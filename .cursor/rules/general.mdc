@@ -1,0 +1,8 @@
+---
+alwaysApply: true
+---
+#Stack 
+Next.js 15 (App Router, Server Actions, Route Handlers, RSC-first)
+React 19, Tailwind CSS v4, shadcn/ui
+Neon Postgres (serverless), Drizzle ORM (SQL migrations, schema-first)
+Zod schema
