@@ -1,11 +1,15 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization, magicLink } from "better-auth/plugins";
+import { APIError } from "better-auth/api";
 import { db } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { Resend } from "resend";
+import { DISALLOWED_DOMAINS } from "./constants";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+
+
 
 export const auth = betterAuth({
    database: drizzleAdapter(db, {
@@ -26,6 +30,17 @@ export const auth = betterAuth({
       organization(),
       magicLink({
          sendMagicLink: async ({ email, url, token }, request) => {
+            // Validate email domain before sending magic link
+            if (DISALLOWED_DOMAINS.length > 0) {
+               const emailDomain = email.split("@")[1]?.toLowerCase();
+               
+               if (emailDomain && DISALLOWED_DOMAINS.includes(emailDomain)) {
+                  throw new APIError("BAD_REQUEST", {
+                     message: `Email addresses from ${emailDomain} are not allowed. Please use your work email.`,
+                  });
+               }
+            }
+
             await resend.emails.send({
                from: process.env.EMAIL_FROM as string,
                to: email,
@@ -45,6 +60,26 @@ export const auth = betterAuth({
          },
       })
    ],
+   databaseHooks: {
+      user: {
+         create: {
+            before: async (user) => {
+               // Only validate if domains are configured
+               if (DISALLOWED_DOMAINS.length > 0) {
+                  const emailDomain = user.email.split("@")[1]?.toLowerCase();
+                  
+                  if (emailDomain && DISALLOWED_DOMAINS.includes(emailDomain)) {
+                     throw new APIError("BAD_REQUEST", {
+                        message: `Email addresses from ${emailDomain} are not allowed. Please use your work email.`,
+                     });
+                  }
+               }
+               
+               return { data: user };
+            },
+         },
+      },
+   },
    rateLimit: {
       window: 60, // time window in seconds
       max: 10,

@@ -19,14 +19,13 @@ export const config = {
 		/*
 		 * Match all request paths except for the ones starting with:
 		 * - api/auth (auth API routes)
-		 * - auth (public auth pages like signin/signup)
+		 * - auth (public auth pages like signin/signup and callback)
 		 * - onboarding (onboarding page)
-		 * - auth-callback (auth callback page)
 		 * - _next/static (static files)
 		 * - _next/image (image optimization files)
 		 * - favicon.ico, favicon.png (favicon files)
 		 * - public assets (svg, png, etc.)
 		 */
-		"/((?!api/auth|auth|onboarding|auth-callback|_next/static|_next/image|favicon.ico|favicon.png|.*\\.svg$|.*\\.png$).*)",
+		"/((?!api/auth|auth|onboarding|_next/static|_next/image|favicon.ico|favicon.png|.*\\.svg$|.*\\.png$).*)",
 	],
 };

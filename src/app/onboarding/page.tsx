@@ -47,7 +47,7 @@ export default async function OnboardingPage() {
             
             <div className="pt-12 border-t border-border/40">
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Join thousands of teams using Heyhire to automate their candidate sourcing
+                Join teams using Heyhire to automate their candidate sourcing
               </p>
             </div>
           </div>

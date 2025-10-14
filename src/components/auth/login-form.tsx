@@ -1,7 +1,6 @@
 'use client'
 
-import { useState } from 'react'
-import Link from 'next/link'
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -17,18 +16,24 @@ async function signInWithGoogle() {
   try {
     await authClient.signIn.social({
       provider: 'google',
-      callbackURL: '/auth-callback',
+      callbackURL: '/auth/callback',
     })
   } catch (err) {
     console.error('Google sign in error:', err)
   }
 }
 
-export function LoginForm() {
+export function LoginForm({ initialError }: { initialError?: string }) {
   const [email, setEmail] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(initialError || '')
+
+  useEffect(() => {
+    if (initialError) {
+      setError(initialError)
+    }
+  }, [initialError])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -42,16 +47,23 @@ export function LoginForm() {
     setIsLoading(true)
 
     try {
-      await authClient.signIn.magicLink({
+      const result = await authClient.signIn.magicLink({
         email,
-        callbackURL: '/auth-callback',
+        callbackURL: '/auth/callback',
       })
+      
+      // Check if there's an error in the result
+      if (result.error) {
+        const errorMessage = result.error.message || 'Failed to send magic link'
+        setError(errorMessage)
+        return
+      }
       
       setEmailSent(true)
       toast.success('Check your email for a magic link to sign in!')
     } catch (err: any) {
-      setError(err?.message || 'Failed to send magic link')
-      toast.error('Failed to send magic link. Please try again.')
+      const errorMessage = err?.message || err?.body?.message || 'Failed to send magic link. Please try again.'
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -66,9 +78,9 @@ export function LoginForm() {
         <CardContent>
           <div className="space-y-4">
             <Alert>
-              <Icon name="mail" className="h-4 w-4" />
+              
               <AlertDescription>
-                We've sent a magic link to <strong>{email}</strong>. Click the link in the email to sign in.
+                We've sent a magic link to <b className="font-bold">{email}</b> Click the link in the email to sign in.
               </AlertDescription>
             </Alert>
             
@@ -89,9 +101,19 @@ export function LoginForm() {
 
   return (
     <Card className="w-full shadow-none border-none">
-      <CardHeader className="text-left">
-        <CardTitle className="text-2xl font-bold">Welcome to HeyHire</CardTitle>
-        <p className="text-gray-600">Enter your email to continue</p>
+      <CardHeader className="text-left space-y-6">
+        <a href="/" className="flex items-center gap-2 font-medium">
+          <Image
+            src="/heyhire_logo.svg"
+            alt="HeyHire"
+            width={100}
+            height={25}
+          />
+        </a>
+        <div className="space-y-2">
+          <CardTitle className="text-2xl font-bold">Welcome to HeyHire</CardTitle>
+          <p className="text-gray-600">Enter your email to continue</p>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
