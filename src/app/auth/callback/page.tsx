@@ -19,6 +19,12 @@ export default async function AuthCallbackPage() {
 
   // Check if user has any organizations
   if (organizations && organizations.length > 0) {
+    // Set the first organization as active
+    await auth.api.setActiveOrganization({
+      headers: await headers(),
+      body: { organizationId: organizations[0].id }
+    })
+    
     // User has organizations, go to dashboard
     return redirect('/')
   } else {
