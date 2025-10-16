@@ -30,8 +30,8 @@ export default async function RootLayout({
   const isLocalhost = host.startsWith('localhost') || host.startsWith('127.0.0.1')
 
   return (
-    <html lang="en">
-      <body className={`${sora.variable} antialiased`}>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${sora.variable} antialiased min-h-screen bg-background font-sans`}>
         <NuqsAdapter>
           <QueryProvider>
             {children}

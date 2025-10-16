@@ -42,6 +42,24 @@
   --radius-xl: calc(var(--radius) + 4px);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
 }
 
 :root {
@@ -117,22 +135,17 @@
   --brand-foreground: oklch(0.985 0 0); /* Dark text for contrast */
 }
 
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground font-sans;
-  }
-}
+
 
 @layer base {
     * {
       @apply border-border outline-ring/50;
     }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
   }
+
+  
   
   button:not([disabled]),
   [role="button"]:not([disabled]) {
