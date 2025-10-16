@@ -2,7 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 import { Sora } from 'next/font/google'
 import { headers } from 'next/headers'
-import { Badge } from '@/components/ui/badge'
+import { NuqsAdapter } from 'nuqs/adapters/next/app'
+import { LocalhostBadge } from '@/components/localhost-badge'
 import { QueryProvider, ToasterProvider } from '@/providers/query-provider'
 const sora = Sora({
   variable: "--font-sora",
@@ -31,15 +32,13 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body className={`${sora.variable} antialiased`}>
-        <QueryProvider>
-          {children}
-          {isLocalhost && (
-            <div className="fixed top-3 right-3 z-50">
-              <Badge variant="destructive">Localhost</Badge>
-            </div>
-          )}
-          <ToasterProvider />
-        </QueryProvider>
+        <NuqsAdapter>
+          <QueryProvider>
+            {children}
+            <LocalhostBadge isLocalhost={isLocalhost} />
+            <ToasterProvider />
+          </QueryProvider>
+        </NuqsAdapter>
       </body>
     </html>
   )
