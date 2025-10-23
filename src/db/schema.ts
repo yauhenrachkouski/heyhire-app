@@ -12,6 +12,7 @@ export const user = pgTable("user", {
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
   stripeCustomerId: text("stripe_customer_id"),
+  lastLoginMethod: text("last_login_method"),
 });
 
 export const session = pgTable("session", {

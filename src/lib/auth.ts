@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { organization, magicLink } from "better-auth/plugins";
+import { organization, magicLink, lastLoginMethod } from "better-auth/plugins";
 import { stripe } from "@better-auth/stripe";
 import { APIError } from "better-auth/api";
 import { db } from "@/db/drizzle";
@@ -61,7 +61,30 @@ export const auth = betterAuth({
       },
    },
    plugins: [
-      organization(),
+      organization({
+         async sendInvitationEmail(data) {
+            const inviteLink = `${process.env.NEXT_PUBLIC_SITE_URL}/accept-invitation/${data.id}`;
+            await resend.emails.send({
+               from: process.env.EMAIL_FROM as string,
+               to: data.email,
+               subject: `You've been invited to join ${data.organization.name}`,
+               html: `
+                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                     <h2>You've been invited!</h2>
+                     <p>${data.inviter.user.name || data.inviter.user.email} has invited you to join <strong>${data.organization.name}</strong> on Heyhire.</p>
+                     <a href="${inviteLink}" style="display: inline-block; padding: 12px 24px; background-color: #000; color: #fff; text-decoration: none; border-radius: 5px; margin: 20px 0;">
+                        Accept Invitation
+                     </a>
+                     <p>This invitation will expire in 48 hours.</p>
+                     <p>If you didn't expect this invitation, you can safely ignore this email.</p>
+                  </div>
+               `,
+            });
+         },
+      }),
+      lastLoginMethod({
+         storeInDatabase: true,
+      }),
       magicLink({
          sendMagicLink: async ({ email, url, token }, request) => {
             // Validate email domain before sending magic link
@@ -99,10 +122,6 @@ export const auth = betterAuth({
          createCustomerOnSignUp: true,
          subscription: {
             enabled: true,
-            // NOTE: Subscriptions are NOT created automatically with organizations.
-            // Flow: Organization created → User redirected to /subscribe → User selects plan
-            // → subscription.upgrade() called → Stripe checkout → Webhook creates subscription
-            // The subscription uses organizationId as referenceId to link them together.
             plans: [
                {
                   name: "starter",
@@ -355,6 +374,7 @@ export const auth = betterAuth({
             },
          },
       },
+      
    },
    rateLimit: {
       window: 60, // time window in seconds

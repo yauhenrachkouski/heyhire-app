@@ -16,32 +16,34 @@ import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
 import type { Member } from "@/actions/members"
 import { InviteMemberDialog } from "../members/invite-member-dialog"
-import { revokeInvitation } from "@/actions/invitations"
+import { cancelInvitation } from "@/actions/invitations"
+import { removeMember } from "@/actions/members"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 
 interface SimpleMembersTableProps {
   members: Member[]
   organizationId: string
+  currentUserId: string
 }
 
-export function SimpleMembersTable({ members, organizationId }: SimpleMembersTableProps) {
+export function SimpleMembersTable({ members, organizationId, currentUserId }: SimpleMembersTableProps) {
   const router = useRouter()
   const [showInviteDialog, setShowInviteDialog] = React.useState(false)
-  const [revokingId, setRevokingId] = React.useState<string | null>(null)
+  const [actioningId, setActioningId] = React.useState<string | null>(null)
   
-  const handleRevokeInvitation = async (invitationId: string) => {
-    setRevokingId(invitationId)
+  const handleCancelInvitation = async (invitationId: string) => {
+    setActioningId(invitationId)
     try {
-      const result = await revokeInvitation(invitationId)
+      const result = await cancelInvitation(invitationId)
       
       if (result.success) {
-        toast.success("Invitation Revoked", {
+        toast.success("Invitation Canceled", {
           description: result.message,
         })
         router.refresh()
       } else {
-        toast.error("Failed to Revoke", {
+        toast.error("Failed to Cancel", {
           description: result.error,
         })
       }
@@ -50,7 +52,35 @@ export function SimpleMembersTable({ members, organizationId }: SimpleMembersTab
         description: "An unexpected error occurred",
       })
     } finally {
-      setRevokingId(null)
+      setActioningId(null)
+    }
+  }
+
+  const handleRemoveMember = async (memberId: string, memberEmail: string) => {
+    if (!confirm(`Are you sure you want to remove ${memberEmail} from the organization?`)) {
+      return
+    }
+
+    setActioningId(memberId)
+    try {
+      const result = await removeMember(memberId)
+      
+      if (result.success) {
+        toast.success("Member Removed", {
+          description: result.message,
+        })
+        router.refresh()
+      } else {
+        toast.error("Failed to Remove", {
+          description: result.error,
+        })
+      }
+    } catch (error) {
+      toast.error("Error", {
+        description: "An unexpected error occurred",
+      })
+    } finally {
+      setActioningId(null)
     }
   }
   
@@ -68,6 +98,7 @@ export function SimpleMembersTable({ members, organizationId }: SimpleMembersTab
   }
 
   const getInitials = (name: string) => {
+    if (!name) return 'U'
     return name
       .split(' ')
       .map(n => n[0])
@@ -122,22 +153,25 @@ export function SimpleMembersTable({ members, organizationId }: SimpleMembersTab
               <TableBody>
                 {members.map((member) => {
                   const isPending = member.status === "pending"
+                  const memberName = member.user?.name || "Unknown"
+                  const memberEmail = member.user?.email || member.email || ""
+                  const isCurrentUser = member.userId === currentUserId
                   return (
                     <TableRow key={member.id}>
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Avatar className="h-8 w-8">
                             <AvatarFallback className="text-xs">
-                              {getInitials(member.userName)}
+                              {getInitials(memberName)}
                             </AvatarFallback>
                           </Avatar>
                           <span className={`font-medium ${isPending ? "text-muted-foreground" : ""}`}>
-                            {member.userName}
+                            {memberName}
                           </span>
                         </div>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {member.userEmail}
+                        {memberEmail}
                       </TableCell>
                       <TableCell>
                         <Badge variant={getRoleBadgeVariant(member.role)}>
@@ -156,19 +190,34 @@ export function SimpleMembersTable({ members, organizationId }: SimpleMembersTab
                         {isPending ? "Not joined" : formatDate(member.createdAt)}
                       </TableCell>
                       <TableCell>
-                        {isPending && member.invitationId && (
+                        {isPending && member.invitationId ? (
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleRevokeInvitation(member.invitationId!)}
-                            disabled={revokingId === member.invitationId}
+                            onClick={() => handleCancelInvitation(member.invitationId!)}
+                            disabled={actioningId === member.invitationId}
                           >
-                            {revokingId === member.invitationId ? (
+                            {actioningId === member.invitationId ? (
                               <Icon name="loader" className="h-4 w-4 animate-spin" />
                             ) : (
                               <Icon name="x" className="h-4 w-4" />
                             )}
-                            <span className="ml-1">Revoke</span>
+                            <span className="ml-1">Cancel</span>
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveMember(member.id, memberEmail)}
+                            disabled={actioningId === member.id || isCurrentUser}
+                            title={isCurrentUser ? "You cannot remove yourself" : "Remove member"}
+                          >
+                            {actioningId === member.id ? (
+                              <Icon name="loader" className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Icon name="trash" className="h-4 w-4" />
+                            )}
+                            <span className="ml-1">Remove</span>
                           </Button>
                         )}
                       </TableCell>

@@ -1,15 +1,14 @@
 import { createAuthClient } from "better-auth/react"
-import { organizationClient, magicLinkClient } from "better-auth/client/plugins"
+import { organizationClient, magicLinkClient, lastLoginMethodClient } from "better-auth/client/plugins"
 import { stripeClient } from "@better-auth/stripe/client"
 
 export const authClient = createAuthClient({
     plugins: [
         organizationClient(),
         magicLinkClient(),
+        lastLoginMethodClient(),
         stripeClient({
-            subscription: {
-                enabled: true,
-            }
+            subscription: true,
         })
     ]
 })
@@ -20,8 +19,6 @@ export const {
     useSession,
     organization,
     useListOrganizations,
-    useActiveOrganization
+    useActiveOrganization,
+    subscription
 } = authClient
-
-// Export subscription methods for use in client components
-export const subscription = authClient.subscription

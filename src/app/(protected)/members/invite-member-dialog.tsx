@@ -59,10 +59,11 @@ export function InviteMemberDialog({
         router.refresh();
       } else {
         toast.error("Failed to Send Invitation", {
-          description: result.error,
+          description: result.error || "An unexpected error occurred",
         });
       }
     } catch (error) {
+      console.error("Error sending invitation:", error);
       toast.error("Error", {
         description: "An unexpected error occurred",
       });
@@ -78,25 +79,26 @@ export function InviteMemberDialog({
           <DialogHeader>
             <DialogTitle>Invite Team Member</DialogTitle>
             <DialogDescription>
-              Send an invitation to join your organization as a member. They'll receive an email
-              with instructions to get started.
+              Invite a member using their work email address.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="email">Email Address</Label>
+              <Label htmlFor="email">Work Email Address</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="colleague@example.com"
+                placeholder="colleague@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={isLoading}
                 required
                 autoFocus
               />
-             
+              <p className="text-xs text-muted-foreground">
+                Personal email addresses (Gmail, Yahoo, etc.) are not allowed.
+              </p>
             </div>
           </div>
 

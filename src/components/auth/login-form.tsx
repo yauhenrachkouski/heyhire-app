@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Icon } from '@/components/ui/icon'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { authClient } from '@/lib/auth-client'
 import { toast } from 'sonner'
 import googleIcon from '@/assets/google-icon.svg'
@@ -28,11 +29,15 @@ export function LoginForm({ initialError }: { initialError?: string }) {
   const [isLoading, setIsLoading] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
   const [error, setError] = useState(initialError || '')
+  const [lastMethod, setLastMethod] = useState<string | null>(null)
 
   useEffect(() => {
     if (initialError) {
       setError(initialError)
     }
+    // Get the last used login method
+    const method = authClient.getLastUsedLoginMethod()
+    setLastMethod(method)
   }, [initialError])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -125,8 +130,8 @@ export function LoginForm({ initialError }: { initialError?: string }) {
           
           <Button 
             type="button" 
-            variant="outline" 
-            className="w-full bg-black text-white hover:bg-black/80 hover:text-white"
+            variant={lastMethod === 'google' ? 'default' : 'outline'}
+            className={lastMethod === 'google' ? 'w-full' : 'w-full bg-black text-white hover:bg-black/80 hover:text-white'}
             size="lg"
             onClick={signInWithGoogle}
           >
@@ -138,6 +143,9 @@ export function LoginForm({ initialError }: { initialError?: string }) {
               className=""
             />
             Continue with Google
+            {lastMethod === 'google' && (
+              <Badge variant="secondary" className="ml-2">Last used</Badge>
+            )}
           </Button>
           
           <div className="relative">
@@ -169,6 +177,7 @@ export function LoginForm({ initialError }: { initialError?: string }) {
               type="submit" 
               className="w-full" 
               disabled={isLoading}
+              variant={lastMethod === 'magicLink' ? 'default' : 'default'}
             >
               {isLoading ? (
                 <>
@@ -179,6 +188,9 @@ export function LoginForm({ initialError }: { initialError?: string }) {
                 <>
                   <Icon name="mail" size={16} />
                   Continue with Email
+                  {lastMethod === 'magicLink' && (
+                    <Badge variant="secondary" className="ml-2">Last used</Badge>
+                  )}
                 </>
               )}
             </Button>

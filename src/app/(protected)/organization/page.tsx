@@ -53,11 +53,8 @@ export default async function OrganizationSettingsPage() {
 
   // Fetch members for the simplified table (no filters, just basic data)
   const membersData = await getMembers({
-    page: "1",
-    perPage: "100", // Show more members without pagination
-    sort: "",
-    filters: "",
-    joinOperator: "and"
+    limit: 100,
+    offset: 0,
   })
 
   return (
@@ -81,6 +78,7 @@ export default async function OrganizationSettingsPage() {
         <SimpleMembersTable 
           members={membersData.data} 
           organizationId={currentOrganization.id}
+          currentUserId={session.user.id}
         />
       )}
     </div>
