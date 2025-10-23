@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useListOrganizations, useActiveOrganization, organization } from "@/lib/auth-client"
+import { organization } from "@/lib/auth-client"
 import { Icon } from "@/components/ui/icon"
 import {
   DropdownMenu,
@@ -19,32 +19,79 @@ import {
 } from "@/components/ui/sidebar"
 import { useRouter } from "next/navigation"
 import { Skeleton } from "@/components/ui/skeleton"
+import type { subscription } from "@/db/schema"
 
-export function OrganizationSwitcher() {
-  const { data: organizations, isPending: isLoadingOrgs } = useListOrganizations()
-  const { data: activeOrganization } = useActiveOrganization()
+type SubscriptionType = typeof subscription.$inferSelect
+
+// Define organization type based on better-auth API response
+interface Organization {
+  id: string
+  name: string
+  slug: string
+  logo?: string | null
+  metadata?: Record<string, any> | null
+  createdAt: Date
+}
+
+interface OrganizationSwitcherProps {
+  subscription: SubscriptionType | null
+  organizations?: Organization[] | null
+  activeOrganization?: Organization | null
+}
+
+export function OrganizationSwitcher({ 
+  subscription, 
+  organizations: serverOrganizations,
+  activeOrganization: serverActiveOrganization 
+}: OrganizationSwitcherProps) {
   const router = useRouter()
   const { isMobile } = useSidebar()
 
-  // Show loading state while fetching organizations
-  if (isLoadingOrgs) {
-    return (
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton size="lg" disabled>
-            <Skeleton className="flex aspect-square size-8 rounded-lg !bg-muted-foreground/20" />
-            <div className="grid flex-1 gap-1.5 text-left text-sm leading-tight">
-              <Skeleton className="h-4 w-28 !bg-muted-foreground/20" />
-              <Skeleton className="h-3 w-20 !bg-muted-foreground/20" />
-            </div>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
-    )
+  // Debug: Log what props we received
+  console.log('[OrgSwitcher] Received props:', {
+    hasSubscription: !!subscription,
+    organizationsCount: serverOrganizations?.length ?? 0,
+    organizationsList: serverOrganizations?.map(o => ({ id: o.id, name: o.name })) ?? [],
+    hasActiveOrg: !!serverActiveOrganization,
+    activeOrgId: serverActiveOrganization?.id,
+    activeOrgName: serverActiveOrganization?.name
+  })
+
+  // Use server-provided data directly (no loading state needed)
+  // If organizations list is empty but we have an activeOrganization, use it as fallback
+  const organizations = (serverOrganizations && serverOrganizations.length > 0) 
+    ? serverOrganizations 
+    : serverActiveOrganization 
+      ? [serverActiveOrganization]
+      : []
+  
+  const activeOrganization = serverActiveOrganization
+
+  const getPlanDisplay = () => {
+    if (!subscription) return "No active plan"
+    
+    if (subscription.status === "trialing") {
+      return "Free Trial"
+    }
+    
+    if (subscription.status === "active") {
+      const planName = subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)
+      return `${planName} Plan`
+    }
+    
+    return "Inactive"
   }
 
-  // Handle no organizations case
-  if (!organizations || organizations.length === 0) {
+  const getPlanBadgeVariant = () => {
+    if (!subscription) return "secondary"
+    if (subscription.status === "trialing") return "default"
+    if (subscription.status === "active") return "default"
+    return "secondary"
+  }
+
+  // Handle no organizations case - ONLY show if BOTH organizations and activeOrganization are missing
+  if ((!organizations || organizations.length === 0) && !activeOrganization) {
+    console.log('[OrgSwitcher] No organizations available - showing error state')
     return (
       <SidebarMenu>
         <SidebarMenuItem>
@@ -84,7 +131,7 @@ export function OrganizationSwitcher() {
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-semibold">{displayOrg.name}</span>
-                <span className="truncate text-xs">{organizations.length} organization{organizations.length !== 1 ? 's' : ''}</span>
+                <span className="truncate text-xs text-muted-foreground">{getPlanDisplay()}</span>
               </div>
               <Icon name="selector" className="ml-auto" />
             </SidebarMenuButton>
@@ -111,7 +158,6 @@ export function OrganizationSwitcher() {
                   </div>
                   <div className="flex-1 overflow-hidden">
                     <div className="truncate font-medium">{org.name}</div>
-                    <div className="truncate text-xs text-muted-foreground">{org.slug}</div>
                   </div>
                   {org.id === displayOrg.id && (
                     <Icon name="check" className="size-4 text-green-600" />

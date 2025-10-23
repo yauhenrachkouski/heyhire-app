@@ -241,7 +241,11 @@ export function filterColumns<T extends Table>({
         }
         return undefined;
 
-      
+      case "isEmpty":
+        return eq(column, null);
+
+      case "isNotEmpty":
+        return not(eq(column, null));
 
       default:
         throw new Error(`Unsupported operator: ${filter.operator}`);

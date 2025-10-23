@@ -15,9 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { organization, useSession } from '@/lib/auth-client'
+import { useSession } from '@/lib/auth-client'
 import { toast } from 'sonner'
-import { createDefaultOrganization } from '@/actions/account'
+import { createDefaultOrganization, createOrganizationWithSetup } from '@/actions/account'
 
 const ORGANIZATION_SIZES = [
   { value: 'just-me', label: 'Just me' },
@@ -50,23 +50,27 @@ export function OnboardingForm() {
 
     try {
       const orgName = organizationName.trim() || 'Default Workspace'
-      const slug = orgName.toLowerCase().replace(/[^a-z0-9]+/g, '-')
       
-      const result = await organization.create({
+      console.log('[OnboardingForm] Submitting organization creation:', { orgName, size: organizationSize })
+      
+      // Use server-side organization creation
+      const result = await createOrganizationWithSetup({
         name: orgName,
-        slug: slug,
-        metadata: organizationSize ? { size: organizationSize } : undefined,
+        size: organizationSize,
       })
 
-      if (result.error) {
-        throw new Error(result.error.message || 'Failed to create organization')
+      console.log('[OnboardingForm] Organization creation result:', result)
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create organization')
       }
 
       toast.success('Onboarding completed successfully!')
+      console.log('[OnboardingForm] Redirecting to /subscribe')
       await new Promise(resolve => setTimeout(resolve, 500))
-      router.push('/')
+      router.push('/subscribe')
     } catch (err: any) {
-      console.error('Organization creation error:', err)
+      console.error('[OnboardingForm] Organization creation error:', err)
       setError(err?.message || 'Failed to create organization')
       toast.error('Failed to create organization. Please try again.')
     } finally {
@@ -77,16 +81,20 @@ export function OnboardingForm() {
   const handleSkip = async () => {
     setIsLoading(true)
     try {
+      console.log('[OnboardingForm] Skipping - creating default organization')
       const result = await createDefaultOrganization()
+      
+      console.log('[OnboardingForm] Default organization result:', result)
       
       if (result.error) {
         throw new Error(result.error)
       }
 
       toast.success('Default workspace created!')
-      router.push('/')
+      console.log('[OnboardingForm] Redirecting to /subscribe')
+      router.push('/subscribe')
     } catch (err: any) {
-      console.error('Failed to create default organization:', err)
+      console.error('[OnboardingForm] Failed to create default organization:', err)
       toast.error('Failed to create workspace. Please try again.')
     } finally {
       setIsLoading(false)

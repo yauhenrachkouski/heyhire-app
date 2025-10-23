@@ -291,6 +291,109 @@ export async function softDeleteAccount() {
   }
 }
 
+/**
+ * Server-side organization creation with full setup
+ * Used in onboarding flow for reliable organization + membership + active session setup
+ */
+export async function createOrganizationWithSetup(data: {
+  name: string
+  size?: string
+}) {
+  try {
+    console.log('[createOrganizationWithSetup] Starting organization creation:', { name: data.name, size: data.size })
+    
+    const session = await auth.api.getSession({
+      headers: await headers()
+    })
+
+    if (!session?.user) {
+      console.error('[createOrganizationWithSetup] No authenticated user')
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    console.log('[createOrganizationWithSetup] User authenticated:', session.user.id)
+
+    // Check if user already has an organization
+    const existingMembership = await db.query.member.findFirst({
+      where: eq(member.userId, session.user.id)
+    })
+
+    if (existingMembership) {
+      console.log('[createOrganizationWithSetup] User already has organization:', existingMembership.organizationId)
+      // User already has an organization, just set it as active and return
+      await auth.api.setActiveOrganization({
+        headers: await headers(),
+        body: { organizationId: existingMembership.organizationId }
+      })
+      return { success: true, organizationId: existingMembership.organizationId }
+    }
+
+    const organizationName = data.name.trim() || 'Default Workspace'
+    const slug = `${organizationName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${crypto.randomUUID().slice(0, 8)}`
+
+    console.log('[createOrganizationWithSetup] Creating organization with slug:', slug)
+
+    // Use better-auth's server API to create organization
+    const createResult = await auth.api.createOrganization({
+      headers: await headers(),
+      body: {
+        name: organizationName,
+        slug: slug,
+        metadata: data.size ? { size: data.size } : undefined
+      }
+    })
+
+    if (!createResult) {
+      console.error('[createOrganizationWithSetup] Failed to create organization - no result')
+      throw new Error('Failed to create organization')
+    }
+
+    console.log('[createOrganizationWithSetup] Organization created successfully:', createResult.id)
+
+    // Set the newly created organization as active
+    const setActiveResult = await auth.api.setActiveOrganization({
+      headers: await headers(),
+      body: { organizationId: createResult.id }
+    })
+
+    console.log('[createOrganizationWithSetup] Organization set as active:', setActiveResult)
+
+    // Verify the organization was created by querying it back
+    const verifyOrg = await db.query.organization.findFirst({
+      where: eq(orgTable.id, createResult.id)
+    })
+
+    const verifyMember = await db.query.member.findFirst({
+      where: and(
+        eq(member.organizationId, createResult.id),
+        eq(member.userId, session.user.id)
+      )
+    })
+
+    console.log('[createOrganizationWithSetup] Verification:', {
+      orgExists: !!verifyOrg,
+      memberExists: !!verifyMember,
+      memberRole: verifyMember?.role
+    })
+
+    return { 
+      success: true, 
+      organizationId: createResult.id,
+      organization: {
+        id: createResult.id,
+        name: createResult.name,
+        slug: createResult.slug
+      }
+    }
+  } catch (err) {
+    console.error('[createOrganizationWithSetup] Error:', err)
+    return { 
+      success: false, 
+      error: err instanceof Error ? err.message : 'Failed to create organization' 
+    }
+  }
+}
+
 export async function createDefaultOrganization() {
   try {
     const session = await auth.api.getSession({
@@ -330,6 +433,12 @@ export async function createDefaultOrganization() {
       organizationId: organizationId,
       userId: session.user.id,
       role: 'owner'
+    })
+
+    // Set the newly created organization as active
+    await auth.api.setActiveOrganization({
+      headers: await headers(),
+      body: { organizationId }
     })
 
     return { success: true, organizationId }

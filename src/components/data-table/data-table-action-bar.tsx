@@ -86,6 +86,7 @@ interface DataTableActionBarActionProps
 
 function DataTableActionBarAction({
   size = "sm",
+  variant = "secondary",
   tooltip,
   isPending,
   disabled,
@@ -95,10 +96,11 @@ function DataTableActionBarAction({
 }: DataTableActionBarActionProps) {
   const trigger = (
     <Button
-      variant="secondary"
+      variant={variant}
       size={size}
       className={cn(
-        "gap-1.5 border border-secondary bg-secondary/50 hover:bg-secondary/70 [&>svg]:size-3.5",
+        "gap-1.5 [&>svg]:size-3.5",
+        variant,
         size === "icon" ? "size-7" : "h-7",
         className,
       )}

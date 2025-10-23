@@ -52,7 +52,7 @@ export function ConnectedAccountsSection({ accounts: initialAccounts }: Connecte
     try {
       await authClient.signIn.social({
         provider: 'google',
-        callbackURL: '/settings',
+        callbackURL: '/account',
       })
     } catch (err) {
       console.error('Google connect error:', err)

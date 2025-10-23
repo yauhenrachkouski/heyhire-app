@@ -2,6 +2,7 @@ import { flexRender, type Table as TanstackTable } from "@tanstack/react-table";
 import type * as React from "react";
 
 import { DataTablePagination } from "@/components/data-table/data-table-pagination";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -16,6 +17,7 @@ import { cn } from "@/lib/utils";
 interface DataTableProps<TData> extends React.ComponentProps<"div"> {
   table: TanstackTable<TData>;
   actionBar?: React.ReactNode;
+  isLoading?: boolean;
 }
 
 export function DataTable<TData>({
@@ -23,8 +25,12 @@ export function DataTable<TData>({
   actionBar,
   children,
   className,
+  isLoading = false,
   ...props
 }: DataTableProps<TData>) {
+  const columnCount = table.getAllColumns().length;
+  const rowCount = table.getState().pagination.pageSize;
+
   return (
     <div
       className={cn("flex w-full flex-col gap-2.5 overflow-auto", className)}
@@ -56,7 +62,17 @@ export function DataTable<TData>({
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows?.length ? (
+            {isLoading ? (
+              Array.from({ length: rowCount }).map((_, i) => (
+                <TableRow key={`skeleton-${i}`} className="hover:bg-transparent">
+                  {Array.from({ length: columnCount }).map((_, j) => (
+                    <TableCell key={`skeleton-cell-${j}`}>
+                      <Skeleton className="h-6 w-full" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
@@ -80,7 +96,7 @@ export function DataTable<TData>({
             ) : (
               <TableRow>
                 <TableCell
-                  colSpan={table.getAllColumns().length}
+                  colSpan={columnCount}
                   className="h-24 text-center"
                 >
                   No results.

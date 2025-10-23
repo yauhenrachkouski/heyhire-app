@@ -99,6 +99,7 @@ import {
   IconInfoCircle,
   IconCloudUpload,
   IconFilePlus,
+  IconLifebuoy,
 } from '@tabler/icons-react'
 
 // Icon name to component mapping
@@ -191,7 +192,7 @@ const iconMap = {
   'globe': IconGlobe,
   timeline: IconTimeline,
   dot: IconDotsVertical,
-  dots: IconDots,
+  'dots-vertical': IconDotsVertical,
   'briefcase-2': IconBriefcase2,
   'briefcase-off': IconBriefcaseOff,
   lock: IconLock,
@@ -213,6 +214,7 @@ const iconMap = {
   'info': IconInfoCircle,
   'cloud-upload': IconCloudUpload,
   'file-plus': IconFilePlus,
+  'lifebuoy': IconLifebuoy,
 } as const
 
 export type IconName = keyof typeof iconMap

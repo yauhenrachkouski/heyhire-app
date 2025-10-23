@@ -21,11 +21,12 @@ export const config = {
 		 * - api/auth (auth API routes)
 		 * - auth (public auth pages like signin/signup and callback)
 		 * - onboarding (onboarding page)
+		 * - pricing (pricing page - accessible without subscription)
 		 * - _next/static (static files)
 		 * - _next/image (image optimization files)
 		 * - favicon.ico, favicon.png (favicon files)
 		 * - public assets (svg, png, etc.)
 		 */
-		"/((?!api/auth|auth|onboarding|_next/static|_next/image|favicon.ico|favicon.png|.*\\.svg$|.*\\.png$).*)",
+		"/((?!api/auth|auth|onboarding|pricing|_next/static|_next/image|favicon.ico|favicon.png|.*\\.svg$|.*\\.png$).*)",
 	],
 };

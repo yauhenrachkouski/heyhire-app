@@ -19,19 +19,21 @@ import {
   type VisibilityState,
 } from "@tanstack/react-table";
 import {
-  parseAsArrayOf,
   parseAsInteger,
-  parseAsString,
-  type SingleParser,
   type UseQueryStateOptions,
   useQueryState,
-  useQueryStates,
 } from "nuqs";
 import * as React from "react";
 
 import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
-import { getSortingStateParser } from "@/lib/parsers";
-import type { ExtendedColumnSort, QueryKeys } from "@/types/data-table";
+import { getDefaultFilterOperator } from "@/lib/data-table";
+import { generateId } from "@/lib/id";
+import { getFiltersStateParser, getSortingStateParser } from "@/lib/parsers";
+import type {
+  ExtendedColumnFilter,
+  ExtendedColumnSort,
+  QueryKeys,
+} from "@/types/data-table";
 
 const PAGE_KEY = "page";
 const PER_PAGE_KEY = "perPage";
@@ -67,6 +69,32 @@ interface UseDataTableProps<TData>
   startTransition?: React.TransitionStartFunction;
 }
 
+/**
+ * Advanced data table hook that manages table state with URL synchronization
+ *
+ * This hook provides a complete data table solution with:
+ * - URL-based state management (via Nuqs) for pagination, sorting, and filters
+ * - Advanced filtering with operators, variants, and multiple filter types
+ * - Server-side pagination, sorting, and filtering support
+ * - Automatic URL updates when state changes
+ * - Filter state separation: incomplete filters (local) vs complete filters (URL)
+ *
+ * @example
+ * ```tsx
+ * const { table, advancedFilters } = useDataTable({
+ *   data: members,
+ *   columns: memberColumns,
+ *   pageCount: 10,
+ *   enableAdvancedFilter: true,
+ * });
+ *
+ * // Use filters in your components
+ * <DataTableFilterList table={table} advancedFilters={advancedFilters} />
+ * ```
+ *
+ * @param props - Configuration options for the data table
+ * @returns Object containing the TanStack Table instance and filter management API
+ */
 export function useDataTable<TData>(props: UseDataTableProps<TData>) {
   const {
     columns,
@@ -151,14 +179,14 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
   );
 
   const columnIds = React.useMemo(() => {
-    return new Set(
-      columns.map((column) => column.id).filter(Boolean) as string[],
-    );
+    return columns.map((column) => column.id).filter(Boolean) as string[];
   }, [columns]);
+
+  const columnIdsSet = React.useMemo(() => new Set(columnIds), [columnIds]);
 
   const [sorting, setSorting] = useQueryState(
     sortKey,
-    getSortingStateParser<TData>(columnIds)
+    getSortingStateParser<TData>(columnIdsSet)
       .withOptions(queryStateOptions)
       .withDefault(initialState?.sorting ?? []),
   );
@@ -175,96 +203,167 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     [sorting, setSorting],
   );
 
-  const filterableColumns = React.useMemo(() => {
-    if (enableAdvancedFilter) return [];
+  // Advanced filter support - replaces simple column filters
+  // Incomplete filters (no value yet) stay in local state
+  // Complete filters (has value) sync to URL
+  const [incompleteFilters, setIncompleteFilters] = React.useState<
+    ExtendedColumnFilter<TData>[]
+  >([]);
 
-    return columns.filter((column) => column.enableColumnFilter);
-  }, [columns, enableAdvancedFilter]);
-
-  const filterParsers = React.useMemo(() => {
-    if (enableAdvancedFilter) return {};
-
-    return filterableColumns.reduce<
-      Record<string, SingleParser<string> | SingleParser<string[]>>
-    >((acc, column) => {
-      if (column.meta?.options) {
-        acc[column.id ?? ""] = parseAsArrayOf(
-          parseAsString,
-          ARRAY_SEPARATOR,
-        ).withOptions(queryStateOptions);
-      } else {
-        acc[column.id ?? ""] = parseAsString.withOptions(queryStateOptions);
-      }
-      return acc;
-    }, {});
-  }, [filterableColumns, queryStateOptions, enableAdvancedFilter]);
-
-  const [filterValues, setFilterValues] = useQueryStates(filterParsers);
-
-  const debouncedSetFilterValues = useDebouncedCallback(
-    (values: typeof filterValues) => {
-      void setPage(1);
-      void setFilterValues(values);
-    },
-    debounceMs,
+  const [completeFilters, setCompleteFilters] = useQueryState(
+    filtersKey,
+    getFiltersStateParser<TData>(columnIds)
+      .withOptions(queryStateOptions)
+      .withDefault([]),
   );
 
-  const initialColumnFilters: ColumnFiltersState = React.useMemo(() => {
-    if (enableAdvancedFilter) return [];
+  // Check if a filter is complete (has a value or is an empty/not-empty operator)
+  const isFilterComplete = React.useCallback(
+    (filter: ExtendedColumnFilter<TData>): boolean => {
+      if (
+        filter.operator === "isEmpty" ||
+        filter.operator === "isNotEmpty"
+      ) {
+        return true;
+      }
+      return (
+        (Array.isArray(filter.value) && filter.value.length > 0) ||
+        (typeof filter.value === "string" && filter.value !== "") ||
+        typeof filter.value === "number"
+      );
+    },
+    [],
+  );
 
-    return Object.entries(filterValues).reduce<ColumnFiltersState>(
-      (filters, [key, value]) => {
-        if (value !== null) {
-          const processedValue = Array.isArray(value)
-            ? value
-            : typeof value === "string" && /[^a-zA-Z0-9]/.test(value)
-              ? value.split(/[^a-zA-Z0-9]+/).filter(Boolean)
-              : [value];
+  // All filters (incomplete + complete) for UI display
+  const allFilters = React.useMemo(
+    () => [...incompleteFilters, ...(completeFilters ?? [])],
+    [incompleteFilters, completeFilters],
+  );
 
-          filters.push({
-            id: key,
-            value: processedValue,
-          });
+  // Add a new filter (starts as incomplete)
+  const addFilter = React.useCallback(
+    (columnId: string) => {
+      const column = columns.find((col) => col.id === columnId);
+      if (!column) return;
+
+      setIncompleteFilters((prev) => [
+        ...prev,
+        {
+          id: columnId as Extract<keyof TData, string>,
+          value: "",
+          variant: column.meta?.variant ?? "text",
+          operator: getDefaultFilterOperator(column.meta?.variant ?? "text"),
+          filterId: generateId({ length: 8 }),
+        },
+      ]);
+    },
+    [columns],
+  );
+
+  // Update a filter (moves between incomplete/complete as needed)
+  const updateFilter = React.useCallback(
+    (
+      filterId: string,
+      updates: Partial<Omit<ExtendedColumnFilter<TData>, "filterId">>,
+    ) => {
+      // Try to find in incomplete filters first
+      const incompleteFilter = incompleteFilters.find(
+        (f) => f.filterId === filterId,
+      );
+
+      if (incompleteFilter) {
+        // Filter is currently incomplete
+        const updatedFilter = {
+          ...incompleteFilter,
+          ...updates,
+        } as ExtendedColumnFilter<TData>;
+
+        if (isFilterComplete(updatedFilter)) {
+          // Filter is now complete - move to URL state
+          setIncompleteFilters((prev) =>
+            prev.filter((f) => f.filterId !== filterId),
+          );
+          void setCompleteFilters((prev) => [...(prev ?? []), updatedFilter]);
+          void setPage(1); // Reset to first page when filter changes
+        } else {
+          // Filter is still incomplete - update in place
+          setIncompleteFilters((prev) =>
+            prev.map((f) => (f.filterId === filterId ? updatedFilter : f)),
+          );
         }
-        return filters;
-      },
-      [],
-    );
-  }, [filterValues, enableAdvancedFilter]);
+        return;
+      }
 
-  const [columnFilters, setColumnFilters] =
-    React.useState<ColumnFiltersState>(initialColumnFilters);
+      // Filter must be in complete state
+      void setCompleteFilters((prev) => {
+        if (!prev) return prev;
 
-  const onColumnFiltersChange = React.useCallback(
-    (updaterOrValue: Updater<ColumnFiltersState>) => {
-      if (enableAdvancedFilter) return;
+        const completeFilter = prev.find((f) => f.filterId === filterId);
+        if (!completeFilter) return prev;
 
-      setColumnFilters((prev) => {
-        const next =
-          typeof updaterOrValue === "function"
-            ? updaterOrValue(prev)
-            : updaterOrValue;
+        const updatedFilter = {
+          ...completeFilter,
+          ...updates,
+        } as ExtendedColumnFilter<TData>;
 
-        const filterUpdates = next.reduce<
-          Record<string, string | string[] | null>
-        >((acc, filter) => {
-          if (filterableColumns.find((column) => column.id === filter.id)) {
-            acc[filter.id] = filter.value as string | string[];
-          }
-          return acc;
-        }, {});
-
-        for (const prevFilter of prev) {
-          if (!next.some((filter) => filter.id === prevFilter.id)) {
-            filterUpdates[prevFilter.id] = null;
-          }
+        // Check if filter became incomplete (value cleared)
+        if (!isFilterComplete(updatedFilter)) {
+          // Move back to incomplete filters
+          setIncompleteFilters((prevIncomplete) => [
+            ...prevIncomplete,
+            updatedFilter,
+          ]);
+          // Remove from complete
+          void setPage(1);
+          return prev.filter((f) => f.filterId !== filterId);
         }
 
-        debouncedSetFilterValues(filterUpdates);
-        return next;
+        // Update in complete filters
+        void setPage(1); // Reset to first page when filter changes
+        return prev.map((filter) =>
+          filter.filterId === filterId ? updatedFilter : filter,
+        );
       });
     },
-    [debouncedSetFilterValues, filterableColumns, enableAdvancedFilter],
+    [incompleteFilters, isFilterComplete, setCompleteFilters, setPage],
+  );
+
+  // Remove a filter
+  const removeFilter = React.useCallback(
+    (filterId: string) => {
+      // Remove from incomplete
+      setIncompleteFilters((prev) =>
+        prev.filter((filter) => filter.filterId !== filterId),
+      );
+
+      // Also remove from complete filters if exists
+      void setCompleteFilters((prev) =>
+        prev?.filter((filter) => filter.filterId !== filterId),
+      );
+      void setPage(1); // Reset to first page when filter removed
+    },
+    [setCompleteFilters, setPage],
+  );
+
+  // Reset all filters
+  const resetFilters = React.useCallback(() => {
+    setIncompleteFilters([]);
+    void setCompleteFilters(null);
+    void setPage(1);
+  }, [setCompleteFilters, setPage]);
+
+  // For backward compatibility with TanStack Table's columnFilters
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
+    [],
+  );
+
+  const onColumnFiltersChange = React.useCallback(
+    (_updaterOrValue: Updater<ColumnFiltersState>) => {
+      // No-op - we're using advanced filters now
+      // This is here for TanStack Table compatibility
+    },
+    [],
   );
 
   const table = useReactTable({
@@ -310,5 +409,19 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     },
   });
 
-  return { table, shallow, debounceMs, throttleMs };
+  return {
+    table,
+    shallow,
+    debounceMs,
+    throttleMs,
+    advancedFilters: {
+      allFilters,
+      completeFilters: completeFilters ?? [],
+      incompleteFilters,
+      addFilter,
+      updateFilter,
+      removeFilter,
+      resetFilters,
+    },
+  };
 }
