@@ -1,32 +1,28 @@
 import { notFound } from "next/navigation";
 import { getSearchById } from "@/actions/search";
-import { NuqsAdapter } from "nuqs/adapters/next/app";
-import { SearchClient } from "../search-client";
+import { SearchResultsClient } from "./search-results-client";
 
-interface SearchDetailPageProps {
+interface SearchPageProps {
   params: Promise<{ id: string }>;
 }
 
-export default async function SearchDetailPage({ params }: SearchDetailPageProps) {
+export default async function SearchPage({ params }: SearchPageProps) {
   const { id } = await params;
   
-  // Fetch the search by ID
-  const searchResponse = await getSearchById(id);
+  console.log("[SearchPage] Loading search:", id);
   
-  if (!searchResponse.success || !searchResponse.data) {
+  const searchResult = await getSearchById(id);
+  
+  if (!searchResult.success || !searchResult.data) {
+    console.error("[SearchPage] Search not found:", id);
     notFound();
   }
   
-  const { data: search } = searchResponse;
+  const search = searchResult.data;
   
   return (
-    <NuqsAdapter>
-      <SearchClient 
-        viewMode="cards" 
-        initialQuery={search.params}
-        initialQueryText={search.query}
-      />
-    </NuqsAdapter>
+    <div className="container mx-auto">
+      <SearchResultsClient search={search} />
+    </div>
   );
 }
-

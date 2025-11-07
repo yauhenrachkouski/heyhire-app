@@ -16,6 +16,11 @@ import { db } from "@/db/drizzle";
 import { search } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { generateId } from "@/lib/id";
+import { searchLinkedInWithSerper } from "./serper";
+import { scrapeLinkedInProfilesBatch } from "./linkedin-scraper";
+import { searchAllSources, getUniqueUrls } from "@/lib/sources";
+import { createOrUpdateCandidate, addCandidateToSearch } from "./candidates";
+import { enqueueCandidateScraping } from "@/lib/queue/qstash-client";
 
 const CLAUDE_API_KEY = process.env.ANTHROPIC_API_KEY;
 const FORAGER_API_KEY = process.env.FORAGER_API_KEY;
@@ -23,16 +28,46 @@ const FORAGER_ACCOUNT_ID = process.env.FORAGER_ACCOUNT_ID;
 
 const CLAUDE_PROMPT = `You are a job search query parser. Your task is to extract structured information from user queries and return valid JSON.
 
+IMPORTANT CORRECTION RULES:
+1. SPELLING CORRECTIONS: Automatically correct any spelling mistakes in cities, countries, job titles, and other fields
+   - Example: "san francisko" → "San Francisco"
+   - Example: "sofware engineer" → "Software Engineer"
+   - Example: "new yourk" → "New York"
+
+2. LOCATION STANDARDIZATION:
+   - Expand ALL city/state abbreviations to their full, proper names
+   - Use proper capitalization and international standard formats
+   - Examples:
+     * "SF" → "San Francisco"
+     * "NYC" or "NY" → "New York"
+     * "LA" → "Los Angeles"
+     * "miami" → "Miami"
+     * "london" → "London"
+   - Return ONLY the city name, do NOT add state or country suffixes
+   - Format: "San Francisco" (not "San Francisco, CA"), "New York" (not "New York, NY")
+
+3. JOB TITLE STANDARDIZATION:
+   - Correct grammar and capitalization in job titles
+   - Use proper title case (capitalize main words)
+   - Example: "software engineer" → "Software Engineer"
+   - Example: "senior react develper" → "Senior React Developer"
+   - Example: "FRONTEND DEVELOPER" → "Frontend Developer"
+
+4. GRAMMAR AND FORMATTING:
+   - Fix any grammatical errors
+   - Standardize technology names (e.g., "reactjs" → "React", "nodejs" → "Node.js", "next.js" → "Next.js")
+   - Ensure consistent formatting across all fields
+
 Parse the user's query and extract the following fields:
-- job_title: The position or role being searched for
-- location: The geographic location specified
+- job_title: The position or role being searched for (CORRECTED and in Title Case)
+- location: The geographic location specified (CORRECTED, expanded from abbreviations, properly capitalized)
 - years_of_experience: The required or specified years of experience
-- industry: The industry or sector mentioned
-- skills: The specific skills, technologies, or expertise required
+- industry: The industry or sector mentioned (properly formatted)
+- skills: The specific skills, technologies, or expertise required (properly formatted technology names)
 
 Additionally, create a 'tags' array where each item is an object with:
 - category: one of ["job_title", "location", "years_of_experience", "industry", "skills"]
-- value: the extracted value for that category
+- value: the CORRECTED and STANDARDIZED value for that category
 
 If any field is not mentioned in the query, return an empty string "" for that field, and DO NOT include it in the tags array.
 
@@ -50,14 +85,17 @@ Return ONLY a valid JSON object in this exact format:
 }
 
 Examples:
-- Query: "I'm looking for Software engineer in SF"
-  Output: {"job_title": "Software engineer", "location": "SF", "years_of_experience": "", "industry": "", "skills": "", "tags": [{"category": "job_title", "value": "Software engineer"}, {"category": "location", "value": "SF"}]}
+- Query: "I'm looking for software engineer in SF"
+  Output: {"job_title": "Software Engineer", "location": "San Francisco", "years_of_experience": "", "industry": "", "skills": "", "tags": [{"category": "job_title", "value": "Software Engineer"}, {"category": "location", "value": "San Francisco"}]}
 
-- Query: "Software engineer with next.js 5 years experience in Finance from Gdansk"
-  Output: {"job_title": "Software engineer", "location": "Gdansk", "years_of_experience": "5 years", "industry": "Finance", "skills": "next.js", "tags": [{"category": "job_title", "value": "Software engineer"}, {"category": "location", "value": "Gdansk"}, {"category": "years_of_experience", "value": "5 years"}, {"category": "industry", "value": "Finance"}, {"category": "skills", "value": "next.js"}]}
+- Query: "sofware engineer with next.js 5 years experience in Finance from gdansk"
+  Output: {"job_title": "Software Engineer", "location": "Gdansk", "years_of_experience": "5 years", "industry": "Finance", "skills": "Next.js", "tags": [{"category": "job_title", "value": "Software Engineer"}, {"category": "location", "value": "Gdansk"}, {"category": "years_of_experience", "value": "5 years"}, {"category": "industry", "value": "Finance"}, {"category": "skills", "value": "Next.js"}]}
 
-- Query: "Senior React developer in London with 3 years experience in fintech"
-  Output: {"job_title": "Senior React developer", "location": "London", "years_of_experience": "3 years", "industry": "fintech", "skills": "React", "tags": [{"category": "job_title", "value": "Senior React developer"}, {"category": "location", "value": "London"}, {"category": "years_of_experience", "value": "3 years"}, {"category": "industry", "value": "fintech"}, {"category": "skills", "value": "React"}]}
+- Query: "senior react develper in NYC with 3 years experience in fintech"
+  Output: {"job_title": "Senior React Developer", "location": "New York", "years_of_experience": "3 years", "industry": "Fintech", "skills": "React", "tags": [{"category": "job_title", "value": "Senior React Developer"}, {"category": "location", "value": "New York"}, {"category": "years_of_experience", "value": "3 years"}, {"category": "industry", "value": "Fintech"}, {"category": "skills", "value": "React"}]}
+
+- Query: "FRONTEND DEVELOPER miami with reactjs"
+  Output: {"job_title": "Frontend Developer", "location": "Miami", "years_of_experience": "", "industry": "", "skills": "React", "tags": [{"category": "job_title", "value": "Frontend Developer"}, {"category": "location", "value": "Miami"}, {"category": "skills", "value": "React"}]}
 
 Parse the following query and return only the JSON object:`;
 
@@ -135,219 +173,222 @@ export async function parseQueryWithClaude(
   }
 }
 
-async function getForagerAutocompleteIds(
-  query: string,
-  endpoint: string
-): Promise<number[]> {
-  console.log(`[Search] Fetching Forager IDs for ${endpoint} with query:`, query);
+// COMMENTED OUT - Replaced with Serper.dev integration
+// async function getForagerAutocompleteIds(
+//   query: string,
+//   endpoint: string
+// ): Promise<number[]> {
+//   console.log(`[Search] Fetching Forager IDs for ${endpoint} with query:`, query);
 
-  if (!query) {
-    console.log(`[Search] Empty query for ${endpoint}, returning empty array`);
-    return [];
-  }
+//   if (!query) {
+//     console.log(`[Search] Empty query for ${endpoint}, returning empty array`);
+//     return [];
+//   }
 
-  try {
-    const url = new URL(`https://api-v2.forager.ai/api/datastorage/autocomplete/${endpoint}/`);
-    url.searchParams.append("q", query);
+//   try {
+//     const url = new URL(`https://api-v2.forager.ai/api/datastorage/autocomplete/${endpoint}/`);
+//     url.searchParams.append("q", query);
 
-    console.log(`[Search] Forager request URL:`, url.toString());
+//     console.log(`[Search] Forager request URL:`, url.toString());
 
-    const response = await fetch(url.toString(), {
-      method: "GET",
-      headers: {
-        "X-API-KEY": FORAGER_API_KEY || "",
-        "Content-Type": "application/json",
-      },
-    });
+//     const response = await fetch(url.toString(), {
+//       method: "GET",
+//       headers: {
+//         "X-API-KEY": FORAGER_API_KEY || "",
+//         "Content-Type": "application/json",
+//       },
+//     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(
-        `[Search] Forager ${endpoint} error (${response.status}):`,
-        errorText
-      );
-      return [];
-    }
+//     if (!response.ok) {
+//       const errorText = await response.text();
+//       console.error(
+//         `[Search] Forager ${endpoint} error (${response.status}):`,
+//         errorText
+//       );
+//       return [];
+//     }
 
-    const data = await response.json();
-    console.log(`[Search] Forager ${endpoint} response:`, data);
+//     const data = await response.json();
+//     console.log(`[Search] Forager ${endpoint} response:`, data);
 
-    const validated = foragerAutocompleteResponseSchema.parse(data);
-    const ids = validated.results
-      .map((item) => {
-        // Convert string or number ID to integer
-        const idValue = item.id;
-        const numId = typeof idValue === "string" ? parseInt(idValue, 10) : idValue;
-        return numId;
-      })
-      .filter((id): id is number => !isNaN(id));
+//     const validated = foragerAutocompleteResponseSchema.parse(data);
+//     const ids = validated.results
+//       .map((item) => {
+//         // Convert string or number ID to integer
+//         const idValue = item.id;
+//         const numId = typeof idValue === "string" ? parseInt(idValue, 10) : idValue;
+//         return numId;
+//       })
+//       .filter((id): id is number => !isNaN(id));
 
-    console.log(`[Search] Extracted IDs from ${endpoint}:`, ids);
-    return ids;
-  } catch (error) {
-    const errorMessage = getErrorMessage(error);
-    console.error(`[Search] Error fetching ${endpoint}:`, errorMessage);
-    return [];
-  }
-}
+//     console.log(`[Search] Extracted IDs from ${endpoint}:`, ids);
+//     return ids;
+//   } catch (error) {
+//     const errorMessage = getErrorMessage(error);
+//     console.error(`[Search] Error fetching ${endpoint}:`, errorMessage);
+//     return [];
+//   }
+// }
 
-export async function getForagerIds(
-  parsedQuery: ParsedQuery
-): Promise<GetForagerIdsResponse> {
-  try {
-    console.log("[Search] Getting Forager IDs for parsed query:", parsedQuery);
+// COMMENTED OUT - Replaced with Serper.dev integration
+// export async function getForagerIds(
+//   parsedQuery: ParsedQuery
+// ): Promise<GetForagerIdsResponse> {
+//   try {
+//     console.log("[Search] Getting Forager IDs for parsed query:", parsedQuery);
 
-    if (!FORAGER_API_KEY) {
-      throw new Error("FORAGER_API_KEY is not set");
-    }
+//     if (!FORAGER_API_KEY) {
+//       throw new Error("FORAGER_API_KEY is not set");
+//     }
 
-    // Only make API calls if we have queries to search for
-    const skillsPromise = parsedQuery.skills 
-      ? getForagerAutocompleteIds(parsedQuery.skills, "person_skills")
-      : Promise.resolve([]);
+//     // Only make API calls if we have queries to search for
+//     const skillsPromise = parsedQuery.skills 
+//       ? getForagerAutocompleteIds(parsedQuery.skills, "person_skills")
+//       : Promise.resolve([]);
     
-    const locationsPromise = parsedQuery.location 
-      ? getForagerAutocompleteIds(parsedQuery.location, "locations")
-      : Promise.resolve([]);
+//     const locationsPromise = parsedQuery.location 
+//       ? getForagerAutocompleteIds(parsedQuery.location, "locations")
+//       : Promise.resolve([]);
     
-    const industriesPromise = parsedQuery.industry 
-      ? getForagerAutocompleteIds(parsedQuery.industry, "industries")
-      : Promise.resolve([]);
+//     const industriesPromise = parsedQuery.industry 
+//       ? getForagerAutocompleteIds(parsedQuery.industry, "industries")
+//       : Promise.resolve([]);
 
-    // Make parallel requests to Forager autocomplete endpoints (only if queries exist)
-    const [skillIds, locationIds, industryIds] = await Promise.all([
-      skillsPromise,
-      locationsPromise,
-      industriesPromise,
-    ]);
+//     // Make parallel requests to Forager autocomplete endpoints (only if queries exist)
+//     const [skillIds, locationIds, industryIds] = await Promise.all([
+//       skillsPromise,
+//       locationsPromise,
+//       industriesPromise,
+//     ]);
 
-    const foragerIds = foragerIdsSchema.parse({
-      skills: skillIds,
-      locations: locationIds,
-      industries: industryIds,
-    });
+//     const foragerIds = foragerIdsSchema.parse({
+//       skills: skillIds,
+//       locations: locationIds,
+//       industries: industryIds,
+//     });
 
-    console.log("[Search] Final Forager IDs object:", foragerIds);
+//     console.log("[Search] Final Forager IDs object:", foragerIds);
 
-    return {
-      success: true,
-      data: foragerIds,
-    };
-  } catch (error) {
-    const errorMessage = getErrorMessage(error);
-    console.error("[Search] Error getting Forager IDs:", errorMessage);
-    return {
-      success: false,
-      error: errorMessage,
-    };
-  }
-}
+//     return {
+//       success: true,
+//       data: foragerIds,
+//     };
+//   } catch (error) {
+//     const errorMessage = getErrorMessage(error);
+//     console.error("[Search] Error getting Forager IDs:", errorMessage);
+//     return {
+//       success: false,
+//       error: errorMessage,
+//     };
+//   }
+// }
 
-export async function searchPeopleInForager(
-  foragerIds: { skills: number[]; locations: number[]; industries: number[] },
-  parsedQuery: ParsedQuery
-): Promise<SearchPeopleResponse> {
-  try {
-    console.log("[Search] Searching people in Forager with IDs:", foragerIds);
-    console.log("[Search] Parsed query:", parsedQuery);
+// COMMENTED OUT - Replaced with Serper.dev integration
+// export async function searchPeopleInForager(
+//   foragerIds: { skills: number[]; locations: number[]; industries: number[] },
+//   parsedQuery: ParsedQuery
+// ): Promise<SearchPeopleResponse> {
+//   try {
+//     console.log("[Search] Searching people in Forager with IDs:", foragerIds);
+//     console.log("[Search] Parsed query:", parsedQuery);
 
-    if (!FORAGER_API_KEY || !FORAGER_ACCOUNT_ID) {
-      throw new Error("FORAGER_API_KEY or FORAGER_ACCOUNT_ID is not set");
-    }
+//     if (!FORAGER_API_KEY || !FORAGER_ACCOUNT_ID) {
+//       throw new Error("FORAGER_API_KEY or FORAGER_ACCOUNT_ID is not set");
+//     }
 
-    // Parse years of experience if provided
-    let yearsStart = 0;
-    let yearsEnd = 0;
-    if (parsedQuery.years_of_experience) {
-      const yearsMatch = parsedQuery.years_of_experience.match(/(\d+)/);
-      if (yearsMatch) {
-        const years = parseInt(yearsMatch[0], 10);
-        yearsStart = years;
-        yearsEnd = years + 5;
-      }
-    }
+//     // Parse years of experience if provided
+//     let yearsStart = 0;
+//     let yearsEnd = 0;
+//     if (parsedQuery.years_of_experience) {
+//       const yearsMatch = parsedQuery.years_of_experience.match(/(\d+)/);
+//       if (yearsMatch) {
+//         const years = parseInt(yearsMatch[0], 10);
+//         yearsStart = years;
+//         yearsEnd = years + 5;
+//       }
+//     }
 
-    // Build the request payload
-    const requestPayload = {
-      page: 0,
-      role_title: parsedQuery.job_title ? `"${parsedQuery.job_title}"` : undefined,
-      person_skills: foragerIds.skills,
-      person_locations: foragerIds.locations,
-      person_industries: foragerIds.industries,
-      ...(yearsStart > 0 && { role_years_on_position_start: yearsStart }),
-      ...(yearsEnd > 0 && { role_years_on_position_end: yearsEnd }),
-    };
+//     // Build the request payload
+//     const requestPayload = {
+//       page: 0,
+//       role_title: parsedQuery.job_title ? `"${parsedQuery.job_title}"` : undefined,
+//       person_skills: foragerIds.skills,
+//       person_locations: foragerIds.locations,
+//       person_industries: foragerIds.industries,
+//       ...(yearsStart > 0 && { role_years_on_position_start: yearsStart }),
+//       ...(yearsEnd > 0 && { role_years_on_position_end: yearsEnd }),
+//     };
 
-    console.log("[Search] Person role search request payload:", requestPayload);
+//     console.log("[Search] Person role search request payload:", requestPayload);
 
-    const url = `https://api-v2.forager.ai/api/${FORAGER_ACCOUNT_ID}/datastorage/person_role_search/`;
-    console.log("[Search] Forager URL:", url);
+//     const url = `https://api-v2.forager.ai/api/${FORAGER_ACCOUNT_ID}/datastorage/person_role_search/`;
+//     console.log("[Search] Forager URL:", url);
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "X-API-KEY": FORAGER_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestPayload),
-    });
+//     const response = await fetch(url, {
+//       method: "POST",
+//       headers: {
+//         "X-API-KEY": FORAGER_API_KEY,
+//         "Content-Type": "application/json",
+//       },
+//       body: JSON.stringify(requestPayload),
+//     });
 
-    console.log("[Search] Forager response status:", response.status);
+//     console.log("[Search] Forager response status:", response.status);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[Search] Forager person search error:", errorText);
-      throw new Error(
-        `Forager person_role_search error: ${response.status} - ${errorText}`
-      );
-    }
+//     if (!response.ok) {
+//       const errorText = await response.text();
+//       console.error("[Search] Forager person search error:", errorText);
+//       throw new Error(
+//         `Forager person_role_search error: ${response.status} - ${errorText}`
+//       );
+//     }
 
-    const data = await response.json();
-    console.log("[Search] Forager person search response:", data);
+//     const data = await response.json();
+//     console.log("[Search] Forager person search response:", data);
 
-    console.log("[Search] Attempting to validate response schema...");
-    let validated;
-    let people;
+//     console.log("[Search] Attempting to validate response schema...");
+//     let validated;
+//     let people;
     
-    try {
-      validated = searchResponseSchema.parse(data);
-      console.log("[Search] Response schema validation passed");
-      people = validated.search_results || validated.results || [];
+//     try {
+//       validated = searchResponseSchema.parse(data);
+//       console.log("[Search] Response schema validation passed");
+//       people = validated.search_results || validated.results || [];
 
-      console.log(`[Search] Retrieved ${people.length} people from Forager`);
+//       console.log(`[Search] Retrieved ${people.length} people from Forager`);
       
-      // Log first result structure for debugging
-      if (people.length > 0) {
-        console.log("[Search] First result structure:", JSON.stringify(people[0], null, 2));
-      }
-    } catch (validationError) {
-      console.error("[Search] Schema validation failed:", validationError);
+//       // Log first result structure for debugging
+//       if (people.length > 0) {
+//         console.log("[Search] First result structure:", JSON.stringify(people[0], null, 2));
+//       }
+//     } catch (validationError) {
+//       console.error("[Search] Schema validation failed:", validationError);
       
-      // Log raw results for inspection
-      if (data.search_results && data.search_results.length > 0) {
-        console.log("[Search] Raw first result:", JSON.stringify(data.search_results[0], null, 2));
-      }
+//       // Log raw results for inspection
+//       if (data.search_results && data.search_results.length > 0) {
+//         console.log("[Search] Raw first result:", JSON.stringify(data.search_results[0], null, 2));
+//       }
       
-      throw validationError;
-    }
+//       throw validationError;
+//     }
 
-    // Limit to 10 results
-    const limitedResults = people.slice(0, 10);
-    console.log(`[Search] Returning ${limitedResults.length} results`);
+//     // Limit to 10 results
+//     const limitedResults = people.slice(0, 10);
+//     console.log(`[Search] Returning ${limitedResults.length} results`);
 
-    return {
-      success: true,
-      data: limitedResults,
-    };
-  } catch (error) {
-    const errorMessage = getErrorMessage(error);
-    console.error("[Search] Error searching people:", errorMessage);
-    return {
-      success: false,
-      error: errorMessage,
-    };
-  }
-}
+//     return {
+//       success: true,
+//       data: limitedResults,
+//     };
+//   } catch (error) {
+//     const errorMessage = getErrorMessage(error);
+//     console.error("[Search] Error searching people:", errorMessage);
+//     return {
+//       success: false,
+//       error: errorMessage,
+//     };
+//   }
+// }
 
 /**
  * Search people with pagination support for infinite queries
@@ -356,95 +397,264 @@ export async function searchPeopleInForager(
  * @param page - Page number (0-based)
  * @param pageSize - Number of results per page
  */
-export async function searchPeopleInForagerPaginated(
-  foragerIds: { skills: number[]; locations: number[]; industries: number[] },
-  parsedQuery: ParsedQuery,
-  page: number = 0,
-  pageSize: number = 10
+// COMMENTED OUT - Replaced with Serper.dev integration
+// export async function searchPeopleInForagerPaginated(
+//   foragerIds: { skills: number[]; locations: number[]; industries: number[] },
+//   parsedQuery: ParsedQuery,
+//   page: number = 0,
+//   pageSize: number = 10
+// ): Promise<SearchPeopleResponse> {
+//   try {
+//     console.log(
+//       "[Search] Searching people in Forager with pagination - Page:",
+//       page,
+//       "PageSize:",
+//       pageSize
+//     );
+
+//     if (!FORAGER_API_KEY || !FORAGER_ACCOUNT_ID) {
+//       throw new Error("FORAGER_API_KEY or FORAGER_ACCOUNT_ID is not set");
+//     }
+
+//     // Parse years of experience if provided
+//     let yearsStart = 0;
+//     let yearsEnd = 0;
+//     if (parsedQuery.years_of_experience) {
+//       const yearsMatch = parsedQuery.years_of_experience.match(/(\d+)/);
+//       if (yearsMatch) {
+//         const years = parseInt(yearsMatch[0], 10);
+//         yearsStart = years;
+//         yearsEnd = years + 5;
+//       }
+//     }
+
+//     // Build the request payload with pagination
+//     const requestPayload = {
+//       page,
+//       role_title: parsedQuery.job_title ? `"${parsedQuery.job_title}"` : undefined,
+//       person_skills: foragerIds.skills,
+//       person_locations: foragerIds.locations,
+//       person_industries: foragerIds.industries,
+//       ...(yearsStart > 0 && { role_years_on_position_start: yearsStart }),
+//       ...(yearsEnd > 0 && { role_years_on_position_end: yearsEnd }),
+//     };
+
+//     console.log("[Search] Person role search request payload:", requestPayload);
+
+//     const url = `https://api-v2.forager.ai/api/${FORAGER_ACCOUNT_ID}/datastorage/person_role_search/`;
+
+//     const response = await fetch(url, {
+//       method: "POST",
+//       headers: {
+//         "X-API-KEY": FORAGER_API_KEY,
+//         "Content-Type": "application/json",
+//       },
+//       body: JSON.stringify(requestPayload),
+//     });
+
+//     console.log("[Search] Forager response status:", response.status);
+
+//     if (!response.ok) {
+//       const errorText = await response.text();
+//       console.error("[Search] Forager person search error:", errorText);
+//       throw new Error(
+//         `Forager person_role_search error: ${response.status} - ${errorText}`
+//       );
+//     }
+
+//     const data = await response.json();
+//     console.log("[Search] Forager person search response:", data);
+
+//     let validated;
+//     let people;
+    
+//     try {
+//       validated = searchResponseSchema.parse(data);
+//       people = validated.search_results || validated.results || [];
+//       console.log(`[Search] Retrieved ${people.length} people from Forager on page ${page}`);
+//     } catch (validationError) {
+//       console.error("[Search] Schema validation failed:", validationError);
+//       throw validationError;
+//     }
+
+//     // Slice results to match pageSize (Forager returns all, we limit on client)
+//     const slicedResults = people.slice(0, pageSize);
+
+//     return {
+//       success: true,
+//       data: slicedResults,
+//     };
+//   } catch (error) {
+//     const errorMessage = getErrorMessage(error);
+//     console.error("[Search] Error searching people (paginated):", errorMessage);
+//     return {
+//       success: false,
+//       error: errorMessage,
+//     };
+//   }
+// }
+
+/**
+ * NEW - Search people using Serper.dev + RapidAPI LinkedIn scraper
+ * This replaces the Forager search flow
+ * 
+ * @param parsedQuery - Parsed query with job_title, location, skills, industry
+ * @returns Array of PeopleSearchResult from scraped LinkedIn profiles
+ */
+export async function searchPeopleWithSerper(
+  parsedQuery: ParsedQuery
 ): Promise<SearchPeopleResponse> {
   try {
-    console.log(
-      "[Search] Searching people in Forager with pagination - Page:",
-      page,
-      "PageSize:",
-      pageSize
-    );
+    console.log("[Search] Starting Serper-based search with query:", parsedQuery);
 
-    if (!FORAGER_API_KEY || !FORAGER_ACCOUNT_ID) {
-      throw new Error("FORAGER_API_KEY or FORAGER_ACCOUNT_ID is not set");
-    }
-
-    // Parse years of experience if provided
-    let yearsStart = 0;
-    let yearsEnd = 0;
-    if (parsedQuery.years_of_experience) {
-      const yearsMatch = parsedQuery.years_of_experience.match(/(\d+)/);
-      if (yearsMatch) {
-        const years = parseInt(yearsMatch[0], 10);
-        yearsStart = years;
-        yearsEnd = years + 5;
-      }
-    }
-
-    // Build the request payload with pagination
-    const requestPayload = {
-      page,
-      role_title: parsedQuery.job_title ? `"${parsedQuery.job_title}"` : undefined,
-      person_skills: foragerIds.skills,
-      person_locations: foragerIds.locations,
-      person_industries: foragerIds.industries,
-      ...(yearsStart > 0 && { role_years_on_position_start: yearsStart }),
-      ...(yearsEnd > 0 && { role_years_on_position_end: yearsEnd }),
-    };
-
-    console.log("[Search] Person role search request payload:", requestPayload);
-
-    const url = `https://api-v2.forager.ai/api/${FORAGER_ACCOUNT_ID}/datastorage/person_role_search/`;
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "X-API-KEY": FORAGER_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestPayload),
-    });
-
-    console.log("[Search] Forager response status:", response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[Search] Forager person search error:", errorText);
-      throw new Error(
-        `Forager person_role_search error: ${response.status} - ${errorText}`
-      );
-    }
-
-    const data = await response.json();
-    console.log("[Search] Forager person search response:", data);
-
-    let validated;
-    let people;
+    // Step 1: Search LinkedIn URLs using Serper.dev
+    const serperResult = await searchLinkedInWithSerper(parsedQuery);
     
-    try {
-      validated = searchResponseSchema.parse(data);
-      people = validated.search_results || validated.results || [];
-      console.log(`[Search] Retrieved ${people.length} people from Forager on page ${page}`);
-    } catch (validationError) {
-      console.error("[Search] Schema validation failed:", validationError);
-      throw validationError;
+    if (!serperResult.success) {
+      throw new Error(serperResult.error || "Failed to search LinkedIn with Serper");
     }
 
-    // Slice results to match pageSize (Forager returns all, we limit on client)
-    const slicedResults = people.slice(0, pageSize);
+    if (!serperResult.data || serperResult.data.length === 0) {
+      console.log("[Search] No LinkedIn profiles found via Serper");
+      return {
+        success: true,
+        data: [],
+      };
+    }
+
+    const linkedinUsernames = serperResult.data;
+    console.log(`[Search] Found ${linkedinUsernames.length} LinkedIn usernames from Serper`);
+
+    // Step 2: Scrape profiles using RapidAPI
+    console.log("[Search] Starting batch scraping with RapidAPI...");
+    const scrapingResult = await scrapeLinkedInProfilesBatch(linkedinUsernames);
+
+    if (!scrapingResult.success) {
+      throw new Error(scrapingResult.error || "Failed to scrape LinkedIn profiles");
+    }
+
+    const scrapedProfiles = scrapingResult.data || [];
+    console.log(`[Search] Successfully scraped ${scrapedProfiles.length} profiles`);
 
     return {
       success: true,
-      data: slicedResults,
+      data: scrapedProfiles,
     };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    console.error("[Search] Error searching people (paginated):", errorMessage);
+    console.error("[Search] Error in Serper-based search:", errorMessage);
+    return {
+      success: false,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * NEW NON-BLOCKING FLOW - Search people and queue scraping jobs
+ * This replaces the old blocking search flow
+ * 
+ * @param parsedQuery - Parsed query with job_title, location, skills, industry
+ * @param searchId - The search ID from the database
+ * @returns Summary of candidates created and jobs enqueued
+ */
+export async function searchPeopleNonBlocking(
+  parsedQuery: ParsedQuery,
+  searchId: string
+): Promise<{
+  success: boolean;
+  data?: {
+    totalUrls: number;
+    candidatesCreated: number;
+    jobsEnqueued: number;
+  };
+  error?: string;
+}> {
+  try {
+    console.log("[Search] Starting non-blocking search with query:", parsedQuery);
+    console.log("[Search] Search ID:", searchId);
+
+    // Step 1: Call all source providers in parallel
+    console.log("[Search] Calling sources in parallel...");
+    const sourceResults = await searchAllSources(parsedQuery);
+    console.log("[Search] Source results:", sourceResults);
+
+    // Step 2: Get unique URLs
+    const uniqueUrls = getUniqueUrls(sourceResults);
+    console.log("[Search] Found", uniqueUrls.length, "unique LinkedIn URLs");
+
+    if (uniqueUrls.length === 0) {
+      console.log("[Search] No URLs found, returning empty result");
+      return {
+        success: true,
+        data: {
+          totalUrls: 0,
+          candidatesCreated: 0,
+          jobsEnqueued: 0,
+        },
+      };
+    }
+
+    // Step 3: For each URL, create candidate and enqueue scraping job
+    let candidatesCreated = 0;
+    let jobsEnqueued = 0;
+
+    for (const url of uniqueUrls) {
+      try {
+        // Extract username from URL for logging
+        const usernameMatch = url.match(/linkedin\.com\/in\/([^/?]+)/);
+        const username = usernameMatch ? usernameMatch[1] : null;
+
+        console.log("[Search] Processing URL:", url, "username:", username);
+
+        // Create or get candidate
+        const candidateResult = await createOrUpdateCandidate({
+          linkedinUrl: url,
+          linkedinUsername: username || undefined,
+          source: 'rapidapi',
+        });
+
+        const candidateId = candidateResult.candidateId;
+        candidatesCreated++;
+
+        // Link candidate to search
+        const { searchCandidateId } = await addCandidateToSearch(
+          searchId,
+          candidateId,
+          'serper' // source provider that found this candidate
+        );
+
+        // Enqueue scraping job to QStash
+        await enqueueCandidateScraping(
+          candidateId,
+          url,
+          searchCandidateId,
+          searchId,
+          'rapidapi'
+        );
+        jobsEnqueued++;
+
+        console.log("[Search] Enqueued job for candidate:", candidateId);
+      } catch (error) {
+        console.error("[Search] Error processing URL:", url, error);
+        // Continue with other URLs even if one fails
+      }
+    }
+
+    console.log("[Search] Created", candidatesCreated, "candidates");
+    console.log("[Search] Enqueued", jobsEnqueued, "scraping jobs to QStash");
+
+    return {
+      success: true,
+      data: {
+        totalUrls: uniqueUrls.length,
+        candidatesCreated,
+        jobsEnqueued,
+      },
+    };
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    console.error("[Search] Error in non-blocking search:", errorMessage);
     return {
       success: false,
       error: errorMessage,

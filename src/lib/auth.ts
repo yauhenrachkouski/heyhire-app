@@ -81,6 +81,12 @@ export const auth = betterAuth({
                `,
             });
          },
+         organizationHooks: {
+            afterCreateOrganization: async ({ organization, member, user }) => {
+               console.log(`[Organization] Created organization "${organization.name}" (${organization.id}) by user ${user.email}`);
+               // TODO: Send welcome email to organization creator
+            },
+         },
       }),
       lastLoginMethod({
          storeInDatabase: true,
@@ -374,7 +380,35 @@ export const auth = betterAuth({
             },
          },
       },
-      
+      session: {
+         create: {
+            before: async (session) => {
+               // Get the user's first organization to set as active
+               const { member: memberTable } = require("@/db/schema");
+               const { eq } = require("drizzle-orm");
+               
+               const userMember = await db.query.member.findFirst({
+                  where: eq(memberTable.userId, session.userId),
+                  with: {
+                     organization: true,
+                  },
+                  orderBy: (member, { desc }) => [desc(member.createdAt)],
+               });
+               
+               if (userMember) {
+                  console.log(`[Auth] Auto-setting active organization for user ${session.userId}: ${userMember.organizationId}`);
+                  return {
+                     data: {
+                        ...session,
+                        activeOrganizationId: userMember.organizationId,
+                     },
+                  };
+               }
+               
+               return { data: session };
+            },
+         },
+      },
    },
    rateLimit: {
       window: 60, // time window in seconds

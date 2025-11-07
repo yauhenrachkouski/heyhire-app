@@ -4,8 +4,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useDataTable } from "@/hooks/use-data-table";
 import { SearchInput } from "@/components/search/search-input";
-import { ManualSelectionModal } from "@/components/search/manual-selection-modal";
-import { getForagerIds, searchPeopleInForager, saveSearch } from "@/actions/search";
+import { saveSearch, searchPeopleNonBlocking } from "@/actions/search";
 import { CandidateCardListPaginated } from "@/components/search/candidate-card-list-paginated";
 import { SkeletonCardList } from "@/components/search/skeleton-card-list";
 import { FakeBlurredCardList } from "@/components/search/fake-blurred-card-list";
@@ -20,8 +19,7 @@ import {
 import { ColumnDef } from "@tanstack/react-table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Trash2, Mail, Settings2 } from "lucide-react";
-import { formatQueryToNaturalLanguage } from "@/lib/query-formatter";
+import { Trash2, Mail } from "lucide-react";
 import { useSession, useActiveOrganization } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 
@@ -113,16 +111,10 @@ export function SearchClient({ viewMode = "table", showSkeletons = true, initial
   const [rawSearchResults, setRawSearchResults] = useState<
     PeopleSearchResult[]
   >([]);
-  const [foragerIds, setForagerIds] = useState<{
-    skills: number[];
-    locations: number[];
-    industries: number[];
-  } | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<number[]>([]);
-  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const { toast } = useToast();
   
   // Get current user and organization
@@ -154,7 +146,6 @@ export function SearchClient({ viewMode = "table", showSkeletons = true, initial
       setQueryText(newQueryText);
     }
     setRawSearchResults([]);
-    setForagerIds(null);
     setHasSearched(false);
   };
 
@@ -170,102 +161,54 @@ export function SearchClient({ viewMode = "table", showSkeletons = true, initial
     console.log("[Search Client] User session:", session?.user?.id);
     console.log("[Search Client] Active org:", activeOrg?.id);
 
-    // If this is a new search (not a saved one being re-run), save it first and redirect
-    if (!initialQuery && session?.user && activeOrg) {
-      console.log("[Search Client] New search - saving to database first...");
-      
-      try {
-        const saveResult = await saveSearch(
-          queryText,
-          parsedQuery,
-          session.user.id,
-          activeOrg.id
-        );
-        
-        console.log("[Search Client] Save result:", saveResult);
-        
-        if (saveResult.success && saveResult.data?.id) {
-          console.log("[Search Client] Search saved with ID:", saveResult.data.id);
-          
-          // Refresh router to update sidebar with new search
-          router.refresh();
-          
-          // Redirect to the saved search page where the actual search will execute
-          console.log("[Search Client] Redirecting to /search/" + saveResult.data.id);
-          router.push(`/search/${saveResult.data.id}`);
-          return;
-        } else {
-          console.error("[Search Client] Failed to save search:", saveResult.error);
-          toast({
-            title: "Error",
-            description: "Failed to save search",
-            variant: "destructive",
-          });
-          return;
-        }
-      } catch (error) {
-        console.error("[Search Client] Error saving search:", error);
-        toast({
-          title: "Error",
-          description: "Failed to save search",
-          variant: "destructive",
-        });
-        return;
-      }
+    // Save search and start non-blocking flow
+    if (!session?.user || !activeOrg) {
+      console.error("[Search Client] No user session or organization");
+      toast({
+        title: "Error",
+        description: "Please sign in to search",
+        variant: "destructive",
+      });
+      return;
     }
 
-    // If we're here, this is a saved search being re-run
-    console.log("[Search Client] Executing saved search...");
+    console.log("[Search Client] Saving search to database...");
     setIsSearching(true);
-    setHasSearched(true);
-
+    
     try {
-      // Step 1: Get Forager IDs
-      console.log("[Search Client] Step 1: Getting Forager IDs...");
-      const idsResponse = await getForagerIds(parsedQuery);
-
-      if (!idsResponse.success) {
-        throw new Error(idsResponse.error || "Failed to get Forager IDs");
+      // Step 1: Save the search
+      const saveResult = await saveSearch(
+        queryText,
+        parsedQuery,
+        session.user.id,
+        activeOrg.id
+      );
+      
+      console.log("[Search Client] Save result:", saveResult);
+      
+      if (!saveResult.success || !saveResult.data?.id) {
+        throw new Error(saveResult.error || "Failed to save search");
       }
 
-      if (!idsResponse.data) {
-        throw new Error("No IDs returned from Forager");
+      const searchId = saveResult.data.id;
+      console.log("[Search Client] Search saved with ID:", searchId);
+
+      // Step 2: Start non-blocking search (enqueue jobs)
+      console.log("[Search Client] Starting non-blocking search...");
+      const searchResult = await searchPeopleNonBlocking(parsedQuery, searchId);
+
+      if (!searchResult.success) {
+        throw new Error(searchResult.error || "Failed to start search");
       }
 
-      console.log("[Search Client] Forager IDs received:", idsResponse.data);
-      setForagerIds(idsResponse.data);
+      console.log("[Search Client] Search started:", searchResult.data);
 
-      // Step 2: Search people (for table view only)
-      if (viewMode === "table") {
-        console.log("[Search Client] Step 2: Searching people in Forager...");
-        const peopleResponse = await searchPeopleInForager(
-          idsResponse.data,
-          parsedQuery
-        );
-
-        if (!peopleResponse.success) {
-          throw new Error(peopleResponse.error || "Failed to search people");
-        }
-
-        if (!peopleResponse.data) {
-          throw new Error("No results returned from people search");
-        }
-
-        console.log(
-          "[Search Client] People search results:",
-          peopleResponse.data
-        );
-
-        // Only update results once we have complete data
-        setRawSearchResults(peopleResponse.data);
-
-        toast({
-          title: "Success",
-          description: `Found ${peopleResponse.data.length} people matching your criteria`,
-        });
-      } else {
-        // For cards view, pagination will handle fetching
-      }
+      // Refresh router to update sidebar with new search
+      router.refresh();
+      
+      // Redirect to the search results page
+      console.log("[Search Client] Redirecting to /search/" + searchId);
+      router.push(`/search/${searchId}`);
     } catch (error) {
       console.error("[Search Client] Error:", error);
       const errorMessage =
@@ -275,8 +218,6 @@ export function SearchClient({ viewMode = "table", showSkeletons = true, initial
         description: errorMessage,
         variant: "destructive",
       });
-    } finally {
-      // Keep loading state until we confirm data is ready
       setIsSearching(false);
     }
   };
@@ -374,85 +315,83 @@ export function SearchClient({ viewMode = "table", showSkeletons = true, initial
     // TODO: Implement bulk email action
   }, [selectedCandidateIds, toast]);
 
-  const handleManualApply = useCallback((query: ParsedQuery) => {
-    console.log("[Search Client] Manual query applied:", query);
-    setParsedQuery(query);
-    
-    // Convert parsed query back to natural language
-    const naturalLanguageQuery = formatQueryToNaturalLanguage(query);
-    setQueryText(naturalLanguageQuery);
-    
-    setRawSearchResults([]);
-    setForagerIds(null);
-    setHasSearched(false);
-    toast({
-      title: "Filters Applied",
-      description: "Manual search criteria have been set",
-    });
-  }, [toast]);
-
-  // Count filled fields in parsed query
-  const countFilledFields = useCallback((query: ParsedQuery | null): number => {
-    if (!query) return 0;
-    
-    let count = 0;
-    if (query.job_title?.trim()) count++;
-    if (query.location?.trim()) count++;
-    if (query.years_of_experience?.trim()) count++;
-    if (query.industry?.trim()) count++;
-    if (query.skills?.trim()) count++;
-    if (query.company?.trim()) count++;
-    if (query.education?.trim()) count++;
-    
-    return count;
-  }, []);
-
   console.log("[Search Client] Display results:", displayResults);
   console.log("[Search Client] Table initialized:", !!table);
   console.log("[Search Client] View mode:", viewMode);
 
   return (
     <div className="flex flex-col gap-6 mb-2">
-      {/* Search Form Section - Always Visible */}
-      <div className="space-y-1 bg-blue-600 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <label className="text-sm text-white/80">
+      {/* Search Form Section - Only visible when no search has been performed */}
+      {!hasSearched && (
+        <div className="space-y-1 bg-blue-600 rounded-lg p-4">
+          <label className="text-sm text-white font-medium mb-2">
             Who are you searching for?
           </label>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsManualModalOpen(true)}
-            className="text-xs text-white hover:text-white hover:bg-white/10 h-7 px-2"
-          >
-            <Settings2 className="h-3 w-3 mr-1" />
-            Manual Selection {countFilledFields(parsedQuery) > 0 && `(${countFilledFields(parsedQuery)})`}
-          </Button>
+          <SearchInput
+            onQueryParsed={handleQueryParsed}
+            onParsingChange={setIsParsing}
+            onSearch={handleStartSearch}
+            isLoading={isSearching}
+            hasParsedQuery={!!parsedQuery}
+            value={queryText}
+            onQueryTextChange={setQueryText}
+          />
+          {isParsing && (
+            <div className="mt-2 flex items-center gap-2 text-white text-sm">
+              <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-current border-r-transparent"></div>
+              <span>Analyzing your search...</span>
+            </div>
+          )}
         </div>
-        <SearchInput
-          onQueryParsed={handleQueryParsed}
-          onParsingChange={setIsParsing}
-          onSearch={handleStartSearch}
-          isLoading={isSearching}
-          hasParsedQuery={!!parsedQuery}
-          value={queryText}
-          onQueryTextChange={setQueryText}
-        />
-        {isParsing && (
-          <div className="mt-2 flex items-center gap-2 text-white text-sm">
-            <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-current border-r-transparent"></div>
-            <span>Analyzing your search...</span>
-          </div>
-        )}
-      </div>
+      )}
 
-      {/* Manual Selection Modal */}
-      <ManualSelectionModal
-        open={isManualModalOpen}
-        onOpenChange={setIsManualModalOpen}
-        initialQuery={parsedQuery}
-        onApply={handleManualApply}
-      />
+      {/* Search Query as H1 - Shown after search */}
+      {hasSearched && (
+        <div className="space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <h1 className="text-3xl font-bold tracking-tight">
+              {queryText || "Search Results"}
+            </h1>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setHasSearched(false);
+                setRawSearchResults([]);
+                setQueryText("");
+                setParsedQuery(null);
+              }}
+              className="shrink-0"
+            >
+              New Search
+            </Button>
+          </div>
+          
+          {/* Results Bar with Actions */}
+          <div className="flex items-center justify-between py-3 border-b">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold">Your search results:</h2>
+              <span className="text-sm text-muted-foreground">
+                {isSearching ? "Searching..." : `${normalizedResults.length} candidates found`}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Action buttons placeholder */}
+              {normalizedResults.length > 0 && !isSearching && (
+                <>
+                  <Button variant="outline" size="sm">
+                    <Mail className="h-4 w-4 mr-2" />
+                    Email All
+                  </Button>
+                  <Button variant="outline" size="sm">
+                    Export
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Loading Progress Indicator */}
       {isSearching && (
@@ -462,15 +401,6 @@ export function SearchClient({ viewMode = "table", showSkeletons = true, initial
       {/* Results Section */}
       {hasSearched && viewMode === "table" && (
         <div className="space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold">
-              Search Results ({normalizedResults.length})
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {isSearching ? "Loading results..." : "Showing matching candidates from Forager"}
-            </p>
-          </div>
-
           <div className="relative transition-all duration-300">
             {displayResults.length > 0 ? (
               <div className={`relative ${isSearching ? "blur-sm" : ""}`}>
@@ -503,14 +433,17 @@ export function SearchClient({ viewMode = "table", showSkeletons = true, initial
         </div>
       )}
 
-      {/* Cards View Section */}
-      {hasSearched && viewMode === "cards" && parsedQuery && foragerIds && (
-        <CandidateCardListPaginated
-          foragerIds={foragerIds}
-          parsedQuery={parsedQuery}
-          onSelectionChange={setSelectedCandidateIds}
-          isSearching={isSearching}
-        />
+      {/* Cards View Section - Show existing results */}
+      {hasSearched && viewMode === "cards" && rawSearchResults.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {rawSearchResults.map((result) => (
+            <div key={result.id} className="border rounded-lg p-4">
+              <h3 className="font-semibold">{result.person?.full_name}</h3>
+              <p className="text-sm text-muted-foreground">{result.person?.headline}</p>
+              <p className="text-sm">{result.organization?.name}</p>
+            </div>
+          ))}
+        </div>
       )}
 
       {/* Fake Blurred Cards - Show by default when not searched */}

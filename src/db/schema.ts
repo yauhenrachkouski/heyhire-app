@@ -1,4 +1,11 @@
-import { pgTable, text, timestamp, boolean, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, integer, pgEnum, unique } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
+
+// Enums for candidate system
+export const candidateSourceEnum = pgEnum('candidate_source', ['rapidapi']);
+export const contactSourceEnum = pgEnum('contact_source', ['linkedin', 'surfe', 'contactout']);
+export const scrapeStatusEnum = pgEnum('scrape_status', ['pending', 'scraping', 'completed', 'failed']);
+export const candidateStatusEnum = pgEnum('candidate_status', ['new', 'reviewing', 'contacted', 'rejected', 'hired']);
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -127,3 +134,160 @@ export const search = pgTable("search", {
     .references(() => organization.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const candidates = pgTable("candidates", {
+  id: text("id").primaryKey(),
+  linkedinUrl: text("linkedin_url").notNull().unique(),
+  linkedinUsername: text("linkedin_username"),
+  linkedinUrn: text("linkedin_urn"),
+  source: candidateSourceEnum("source").default('rapidapi').notNull(),
+  fullName: text("full_name"),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  headline: text("headline"),
+  summary: text("summary"),
+  photoUrl: text("photo_url"),
+  coverUrl: text("cover_url"),
+  location: text("location"), // JSON: { country, city, country_code }
+  isPremium: boolean("is_premium").default(false),
+  isInfluencer: boolean("is_influencer").default(false),
+  followerCount: integer("follower_count"),
+  connectionCount: integer("connection_count"),
+  experiences: text("experiences"), // JSON: array of experience objects
+  educations: text("educations"), // JSON: array of education objects
+  skills: text("skills"), // JSON: array of skill objects
+  certifications: text("certifications"), // JSON: array
+  languages: text("languages"), // JSON: array
+  publications: text("publications"), // JSON: array
+  rawData: text("raw_data"), // JSON: full RapidAPI response
+  scrapeStatus: scrapeStatusEnum("scrape_status").default('pending').notNull(),
+  scrapeError: text("scrape_error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
+export const contacts = pgTable("contacts", {
+  id: text("id").primaryKey(),
+  candidateId: text("candidate_id")
+    .notNull()
+    .references(() => candidates.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // 'email' or 'phone'
+  value: text("value").notNull(),
+  source: contactSourceEnum("source").notNull(),
+  verified: boolean("verified").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
+export const searchCandidates = pgTable("search_candidates", {
+  id: text("id").primaryKey(),
+  searchId: text("search_id")
+    .notNull()
+    .references(() => search.id, { onDelete: "cascade" }),
+  candidateId: text("candidate_id")
+    .notNull()
+    .references(() => candidates.id, { onDelete: "cascade" }),
+  matchScore: integer("match_score"), // 0-100
+  notes: text("notes"), // JSON: { pros: [], cons: [] } or free text
+  status: candidateStatusEnum("status").default('new'),
+  sourceProvider: text("source_provider"), // 'serper', 'linkedin', etc.
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+}, (table) => ({
+  uniqueSearchCandidate: unique().on(table.searchId, table.candidateId),
+}));
+
+// Relations for Better Auth
+export const userRelations = relations(user, ({ many }) => ({
+  sessions: many(session),
+  accounts: many(account),
+  members: many(member),
+  invitations: many(invitation),
+  searches: many(search),
+}));
+
+export const sessionRelations = relations(session, ({ one }) => ({
+  user: one(user, {
+    fields: [session.userId],
+    references: [user.id],
+  }),
+}));
+
+export const accountRelations = relations(account, ({ one }) => ({
+  user: one(user, {
+    fields: [account.userId],
+    references: [user.id],
+  }),
+}));
+
+export const organizationRelations = relations(organization, ({ many }) => ({
+  members: many(member),
+  invitations: many(invitation),
+  searches: many(search),
+}));
+
+export const memberRelations = relations(member, ({ one }) => ({
+  user: one(user, {
+    fields: [member.userId],
+    references: [user.id],
+  }),
+  organization: one(organization, {
+    fields: [member.organizationId],
+    references: [organization.id],
+  }),
+}));
+
+export const invitationRelations = relations(invitation, ({ one }) => ({
+  organization: one(organization, {
+    fields: [invitation.organizationId],
+    references: [organization.id],
+  }),
+  inviter: one(user, {
+    fields: [invitation.inviterId],
+    references: [user.id],
+  }),
+}));
+
+export const searchRelations = relations(search, ({ one, many }) => ({
+  user: one(user, {
+    fields: [search.userId],
+    references: [user.id],
+  }),
+  organization: one(organization, {
+    fields: [search.organizationId],
+    references: [organization.id],
+  }),
+  searchCandidates: many(searchCandidates),
+}));
+
+export const candidatesRelations = relations(candidates, ({ many }) => ({
+  contacts: many(contacts),
+  searchCandidates: many(searchCandidates),
+}));
+
+export const contactsRelations = relations(contacts, ({ one }) => ({
+  candidate: one(candidates, {
+    fields: [contacts.candidateId],
+    references: [candidates.id],
+  }),
+}));
+
+export const searchCandidatesRelations = relations(searchCandidates, ({ one }) => ({
+  search: one(search, {
+    fields: [searchCandidates.searchId],
+    references: [search.id],
+  }),
+  candidate: one(candidates, {
+    fields: [searchCandidates.candidateId],
+    references: [candidates.id],
+  }),
+}));

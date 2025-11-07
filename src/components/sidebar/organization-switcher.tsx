@@ -20,6 +20,7 @@ import {
 import { useRouter } from "next/navigation"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { subscription } from "@/db/schema"
+import Image from "next/image"
 
 type SubscriptionType = typeof subscription.$inferSelect
 
@@ -97,7 +98,13 @@ export function OrganizationSwitcher({
         <SidebarMenuItem>
           <SidebarMenuButton size="lg" disabled>
             <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-orange-500 text-white">
-              <Icon name="alert-circle" className="size-4" />
+              <Image 
+                src="/favicon.png" 
+                alt="No Organization" 
+                width={16} 
+                height={16} 
+                className="invert"
+              />
             </div>
             <div className="grid flex-1 text-left text-sm leading-tight">
               <span className="truncate font-semibold text-orange-600">No Organization</span>
@@ -127,7 +134,13 @@ export function OrganizationSwitcher({
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
               <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                <Icon name="building" className="size-4" />
+                <Image 
+                  src="/favicon.png" 
+                  alt="Workspace" 
+                  width={16} 
+                  height={16} 
+                  className="invert"
+                />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-semibold">{displayOrg.name}</span>
@@ -154,7 +167,13 @@ export function OrganizationSwitcher({
                   className="gap-2 p-2"
                 >
                   <div className="flex size-6 items-center justify-center rounded-sm border">
-                    <Icon name="building" className="size-4 shrink-0" />
+                    <Image 
+                      src="/favicon.png" 
+                      alt="Organization" 
+                      width={16} 
+                      height={16} 
+                      className="shrink-0"
+                    />
                   </div>
                   <div className="flex-1 overflow-hidden">
                     <div className="truncate font-medium">{org.name}</div>

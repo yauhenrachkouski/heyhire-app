@@ -1,9 +1,20 @@
 "use client";
 
-import { Mail, Phone, Plus, Eye, Loader2, Copy } from "lucide-react";
-import Link from "next/link";
+import { 
+  IconMail, 
+  IconPhone, 
+  IconPlus, 
+  IconEye, 
+  IconLoader2, 
+  IconCopy, 
+  IconExternalLink, 
+  IconStar, 
+  IconThumbDown, 
+  IconChevronDown, 
+  IconChevronUp, 
+  IconSparkles 
+} from "@tabler/icons-react";
 import { useState } from "react";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -14,484 +25,301 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { PeopleSearchResult } from "@/types/search";
 import { BRANDFETCH_LINKEDIN_LOGO_URL } from "@/lib/constants";
-import { enrichPerson } from "@/actions/enrichment";
 import { toast } from "sonner";
 
+interface SearchCandidate {
+  id: string;
+  candidate: {
+    id: string;
+    fullName: string | null;
+    headline: string | null;
+    summary: string | null;
+    photoUrl: string | null;
+    location: string | null;
+    linkedinUrl: string;
+    experiences: string | null;
+    skills: string | null;
+    educations: string | null;
+    scrapeStatus: string;
+  };
+  matchScore: number | null;
+  notes: string | null;
+}
+
 interface CandidateCardProps {
-  candidate: PeopleSearchResult;
+  searchCandidate: SearchCandidate;
   isSelected?: boolean;
   onSelect?: (selected: boolean) => void;
   onAddToOutreach?: () => void;
-  onShowCandidate?: (candidate?: PeopleSearchResult) => void;
+  onShowCandidate?: () => void;
+  onEmail?: () => void;
+  onPhone?: () => void;
+  onAddToShortlist?: () => void;
 }
 
 export function CandidateCard({
-  candidate,
+  searchCandidate,
   isSelected = false,
   onSelect = () => {},
   onAddToOutreach = () => {},
   onShowCandidate = () => {},
+  onEmail = () => {},
+  onPhone = () => {},
+  onAddToShortlist = () => {},
 }: CandidateCardProps) {
-  const [revealedEmails, setRevealedEmails] = useState<string[]>([]);
-  const [isRevealingEmail, setIsRevealingEmail] = useState(false);
-  const [revealedPhones, setRevealedPhones] = useState<string[]>([]);
-  const [isRevealingPhone, setIsRevealingPhone] = useState(false);
   const [expandedSkills, setExpandedSkills] = useState(false);
+  const [expandedProsCons, setExpandedProsCons] = useState(false);
 
-  const firstName = candidate.person?.first_name || "";
-  const lastName = candidate.person?.last_name || "";
-  const currentRole = candidate.role_title || "----";
-  const skills = candidate.person?.skills || [];
-  const photo = candidate.person?.photo || null;
-  const email = candidate.person?.email || null;
-  const phone = candidate.person?.phone || null;
-  const organizationName = candidate.organization?.name || "";
-  const organizationLogo = candidate.organization?.logo;
-  const linkedInPersonUrl = candidate.person?.linkedin_info?.public_profile_url;
-  const linkedInOrgUrl = candidate.organization?.linkedin_info?.public_profile_url;
-
+  const { candidate, matchScore, notes } = searchCandidate;
+  
+  console.log("[CandidateCard] Rendering candidate:", candidate.fullName, "Score:", matchScore, "Has notes:", !!notes);
+  
+  // Parse JSON fields
+  const experiences = candidate.experiences ? JSON.parse(candidate.experiences) : [];
+  const skills = candidate.skills ? JSON.parse(candidate.skills) : [];
+  const location = candidate.location ? JSON.parse(candidate.location) : null;
+  
+  // Extract first and last name
+  const fullName = candidate.fullName || "Unknown";
+  const nameParts = fullName.split(" ");
+  const firstName = nameParts[0] || "";
+  const lastName = nameParts.slice(1).join(" ") || "";
+  
+  // Current role from first experience
+  const currentExperience = experiences[0] || {};
+  const currentRole = currentExperience.role_title || candidate.headline || "----";
+  const organizationName = currentExperience.organization_name || "";
+  
   // Generate initials for fallback avatar
   const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 
+  // Parse notes if available (contains pros/cons from scoring)
+  let prosAndCons = null;
+  if (notes) {
+    try {
+      prosAndCons = JSON.parse(notes);
+    } catch (e) {
+      // If notes is plain text, ignore
+    }
+  }
+
   const handleOpenLinkedIn = () => {
-    if (linkedInPersonUrl) {
-      window.open(linkedInPersonUrl, "_blank", "noopener,noreferrer");
+    if (candidate.linkedinUrl) {
+      window.open(candidate.linkedinUrl, "_blank", "noopener,noreferrer");
     }
   };
 
-  const handleRevealEmail = async () => {
-    if (!linkedInPersonUrl || typeof linkedInPersonUrl !== 'string' || linkedInPersonUrl.trim() === '') {
-      toast.error("LinkedIn URL not available");
-      return;
-    }
-
-    if (revealedEmails.length > 0) {
-      // Already revealed, copy all emails to clipboard
-      const emailsText = revealedEmails.join(', ');
-      try {
-        await navigator.clipboard.writeText(emailsText);
-        toast.success(`${revealedEmails.length > 1 ? 'Emails' : 'Email'} copied to clipboard`);
-      } catch (error) {
-        toast.error("Failed to copy to clipboard");
-      }
-      return;
-    }
-
-    setIsRevealingEmail(true);
-
+  const handleCopyLinkedIn = async () => {
     try {
-      const result = await enrichPerson(linkedInPersonUrl, { includeEmail: true, includePhone: false });
-
-      if (result.success && result.data) {
-        const emails = result.data.emails;
-        
-        if (emails && emails.length > 0) {
-          setRevealedEmails(emails);
-          const emailCount = emails.length;
-          toast.success(
-            `${emailCount} email${emailCount > 1 ? 's' : ''} revealed - Credits used: ${result.data.creditsUsed || 1}`
-          );
-        } else {
-          toast.error("No emails found");
-        }
-      } else {
-        toast.error(result.error || "Failed to reveal email");
-      }
+      await navigator.clipboard.writeText(candidate.linkedinUrl);
+      toast.success("LinkedIn URL copied to clipboard");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to reveal email");
-    } finally {
-      setIsRevealingEmail(false);
+      toast.error("Failed to copy to clipboard");
     }
   };
 
-  const handleRevealPhone = async () => {
-    if (!linkedInPersonUrl || typeof linkedInPersonUrl !== 'string' || linkedInPersonUrl.trim() === '') {
-      toast.error("LinkedIn URL not available");
-      return;
-    }
-
-    if (revealedPhones.length > 0) {
-      // Already revealed, copy all phones to clipboard
-      const phonesText = revealedPhones.join(', ');
-      try {
-        await navigator.clipboard.writeText(phonesText);
-        toast.success(`${revealedPhones.length > 1 ? 'Phone numbers' : 'Phone number'} copied to clipboard`);
-      } catch (error) {
-        toast.error("Failed to copy to clipboard");
-      }
-      return;
-    }
-
-    setIsRevealingPhone(true);
-
-    try {
-      const result = await enrichPerson(linkedInPersonUrl, { includeEmail: false, includePhone: true });
-
-      if (result.success && result.data) {
-        const phones = result.data.phones;
-        
-        if (phones && phones.length > 0) {
-          setRevealedPhones(phones);
-          const phoneCount = phones.length;
-          toast.success(
-            `${phoneCount} phone number${phoneCount > 1 ? 's' : ''} revealed - Credits used: ${result.data.creditsUsed || 2}`
-          );
-        } else {
-          toast.error("No phone numbers found");
-        }
-      } else {
-        toast.error(result.error || "Failed to reveal phone");
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to reveal phone");
-    } finally {
-      setIsRevealingPhone(false);
-    }
-  };
-
-  const handleRevealBoth = async () => {
-    if (!linkedInPersonUrl || typeof linkedInPersonUrl !== 'string' || linkedInPersonUrl.trim() === '') {
-      toast.error("LinkedIn URL not available");
-      return;
-    }
-
-    if (revealedEmails.length > 0 && revealedPhones.length > 0) {
-      // Already revealed both, copy all to clipboard
-      const allData = [...revealedEmails, ...revealedPhones].join(', ');
-      try {
-        await navigator.clipboard.writeText(allData);
-        toast.success('Email and phone copied to clipboard');
-      } catch (error) {
-        toast.error("Failed to copy to clipboard");
-      }
-      return;
-    }
-
-    setIsRevealingEmail(true);
-    setIsRevealingPhone(true);
-
-    try {
-      const result = await enrichPerson(linkedInPersonUrl, { includeEmail: true, includePhone: true });
-
-      if (result.success && result.data) {
-        const emails = result.data.emails;
-        const phones = result.data.phones;
-        
-        if (emails && emails.length > 0) {
-          setRevealedEmails(emails);
-        }
-        
-        if (phones && phones.length > 0) {
-          setRevealedPhones(phones);
-        }
-
-        if ((emails && emails.length > 0) || (phones && phones.length > 0)) {
-          const parts = [];
-          if (emails && emails.length > 0) {
-            parts.push(`${emails.length} email${emails.length > 1 ? 's' : ''}`);
-          }
-          if (phones && phones.length > 0) {
-            parts.push(`${phones.length} phone${phones.length > 1 ? 's' : ''}`);
-          }
-          toast.success(
-            `${parts.join(' and ')} revealed - Credits used: ${result.data.creditsUsed || 3}`
-          );
-        } else {
-          toast.error("No contact information found");
-        }
-      } else {
-        toast.error(result.error || "Failed to reveal contact information");
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to reveal contact information");
-    } finally {
-      setIsRevealingEmail(false);
-      setIsRevealingPhone(false);
-    }
-  };
+  // Show skeleton if still scraping
+  const isLoading = candidate.scrapeStatus === 'pending' || candidate.scrapeStatus === 'scraping';
 
   return (
-    <TooltipProvider>
-      <div className={`flex items-start justify-between gap-4 rounded-lg border p-4 transition-all ${
-        isSelected 
-          ? "ring-2 ring-blue-100" 
-          : "bg-card hover:bg-accent/50"
-      }`}>
-        {/* Checkbox */}
-        <div className="flex-shrink-0 pt-1">
+    <div
+      className={`group relative rounded-lg border bg-card p-4 transition-all hover:shadow-md ${
+        isSelected ? "ring-2 ring-primary" : ""
+      } ${isLoading ? "opacity-60" : ""}`}
+    >
+
+      <div className="flex gap-4">
+        {/* Left column: Checkbox */}
+        <div className="flex items-start pt-1">
           <Checkbox
             checked={isSelected}
-            onCheckedChange={(checked) => onSelect(checked === true)}
-            className={`mt-1 transition-transform ${isSelected ? "scale-110" : ""}`}
-            aria-label={`Select ${firstName} ${lastName}`}
+            onCheckedChange={onSelect}
+            aria-label="Select candidate"
           />
         </div>
 
-        {/* Avatar */}
-        <div className="flex-shrink-0">
-          <Avatar className="h-12 w-12">
-            {photo && <AvatarImage src={photo} alt={`${firstName} ${lastName}`} />}
-            <AvatarFallback className="font-semibold text-sm">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-        </div>
-
-        {/* Left section: Candidate info */}
+        {/* Middle column: Profile content */}
         <div className="flex-1 min-w-0">
-          {/* Name - plain text, no links */}
-          <div className="flex items-center gap-2 mb-2">
-            <span className="font-semibold text-foreground truncate">
-              {firstName}
-            </span>
-            <span className="font-semibold text-foreground truncate">{lastName}</span>
-          </div>
+          <div className="flex gap-4 mb-4">
+            {/* Avatar */}
+            <div className="shrink-0">
+              <Avatar className="h-16 w-16">
+                {candidate.photoUrl && <AvatarImage src={candidate.photoUrl} alt={fullName} />}
+                <AvatarFallback className="text-lg">{initials}</AvatarFallback>
+              </Avatar>
+            </div>
 
-          {/* Current role with organization instead of headline */}
-          <div className="mb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-foreground">{currentRole}</span>
-              {organizationName && (
-                <>
-                  <span className="text-sm text-muted-foreground">at</span>
-                  <div className="flex items-center gap-1">
-                    {organizationLogo && (
-                      <Image
-                        src={organizationLogo}
-                        alt={organizationName}
-                        width={16}
-                        height={16}
-                        className="rounded object-cover flex-shrink-0"
-                      />
-                    )}
-                    {linkedInOrgUrl ? (
-                      <Link
-                        href={linkedInOrgUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-primary hover:underline truncate"
-                      >
-                        {organizationName}
-                      </Link>
-                    ) : (
-                      <span className="text-sm text-foreground truncate">
-                        {organizationName}
-                      </span>
-                    )}
-                  </div>
-                </>
+            {/* Name and role */}
+            <div className="flex-1 min-w-0 space-y-1">
+              <h3 className="font-semibold text-lg leading-tight">{fullName}</h3>
+              
+              <p className="text-sm  mt-0.5">{currentRole} {organizationName &&  `at ${organizationName}`}</p>
+              
+              {location && (
+                <p className="text-xs text-muted-foreground">{location.name}</p>
               )}
+              {candidate.summary && (
+                <p className="text-sm  mt-3 line-clamp-2">{candidate.summary}</p>
+              )}
+              
             </div>
           </div>
 
           {/* Skills */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-xs font-medium text-muted-foreground">Skills:</p>
-            {skills.length > 0 ? (
-              <>
-                {skills.slice(0, 5).map((skill, idx) => (
-                  <Badge key={idx} variant="secondary" className="text-xs">
-                    {typeof skill === "string" ? skill : skill?.name || ""}
-                  </Badge>
-                ))}
-                {skills.length > 5 && !expandedSkills && (
-                  <Badge
-                    variant="outline"
-                    className="text-xs cursor-pointer hover:opacity-80 transition-opacity"
-                    onClick={() => setExpandedSkills(true)}
-                  >
-                    {`+${skills.length - 5} more`}
-                  </Badge>
+          {skills.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-4">
+              {(expandedSkills ? skills : skills.slice(0, 5)).map((skill: any, index: number) => (
+                <Badge key={index} variant="secondary" className="text-xs">
+                  {skill.name}
+                </Badge>
+              ))}
+              {skills.length > 5 && (
+                <button
+                  onClick={() => setExpandedSkills(!expandedSkills)}
+                  className="text-xs text-primary hover:underline"
+                >
+                  {expandedSkills ? "Show less" : `+${skills.length - 5} more`}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Pros and Cons - Collapsible */}
+          {prosAndCons && (prosAndCons.pros?.length > 0 || prosAndCons.cons?.length > 0) && (
+            <div>
+              <div className="flex items-center gap-2">
+                <IconSparkles className="h-4 w-4 text-purple-500" />
+                <span className="text-sm font-medium text-muted-foreground">AI Scoring:</span>
+                {matchScore !== null && (
+                  <div className={`
+                    px-2 py-1 rounded-md text-sm font-semibold
+                    ${matchScore >= 70 
+                      ? 'bg-green-100 text-green-700' 
+                      : matchScore >= 50 
+                      ? 'bg-yellow-100 text-yellow-700' 
+                      : 'bg-red-100 text-red-700'
+                    }
+                  `}>
+                    {matchScore}
+                  </div>
                 )}
-                {expandedSkills && skills.length > 5 && 
-                  skills.slice(5).map((skill, idx) => (
-                    <Badge key={`expanded-${idx}`} variant="secondary" className="text-xs">
-                      {typeof skill === "string" ? skill : skill?.name || ""}
-                    </Badge>
-                  ))
-                }
-              </>
-            ) : (
-              <span className="text-sm text-muted-foreground">-</span>
-            )}
-          </div>
-
-          {/* Email and Phone */}
-          <div className="mt-3 flex items-center gap-4 flex-wrap">
-            {/* Email Section */}
-            {revealedEmails.length > 0 ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={handleRevealEmail}
-                    className="flex items-center gap-2 flex-wrap cursor-pointer hover:opacity-80 transition-opacity group"
-                  >
-                    <Mail className="h-4 w-4 text-primary flex-shrink-0" />
-                    <div className="flex flex-wrap gap-2">
-                      {revealedEmails.map((email, idx) => (
-                        <span key={idx} className="text-sm text-foreground">
-                          {email}
-                          {idx < revealedEmails.length - 1 && ','}
-                        </span>
-                      ))}
+                <button
+                  onClick={() => setExpandedProsCons(!expandedProsCons)}
+                  className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                  aria-label={expandedProsCons ? 'Hide details' : 'Show details'}
+                >
+                  {expandedProsCons ? (
+                    <IconChevronUp className="h-4 w-4" />
+                  ) : (
+                    <IconChevronDown className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+              
+              {expandedProsCons && (
+                <div className="mt-3 space-y-3 text-sm">
+                  {prosAndCons.pros && prosAndCons.pros.length > 0 && (
+                    <div>
+                      <p className="font-semibold text-green-600 mb-1">Pros:</p>
+                      <ul className="space-y-1 text-muted-foreground">
+                        {prosAndCons.pros.map((pro: string, i: number) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <span className="text-green-600 mt-0.5">✓</span>
+                            <span>{pro}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                    <Copy className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p>Click to copy to clipboard</p>
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRevealEmail}
-                    disabled={isRevealingEmail}
-                    className="h-8"
-                  >
-                    {isRevealingEmail ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Revealing...
-                      </>
-                    ) : (
-                      <>
-                        <Mail className="h-4 w-4" />
-                        email (1 credit)
-                      </>
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p>
-                    {isRevealingEmail
-                      ? "Revealing email..."
-                      : "Click to reveal email"}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-
-            {/* Phone Section */}
-            {revealedPhones.length > 0 ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={handleRevealPhone}
-                    className="flex items-center gap-2 flex-wrap cursor-pointer hover:opacity-80 transition-opacity group"
-                  >
-                    <Phone className="h-4 w-4 text-primary flex-shrink-0" />
-                    <div className="flex flex-wrap gap-2">
-                      {revealedPhones.map((phoneNum, idx) => (
-                        <span key={idx} className="text-sm text-foreground">
-                          {phoneNum}
-                          {idx < revealedPhones.length - 1 && ','}
-                        </span>
-                      ))}
+                  )}
+                  {prosAndCons.cons && prosAndCons.cons.length > 0 && (
+                    <div>
+                      <p className="font-semibold text-red-600 mb-1">Cons:</p>
+                      <ul className="space-y-1 text-muted-foreground">
+                        {prosAndCons.cons.map((con: string, i: number) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <span className="text-red-600 mt-0.5">✗</span>
+                            <span>{con}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                    <Copy className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p>Click to copy to clipboard</p>
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRevealPhone}
-                    disabled={isRevealingPhone}
-                    className="h-8"
-                  >
-                    {isRevealingPhone ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Revealing...
-                      </>
-                    ) : (
-                      <>
-                        <Phone className="h-4 w-4" />
-                        phone (2 credits)
-                      </>
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p>
-                    {isRevealingPhone
-                      ? "Revealing phone..."
-                      : "Click to reveal phone"}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Loading indicator */}
+          {isLoading && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+              <IconLoader2 className="h-3 w-3 animate-spin" />
+              <span>Analyzing profile...</span>
+            </div>
+          )}
         </div>
 
-        {/* Right section: Action buttons */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {linkedInPersonUrl && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  onClick={handleOpenLinkedIn}
-                  className="h-8 w-8"
-                >
-                  <Image
-                    src={BRANDFETCH_LINKEDIN_LOGO_URL}
-                    alt="LinkedIn"
-                    width={16}
-                    height={16}
-                  />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                <p>Open LinkedIn profile</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={onAddToOutreach}
-                className="h-8 w-8"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              <p>Add to outreach sequence</p>
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => onShowCandidate(candidate)}
-                className="h-8 w-8"
-              >
-                <Eye className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              <p>Show candidate details</p>
-            </TooltipContent>
-          </Tooltip>
+        {/* Right column: Action buttons */}
+        <div className="flex flex-col gap-2 items-end">
+          <div className="flex flex-row gap-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="icon" variant="outline" onClick={onAddToShortlist}>
+                    <IconStar className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Add to shortlist</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="icon" variant="outline">
+                    <IconThumbDown className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Reject candidate</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="icon" variant="outline" onClick={handleOpenLinkedIn}>
+                    <IconExternalLink className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Open LinkedIn profile</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="icon" variant="outline" onClick={onShowCandidate}>
+                    <IconEye className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>View details</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="icon" onClick={onAddToOutreach}>
+                    <IconPlus className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Add to outreach</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
       </div>
-    </TooltipProvider>
+    </div>
   );
 }
+

@@ -27,11 +27,11 @@ export default async function DashboardLayout({
   }
 
   // Fetch all sidebar data in parallel for better performance
-  const [{ subscription }, organizations, activeOrganization, session] = await Promise.all([
+  const [{ subscription }, organizations, activeOrganization, activeMember] = await Promise.all([
     getUserSubscription(),
     auth.api.listOrganizations({ headers: await headers() }),
     auth.api.getFullOrganization({ headers: await headers() }),
-    auth.api.getSession({ headers: await headers() })
+    auth.api.getActiveMember({ headers: await headers() })
   ])
 
   // Debug: Log what we received from better-auth APIs
@@ -40,8 +40,8 @@ export default async function DashboardLayout({
     organizationsList: organizations?.map(o => ({ id: o.id, name: o.name })) ?? [],
     activeOrgId: activeOrganization?.id,
     activeOrgName: activeOrganization?.name,
-    sessionUserId: session?.user?.id,
-    sessionActiveOrgId: session?.session?.activeOrganizationId,
+    currentUserId: activeMember?.user?.id,
+    currentUserRole: activeMember?.role,
     hasSubscription: !!subscription
   })
 
@@ -58,7 +58,7 @@ export default async function DashboardLayout({
           subscription={subscription}
           organizations={organizations}
           activeOrganization={activeOrganization}
-          user={session?.user ?? null}
+          user={activeMember?.user ?? null}
           recentSearches={recentSearches ?? []}
         />
         <SidebarInset>

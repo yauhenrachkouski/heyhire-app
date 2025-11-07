@@ -72,11 +72,7 @@ export default async function SubscribePage() {
           recentSearches={recentSearches ?? []}
         />
         <SidebarInset>
-          
-          <div className="flex flex-1 flex-col gap-4 p-4 md:p-8">
-            {/* Header section */}
-            
-            
+          <div className="flex flex-1 flex-col items-center justify-center p-4 md:p-8">
             {/* Subscribe cards */}
             <SubscribeCardsServer isRequired={true} trialEligible={!trialUsed} />
           </div>

@@ -1,57 +1,49 @@
 "use client";
 
 import { useCallback, useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useReactTable, getCoreRowModel, getPaginationRowModel } from "@tanstack/react-table";
-import { searchPeopleInForagerPaginated } from "@/actions/search";
 import { CandidateCard } from "./candidate-card";
-import { SkeletonCardList } from "./skeleton-card-list";
-import { FakeBlurredCardList } from "./fake-blurred-card-list";
 import { CandidateDetailsSheet } from "./candidate-details-sheet";
 import { DataTablePagination } from "@/components/data-table/data-table-pagination";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import type { ParsedQuery, PeopleSearchResult } from "@/types/search";
 import { CandidateCardActionBar } from "./candidate-card-action-bar";
 
+// Type for candidate from new database schema
+interface Candidate {
+  id: string;
+  candidate: {
+    id: string;
+    fullName: string | null;
+    headline: string | null;
+    photoUrl: string | null;
+    location: string | null;
+    experiences: string | null;
+    skills: string | null;
+    educations: string | null;
+    scrapeStatus: string;
+  };
+  matchScore: number | null;
+  notes: string | null;
+}
+
 interface CandidateCardListPaginatedProps {
-  foragerIds: { skills: number[]; locations: number[]; industries: number[] };
-  parsedQuery: ParsedQuery;
+  candidates: Candidate[];
+  searchId: string;
+  viewMode?: "table" | "cards";
   pageSize?: number;
-  onSelectionChange?: (selectedIds: number[]) => void;
-  isSearching?: boolean;
+  onSelectionChange?: (selectedIds: string[]) => void;
 }
 
 export function CandidateCardListPaginated({
-  foragerIds,
-  parsedQuery,
+  candidates,
+  searchId,
+  viewMode = "cards",
   pageSize = 10,
   onSelectionChange,
-  isSearching = false,
 }: CandidateCardListPaginatedProps) {
   const [pageIndex, setPageIndex] = useState(0);
-  const [selectedCandidate, setSelectedCandidate] = useState<PeopleSearchResult | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-
-  // Fetch all candidates for the current page
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["search", "candidates", foragerIds, parsedQuery, pageIndex],
-    queryFn: async () => {
-      const response = await searchPeopleInForagerPaginated(
-        foragerIds,
-        parsedQuery,
-        pageIndex,
-        pageSize
-      );
-
-      if (!response.success) {
-        throw new Error(response.error || "Failed to fetch candidates");
-      }
-
-      return response.data || [];
-    },
-  });
-
-  const candidates = data || [];
+  const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Setup table for pagination
   const table = useReactTable({
@@ -80,7 +72,7 @@ export function CandidateCardListPaginated({
     console.log("[Candidates] Add to outreach - not implemented yet");
   }, []);
 
-  const handleShowCandidate = useCallback((candidate: PeopleSearchResult) => {
+  const handleShowCandidate = useCallback((candidate: Candidate) => {
     setSelectedCandidate(candidate);
   }, []);
 
@@ -93,7 +85,7 @@ export function CandidateCardListPaginated({
   }, []);
 
   // Handle candidate selection
-  const handleSelectCandidate = useCallback((candidateId: number, selected: boolean) => {
+  const handleSelectCandidate = useCallback((candidateId: string, selected: boolean) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (selected) {
@@ -112,35 +104,12 @@ export function CandidateCardListPaginated({
 
   // Get selected candidate objects
   const selectedCandidates = candidates.filter((c) =>
-    selectedIds.has(c.id || 0)
+    selectedIds.has(c.id)
   );
 
   const handleClearSelection = useCallback(() => {
     setSelectedIds(new Set());
   }, []);
-
-  // Show fake blurred cards when actively searching
-  if (isSearching) {
-    return <FakeBlurredCardList count={10} />;
-  }
-
-  // Show skeleton on initial load (not searching, just loading)
-  if (isLoading) {
-    return <SkeletonCardList />;
-  }
-
-  if (error) {
-    return (
-      <div className="rounded-lg bg-destructive/10 p-4 text-center">
-        <p className="text-sm font-medium text-destructive">
-          Error loading candidates
-        </p>
-        <p className="text-xs text-destructive/80 mt-1">
-          {error instanceof Error ? error.message : "An unexpected error occurred"}
-        </p>
-      </div>
-    );
-  }
 
   if (candidates.length === 0) {
     return (
@@ -156,24 +125,24 @@ export function CandidateCardListPaginated({
     <div className="w-full">
       {/* Candidates list */}
       <div className="space-y-3 mb-4">
-        {candidates.map((candidate) => {
-          const candidateId = candidate.id || 0;
+        {candidates.map((searchCandidate) => {
+          const candidateId = searchCandidate.id;
           const isSelected = selectedIds.has(candidateId);
 
           return (
             <div 
-              key={candidate.id}
+              key={candidateId}
               className={`cursor-pointer transition-all rounded-lg ${
-                selectedCandidate?.id === candidate.id
+                selectedCandidate?.id === candidateId
                   && "ring-2 ring-blue-500 ring-offset-0 border-none"
               }`}
             >
               <CandidateCard
-                candidate={candidate}
+                searchCandidate={searchCandidate}
                 isSelected={isSelected}
                 onSelect={(selected) => handleSelectCandidate(candidateId, selected)}
                 onAddToOutreach={handleAddToOutreach}
-                onShowCandidate={() => handleShowCandidate(candidate)}
+                onShowCandidate={() => handleShowCandidate(searchCandidate)}
                 onEmail={handleEmail}
                 onPhone={handlePhone}
               />
@@ -200,7 +169,7 @@ export function CandidateCardListPaginated({
       <Sheet open={!!selectedCandidate} onOpenChange={(open) => !open && setSelectedCandidate(null)}>
         <SheetContent side="right" className="!w-1/2 !max-w-none p-0 overflow-hidden flex flex-col">
           <CandidateDetailsSheet
-            candidate={selectedCandidate}
+            searchCandidate={selectedCandidate}
             onClose={() => setSelectedCandidate(null)}
           />
         </SheetContent>

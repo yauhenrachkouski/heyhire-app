@@ -56,9 +56,9 @@ interface User {
   name: string
   email: string
   image?: string | null
-  emailVerified: boolean
-  createdAt: Date
-  updatedAt: Date
+  emailVerified?: boolean
+  createdAt?: Date
+  updatedAt?: Date
 }
 
 // Extended interface for menu items with disabled state and sub-items
@@ -102,7 +102,7 @@ const data: { navMain: NavGroup[] } = {
       items: [
         
         {
-          title: "Search People",
+          title: "Talent Search",
           url: "/search",
           icon: "search" as IconName,
         },
@@ -133,6 +133,11 @@ const data: { navMain: NavGroup[] } = {
 
 function isPathActive(currentPathname: string, itemUrl: string): boolean {
   if (itemUrl === "/") return currentPathname === "/"
+  
+  // Special case for /search - only active when exactly on /search, not on individual search pages
+  if (itemUrl === "/search") {
+    return currentPathname === "/search"
+  }
   
   // Special case for /jobs - only active when exactly on /jobs, not on individual job pages
   if (itemUrl === "/jobs") {
@@ -272,10 +277,10 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
         {/* Recent Searches Section */}
         {recentSearches && recentSearches.length > 0 && (
           <SidebarGroup>
-            <SidebarGroupLabel>Recent Searches</SidebarGroupLabel>
-            <SidebarGroupContent>
+            <SidebarGroupLabel className="flex-shrink-0">Recent Searches</SidebarGroupLabel>
+            <SidebarGroupContent className="overflow-auto">
               <SidebarMenu>
-                <RecentSearches searches={recentSearches} />
+                <RecentSearches searches={recentSearches} currentPath={pathname} />
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

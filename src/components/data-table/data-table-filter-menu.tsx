@@ -133,7 +133,7 @@ export function DataTableFilterMenu<TData>({
         operator: getDefaultFilterOperator(
           column.columnDef.meta?.variant ?? "text",
         ),
-        filterId: generateId({ length: 8 }),
+        filterId: generateId(),
       };
 
       debouncedSetFilters([...filters, newFilter]);

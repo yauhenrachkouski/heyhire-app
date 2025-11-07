@@ -21,29 +21,29 @@ export default async function LoginPage({
   const errorMessage = typeof params.error === 'string' ? params.error : undefined
 
   return (
-    <div className="grid min-h-svh lg:grid-cols-[1fr_2fr]">
+    <div className="grid min-h-svh lg:grid-cols-[2fr_2fr]">
       <div className="flex flex-col gap-4 p-6 md:p-10">
         <div className="flex flex-1 items-center justify-center">
-          <div className="w-full max-w-lg">
+          <div className="w-full max-w-md">
             <LoginForm initialError={errorMessage} />
           </div>
         </div>
       </div>
-      <div className="relative hidden lg:flex items-center justify-center overflow-hidden bg-amber-200 p-12">
+      <div className="relative hidden lg:flex items-center justify-center overflow-hidden bg-blue-600 p-12">
         <div className="w-full max-w-2xl space-y-8">
-          <div className="text-left space-y-2">
-            <h2 className="text-3xl font-bold text-black">Proactive sourcing made easy</h2>
-            <p className="text-xl text-black">Join recruitement teams and individuals winning smart!</p>
+          <div className="text-left space-y-1">
+            <h2 className="text-2xl font-bold text-white">Proactive sourcing made easy</h2>
+            <p className="text-lg text-white">Join recruitement teams and individuals winning smart!</p>
           </div>
           
           <div className="bg-white rounded-xl p-10 shadow-2xl">
             <blockquote className="space-y-6">
-              <p className="text-xl leading-relaxed text-foreground/90">
+              <p className="text-lg leading-relaxed text-foreground/90">
                 "Heyhire transformed how we source candidates. What used to take weeks now happens in hours. Our hiring pipeline has never been stronger."
               </p>
               <footer className="space-y-1">
-                <div className="font-semibold text-foreground text-lg">Michael R.</div>
-                <div className="text-sm text-muted-foreground">VP of Recruitment</div>
+                <div className="font-semibold text-foreground">Michael R.</div>
+                <div className="text-base text-muted-foreground">VP of Recruitment</div>
               </footer>
             </blockquote>
           </div>
@@ -54,7 +54,7 @@ export default async function LoginPage({
                 {[...Array(5)].map((_, i) => (
                   <svg
                     key={i}
-                    className={`w-6 h-6 text-amber-600`}
+                    className={`w-6 h-6 text-yellow-400`}
                     fill="currentColor"
                     viewBox="0 0 20 20"
                   >
@@ -62,9 +62,9 @@ export default async function LoginPage({
                   </svg>
                 ))}
               </div>
-              <span className="text-lg font-semibold text-amber-950">4.9/5</span>
+              <span className="text-lg font-semibold text-white">4.9/5</span>
             </div>
-            <p className="text-sm text-black/60">Rated by recruiters and agencies worldwide</p>
+            <p className="text-sm text-white/80">Rated by recruiters and agencies worldwide</p>
           </div>
         </div>
       </div>

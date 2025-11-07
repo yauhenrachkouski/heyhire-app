@@ -32,9 +32,9 @@ interface User {
   name: string
   email: string
   image?: string | null
-  emailVerified: boolean
-  createdAt: Date
-  updatedAt: Date
+  emailVerified?: boolean
+  createdAt?: Date
+  updatedAt?: Date
 }
 
 interface NavUserProps {

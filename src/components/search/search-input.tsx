@@ -36,7 +36,7 @@ export function SearchInput({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  // Update query when value prop changes (for manual selection)
+  // Update query when value prop changes
   useEffect(() => {
     if (value !== undefined) {
       setQuery(value);
@@ -198,7 +198,7 @@ export function SearchInput({
           value={query}
           onChange={handleInputChange}
           disabled={isLoading || isRecording || isTranscribing}
-          className="pl-12 pr-14 pt-3 text-sm border-0 min-h-[80px] resize-none bg-white"
+          className="pl-12 pr-14 pt-3 pb-12 text-sm border-0 min-h-[80px] resize-none bg-white"
           rows={3}
         />
         {hasParsedQuery && (
@@ -206,7 +206,7 @@ export function SearchInput({
             type="button"
             onClick={handleButtonClick}
             disabled={isParsing || isLoading || isSearching || !query.trim() || isRecording || isTranscribing}
-            className="absolute right-3 bottom-3 bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400 cursor-pointer flex items-center justify-center p-2 rounded-md"
+            className="absolute right-3 bottom-3 bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400 cursor-pointer flex items-center justify-center p-2 rounded-md z-10"
             title="Start sourcing"
           >
             {isRecording ? (
@@ -221,6 +221,9 @@ export function SearchInput({
           </button>
         )}
       </div>
+      <p className="text-sm text-white/50 mt-2 px-1">
+        Enter job description, and we will find suitable candidates for you
+      </p>
     </div>
   );
 }

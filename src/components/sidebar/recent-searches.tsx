@@ -1,14 +1,13 @@
 "use client";
 
-import { SidebarMenuButton } from "@/components/ui/sidebar";
-import { Icon } from "@/components/ui/icon";
-import Link from "next/link";
-import { formatDistanceToNow } from "date-fns";
+import { SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import Link from "next/link";
+import { useRef, useState, useEffect } from "react";
 
 interface RecentSearch {
   id: string;
@@ -19,9 +18,53 @@ interface RecentSearch {
 
 interface RecentSearchesProps {
   searches: RecentSearch[];
+  currentPath?: string;
 }
 
-export function RecentSearches({ searches }: RecentSearchesProps) {
+function RecentSearchItem({ search, isActive }: { search: RecentSearch; isActive: boolean }) {
+  const { state } = useSidebar();
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [isTruncated, setIsTruncated] = useState(false);
+
+  useEffect(() => {
+    const element = textRef.current;
+    if (element && state === "expanded") {
+      setIsTruncated(element.scrollWidth > element.clientWidth);
+    }
+  }, [search.name, state]);
+
+  const searchPath = `/search/${search.id}`;
+
+  const button = (
+    <SidebarMenuButton 
+      asChild 
+      isActive={isActive}
+      tooltip={search.name}
+    >
+      <Link href={searchPath} className="w-full">
+        <span ref={textRef} className="truncate block max-w-full">{search.name}</span>
+      </Link>
+    </SidebarMenuButton>
+  );
+
+  // Show tooltip when expanded and text is truncated
+  if (state === "expanded" && isTruncated) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {button}
+        </TooltipTrigger>
+        <TooltipContent side="right" align="center">
+          {search.name}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return button;
+}
+
+export function RecentSearches({ searches, currentPath }: RecentSearchesProps) {
   if (!searches || searches.length === 0) {
     return (
       <div className="px-3 py-2 text-xs text-muted-foreground">
@@ -31,28 +74,18 @@ export function RecentSearches({ searches }: RecentSearchesProps) {
   }
 
   return (
-    <div className="max-h-[300px] overflow-y-auto">
-      {searches.map((search) => (
-        <Tooltip key={search.id}>
-          <TooltipTrigger asChild>
-            <SidebarMenuButton asChild>
-              <Link href={`/search/${search.id}`} className="flex flex-col items-start gap-0.5 py-2">
-                <div className="flex items-center gap-2 w-full">
-                  <Icon name="search" className="h-4 w-4 shrink-0" />
-                  <span className="truncate flex-1 text-sm">{search.name}</span>
-                </div>
-                <span className="text-xs text-muted-foreground ml-6">
-                  {formatDistanceToNow(new Date(search.createdAt), { addSuffix: true })}
-                </span>
-              </Link>
-            </SidebarMenuButton>
-          </TooltipTrigger>
-          <TooltipContent side="right" className="max-w-xs">
-            <p className="font-medium">{search.name}</p>
-          </TooltipContent>
-        </Tooltip>
-      ))}
-    </div>
+    <>
+      {searches.map((search) => {
+        const searchPath = `/search/${search.id}`;
+        const isActive = currentPath === searchPath;
+        
+        return (
+          <SidebarMenuItem key={search.id}>
+            <RecentSearchItem search={search} isActive={isActive} />
+          </SidebarMenuItem>
+        );
+      })}
+    </>
   );
 }
 

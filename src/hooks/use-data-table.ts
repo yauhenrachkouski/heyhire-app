@@ -254,7 +254,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
           value: "",
           variant: column.meta?.variant ?? "text",
           operator: getDefaultFilterOperator(column.meta?.variant ?? "text"),
-          filterId: generateId({ length: 8 }),
+          filterId: generateId(),
         },
       ]);
     },
