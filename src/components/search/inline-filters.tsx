@@ -11,14 +11,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Sparkles } from "lucide-react";
+import { IconArrowsSort } from "@tabler/icons-react";
 
 interface InlineFiltersProps {
   onScoreRangeChange?: (min: number, max: number) => void;
+  onSortChange?: (sort: string) => void;
 }
 
-export function InlineFilters({ onScoreRangeChange }: InlineFiltersProps) {
+export function InlineFilters({ onScoreRangeChange, onSortChange }: InlineFiltersProps) {
   const [minScore, setMinScore] = useState<number>(0); // Start with "All" candidates by default
   const [isCustom, setIsCustom] = useState<boolean>(false);
+  const [sortBy, setSortBy] = useState<string>("score-desc"); // Default: highest score first
 
   // Debounce the API call to avoid too many requests while dragging
   const debouncedScoreChange = useDebouncedCallback((min: number) => {
@@ -47,6 +50,11 @@ export function InlineFilters({ onScoreRangeChange }: InlineFiltersProps) {
     onScoreRangeChange?.(score, 100);
   };
 
+  const handleSortChange = (value: string) => {
+    setSortBy(value);
+    onSortChange?.(value);
+  };
+
   // Determine the current select value
   const getSelectValue = () => {
     if (isCustom) return "custom";
@@ -54,7 +62,7 @@ export function InlineFilters({ onScoreRangeChange }: InlineFiltersProps) {
   };
 
   return (
-    <div className="flex items-center gap-4 flex-wrap">
+    <div className="flex items-center justify-between flex-wrap gap-4">
       {/* AI Score Select */}
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-1.5">
@@ -91,6 +99,23 @@ export function InlineFilters({ onScoreRangeChange }: InlineFiltersProps) {
           </span>
         </div>
       )}
+
+      {/* Sort Select */}
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          <IconArrowsSort className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium text-muted-foreground">Sort by:</span>
+        </div>
+        <Select value={sortBy} onValueChange={handleSortChange}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="score-desc">Highest score first</SelectItem>
+            <SelectItem value="score-asc">Lowest score first</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   );
 }

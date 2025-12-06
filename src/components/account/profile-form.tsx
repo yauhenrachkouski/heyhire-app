@@ -127,14 +127,14 @@ export function ProfileForm({ user }: ProfileFormProps) {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="flex items-center gap-4">
-            <Avatar className="h-20 w-20">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <Avatar className="h-16 w-16 sm:h-20 sm:w-20 shrink-0">
               {userImage && <AvatarImage src={userImage} alt={userName} />}
-              <AvatarFallback className="text-2xl">{user.initials}</AvatarFallback>
+              <AvatarFallback className="text-xl sm:text-2xl">{user.initials}</AvatarFallback>
             </Avatar>
-            <div className="flex-1 space-y-2">
+            <div className="w-full sm:flex-1 space-y-2">
               <Label>Profile Picture</Label>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -146,18 +146,20 @@ export function ProfileForm({ user }: ProfileFormProps) {
                 <Button
                   type="button"
                   variant="outline"
+                  size="sm"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploadingAvatar || isLoading}
                 >
                   {isUploadingAvatar ? (
                     <>
                       <Icon name="loader" className="animate-spin h-4 w-4" />
-                      Uploading...
+                      <span className="hidden sm:inline">Uploading...</span>
                     </>
                   ) : (
                     <>
                       <Icon name="upload" className="h-4 w-4" />
-                      Upload Avatar
+                      <span className="hidden sm:inline">Upload Avatar</span>
+                      <span className="sm:hidden">Upload</span>
                     </>
                   )}
                 </Button>
@@ -165,6 +167,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
                   <Button
                     type="button"
                     variant="outline"
+                    size="sm"
                     onClick={handleRemoveAvatar}
                     disabled={isUploadingAvatar || isLoading}
                   >

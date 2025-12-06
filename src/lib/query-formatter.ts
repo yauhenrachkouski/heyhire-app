@@ -1,4 +1,35 @@
-import type { ParsedQuery } from "@/types/search";
+import type { ParsedQuery, MultiValueField } from "@/types/search";
+
+/**
+ * Helper to check if a field is multi-value
+ */
+function isMultiValue(field: string | MultiValueField | undefined): field is MultiValueField {
+  return typeof field === 'object' && field !== null && 'values' in field && 'operator' in field;
+}
+
+/**
+ * Format a field value (handles both single and multi-value)
+ */
+function formatField(field: string | MultiValueField | undefined): string {
+  if (!field) return "";
+  
+  if (isMultiValue(field)) {
+    if (field.values.length === 0) return "";
+    if (field.values.length === 1) return field.values[0];
+    
+    const operator = field.operator.toLowerCase();
+    if (field.values.length === 2) {
+      return field.values.join(` ${operator} `);
+    }
+    
+    // For 3+ values: "A, B, or C"
+    const last = field.values[field.values.length - 1];
+    const rest = field.values.slice(0, -1);
+    return `${rest.join(", ")}, ${operator} ${last}`;
+  }
+  
+  return typeof field === 'string' ? field.trim() : "";
+}
 
 /**
  * Converts a ParsedQuery object back to a user-friendly natural language string
@@ -6,36 +37,43 @@ import type { ParsedQuery } from "@/types/search";
 export function formatQueryToNaturalLanguage(query: ParsedQuery): string {
   const segments: string[] = [];
 
+  // Add "current" modifier if specified
+  const currentModifier = query.is_current ? "Current " : "";
+
   // Start with job title (most important)
-  if (query.job_title?.trim()) {
-    segments.push(query.job_title.trim());
+  const jobTitle = formatField(query.job_title);
+  if (jobTitle) {
+    segments.push(`${currentModifier}${jobTitle}`);
   }
 
   // Add experience right after job title
-  if (query.years_of_experience?.trim()) {
-    const exp = query.years_of_experience.trim();
-    segments.push(`with ${exp}${exp.includes('year') ? '' : ' years'} of experience`);
+  const experience = formatField(query.years_of_experience);
+  if (experience) {
+    const exp = experience.includes('year') ? experience : `${experience} years`;
+    segments.push(`with ${exp} of experience`);
   }
 
   // Add skills
-  if (query.skills?.trim()) {
-    segments.push(`skilled in ${query.skills.trim()}`);
+  const skills = formatField(query.skills);
+  if (skills) {
+    segments.push(`skilled in ${skills}`);
   }
 
   // Group location-based info together
   const locationParts: string[] = [];
   
-  if (query.location?.trim()) {
-    locationParts.push(`located in ${query.location.trim()}`);
+  const location = formatField(query.location);
+  if (location) {
+    locationParts.push(`located in ${location}`);
   }
 
-  if (query.company?.trim()) {
-    locationParts.push(`working at ${query.company.trim()}`);
+  const company = formatField(query.company);
+  if (company) {
+    locationParts.push(`working at ${company}`);
   }
 
-  if (query.industry?.trim()) {
-    const industry = query.industry.trim();
-    // Check if "industry" is already in the text
+  const industry = formatField(query.industry);
+  if (industry) {
     const industryText = industry.toLowerCase().includes('industry') 
       ? industry 
       : `${industry} industry`;
@@ -54,10 +92,44 @@ export function formatQueryToNaturalLanguage(query: ParsedQuery): string {
     }
   }
 
-  // Add education at the end
-  if (query.education?.trim()) {
-    const edu = query.education.trim();
-    segments.push(`with ${edu}`);
+  // Add education
+  const education = formatField(query.education);
+  if (education) {
+    segments.push(`with ${education}`);
+  }
+
+  // Add remote preference
+  if (query.remote_preference) {
+    segments.push(`${query.remote_preference} work`);
+  }
+
+  // Add company size
+  const companySize = formatField(query.company_size);
+  if (companySize) {
+    segments.push(`at companies with ${companySize} employees`);
+  }
+
+  // Add funding types
+  const funding = formatField(query.funding_types);
+  if (funding) {
+    segments.push(`at ${funding} funded companies`);
+  }
+
+  // Add web technologies
+  const webTech = formatField(query.web_technologies);
+  if (webTech) {
+    segments.push(`using ${webTech}`);
+  }
+
+  // Add revenue range
+  const revenue = formatField(query.revenue_range);
+  if (revenue) {
+    segments.push(`at companies with ${revenue} revenue`);
+  }
+
+  // Add founded year range
+  if (query.founded_year_range) {
+    segments.push(`founded ${query.founded_year_range}`);
   }
 
   // Join segments with commas

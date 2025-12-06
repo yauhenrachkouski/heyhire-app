@@ -11,6 +11,7 @@ import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { getRecentSearches } from "@/actions/search"
+import { getOrganizationCredits } from "@/actions/credits"
 
 export default async function DashboardLayout({
   children,
@@ -51,18 +52,25 @@ export default async function DashboardLayout({
     : { success: false, data: [] };
   const recentSearches = recentSearchesResponse.success ? recentSearchesResponse.data : [];
 
+  // Fetch credits for active organization
+  let activeOrgWithCredits = activeOrganization;
+  if (activeOrganization) {
+    const credits = await getOrganizationCredits(activeOrganization.id);
+    activeOrgWithCredits = { ...activeOrganization, credits };
+  }
+
   return (
     <TooltipProvider>
       <PersistentSidebarProvider>
         <AppSidebar 
           subscription={subscription}
           organizations={organizations}
-          activeOrganization={activeOrganization}
+          activeOrganization={activeOrgWithCredits}
           user={activeMember?.user ?? null}
           recentSearches={recentSearches ?? []}
         />
         <SidebarInset>
-          <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12 border-b border-border">
+          <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
             <div className="flex items-center gap-2 px-4">
               <SidebarTrigger className="-ml-1" />
               <Separator

@@ -143,8 +143,8 @@ export function OrganizationSwitcher({
                 />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">{displayOrg.name}</span>
-                <span className="truncate text-xs text-muted-foreground">{getPlanDisplay()}</span>
+                <div className="truncate font-semibold">{displayOrg.name}</div>
+                <div className="truncate">{getPlanDisplay()}</div>
               </div>
               <Icon name="selector" className="ml-auto" />
             </SidebarMenuButton>

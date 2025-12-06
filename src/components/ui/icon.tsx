@@ -100,6 +100,7 @@ import {
   IconCloudUpload,
   IconFilePlus,
   IconLifebuoy,
+  IconCoins,
 } from '@tabler/icons-react'
 
 // Icon name to component mapping
@@ -215,6 +216,7 @@ const iconMap = {
   'cloud-upload': IconCloudUpload,
   'file-plus': IconFilePlus,
   'lifebuoy': IconLifebuoy,
+  'coins': IconCoins,
 } as const
 
 export type IconName = keyof typeof iconMap

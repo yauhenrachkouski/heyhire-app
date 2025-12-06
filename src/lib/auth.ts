@@ -53,6 +53,9 @@ export const auth = betterAuth({
    emailAndPassword: {
       enabled: false,
    },
+   trustedOrigins: [
+      process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
+   ],
    socialProviders: {
       google: {
          clientId: process.env.GOOGLE_CLIENT_ID as string,
@@ -308,6 +311,57 @@ export const auth = betterAuth({
                            .returning();
                         
                         console.log(`[Stripe Webhook] ✅ Marked subscription as active: ${result[0]?.id}`);
+                        
+                        // Grant credits for subscription
+                        if (result[0]) {
+                           const { addCredits } = require("@/actions/credits");
+                           const { getPlanCreditAllocation, CREDIT_TYPES } = require("@/lib/credits");
+                           const { organization } = require("@/db/schema");
+                           
+                           const subscriptionRecord = result[0];
+                           const plan = subscriptionRecord.plan;
+                           const organizationId = subscriptionRecord.referenceId;
+                           
+                           // Get the organization's owner to use as the userId for the transaction
+                           const { member } = require("@/db/schema");
+                           const orgOwner = await db.query.member.findFirst({
+                              where: eq(member.organizationId, organizationId),
+                           });
+                           
+                           if (orgOwner && organizationId) {
+                              // Grant contact lookup credits
+                              const contactLookupCredits = getPlanCreditAllocation(plan, CREDIT_TYPES.CONTACT_LOOKUP);
+                              if (contactLookupCredits > 0) {
+                                 await addCredits({
+                                    organizationId,
+                                    userId: orgOwner.userId,
+                                    amount: contactLookupCredits,
+                                    type: "subscription_grant",
+                                    creditType: CREDIT_TYPES.CONTACT_LOOKUP,
+                                    relatedEntityId: subscriptionRecord.id,
+                                    description: `Subscription grant: ${contactLookupCredits} contact lookup credits for ${plan} plan`,
+                                    metadata: { plan, subscriptionId: subscriptionRecord.id },
+                                 });
+                                 console.log(`[Stripe Webhook] ✅ Granted ${contactLookupCredits} contact lookup credits`);
+                              }
+                              
+                              // Grant export credits
+                              const exportCredits = getPlanCreditAllocation(plan, CREDIT_TYPES.EXPORT);
+                              if (exportCredits > 0) {
+                                 await addCredits({
+                                    organizationId,
+                                    userId: orgOwner.userId,
+                                    amount: exportCredits,
+                                    type: "subscription_grant",
+                                    creditType: CREDIT_TYPES.EXPORT,
+                                    relatedEntityId: subscriptionRecord.id,
+                                    description: `Subscription grant: ${exportCredits} export credits for ${plan} plan`,
+                                    metadata: { plan, subscriptionId: subscriptionRecord.id },
+                                 });
+                                 console.log(`[Stripe Webhook] ✅ Granted ${exportCredits} export credits`);
+                              }
+                           }
+                        }
                      } catch (error) {
                         console.error(`[Stripe Webhook] ❌ Error updating subscription status:`, error);
                      }

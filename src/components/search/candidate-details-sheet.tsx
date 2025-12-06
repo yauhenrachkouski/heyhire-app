@@ -1,7 +1,7 @@
 
 "use client";
 
-import { X, Mail, Phone, Linkedin, MapPin, Calendar, ExternalLink, Loader2, Plus } from "lucide-react";
+import { X, Mail, Phone, Linkedin, MapPin, Calendar, ExternalLink, Loader2, Plus, Star, ThumbsDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -21,8 +21,27 @@ import Link from "next/link";
 import Image from "next/image";
 import { BRANDFETCH_LINKEDIN_LOGO_URL } from "@/lib/constants";
 
+interface SearchCandidate {
+  id: string;
+  candidate: {
+    id: string;
+    fullName: string | null;
+    headline: string | null;
+    photoUrl: string | null;
+    location: string | null;
+    linkedinUrl: string;
+    linkedinUsername: string | null;
+    experiences: string | null;
+    skills: string | null;
+    educations: string | null;
+    scrapeStatus: string;
+  };
+  matchScore: number | null;
+  notes: string | null;
+}
+
 interface CandidateDetailsSheetProps {
-  candidate: PeopleSearchResult | null;
+  searchCandidate: SearchCandidate | null;
   onClose: () => void;
 }
 
@@ -60,19 +79,23 @@ function calculateDuration(startDate: string | null | undefined, endDate: string
   }
 }
 
-export function CandidateDetailsSheet({ candidate, onClose }: CandidateDetailsSheetProps) {
-  const [detailedCandidate, setDetailedCandidate] = useState<PeopleSearchResult | null>(candidate);
+export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDetailsSheetProps) {
+  const [detailedCandidate, setDetailedCandidate] = useState<PeopleSearchResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [expandedSkills, setExpandedSkills] = useState(false);
-  const [revealedEmail, setRevealedEmail] = useState(false);
-  const [revealedPhone, setRevealedPhone] = useState(false);
 
-  // Fetch detailed info when candidate changes and has an ID
+  // Fetch detailed info when candidate changes and has a LinkedIn identifier
   useEffect(() => {
-    const linkedinPublicIdentifier = candidate?.person?.linkedin_info?.public_identifier;
+    if (!searchCandidate) {
+      setDetailedCandidate(null);
+      return;
+    }
+
+    const linkedinUsername = searchCandidate.candidate.linkedinUsername;
     
-    if (!linkedinPublicIdentifier) {
-      setDetailedCandidate(candidate);
+    if (!linkedinUsername) {
+      console.warn("[CandidateDetailsSheet] No LinkedIn username found");
+      setDetailedCandidate(null);
       return;
     }
 
@@ -80,55 +103,72 @@ export function CandidateDetailsSheet({ candidate, onClose }: CandidateDetailsSh
 
     const fetchDetails = async () => {
       try {
-        console.log("[CandidateDetailsSheet] Fetching detailed info using LinkedIn identifier:", linkedinPublicIdentifier);
+        console.log("[CandidateDetailsSheet] Fetching detailed info using LinkedIn username:", linkedinUsername);
         const response = await getPersonDetailFromForager(
-          linkedinPublicIdentifier,
-          candidate?.id
+          linkedinUsername,
+          undefined // We don't need the candidate ID for enrichment
         );
 
         if (!response.success || !response.data?.[0]) {
           // Fall back to initial candidate data if detail fetch fails
-          console.warn("[CandidateDetailsSheet] Failed to fetch details, using initial data:", response.error);
-          setDetailedCandidate(candidate);
+          console.warn("[CandidateDetailsSheet] Failed to fetch details:", response.error);
+          setDetailedCandidate(null);
         } else {
           console.log("[CandidateDetailsSheet] Detailed info fetched successfully");
           setDetailedCandidate(response.data[0]);
         }
       } catch (err) {
         console.error("[CandidateDetailsSheet] Error fetching details:", err);
-        setDetailedCandidate(candidate);
+        setDetailedCandidate(null);
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchDetails();
-  }, [candidate?.id, candidate?.person?.linkedin_info?.public_identifier, candidate]);
+  }, [searchCandidate?.id, searchCandidate?.candidate.linkedinUsername]);
 
-  if (!detailedCandidate) return null;
+  if (!searchCandidate) return null;
 
-  const person = detailedCandidate.person;
-  const organization = detailedCandidate.organization;
+  // Use detailed candidate if available, otherwise prepare basic data from database
+  const person = detailedCandidate?.person;
+  const organization = detailedCandidate?.organization;
 
-  if (!person) return null;
+  // Parse database fields for fallback display
+  const experiences = searchCandidate.candidate.experiences 
+    ? JSON.parse(searchCandidate.candidate.experiences) 
+    : [];
+  const dbSkills = searchCandidate.candidate.skills 
+    ? JSON.parse(searchCandidate.candidate.skills) 
+    : [];
+  const dbLocation = searchCandidate.candidate.location 
+    ? JSON.parse(searchCandidate.candidate.location) 
+    : null;
 
-  const firstName = person.first_name || "";
-  const lastName = person.last_name || "";
+  // Get current role from experiences
+  const currentExperience = experiences[0] || {};
+
+  // Extract name parts
+  const fullName = searchCandidate.candidate.fullName || "Unknown";
+  const nameParts = fullName.split(" ");
+  const dbFirstName = nameParts[0] || "";
+  const dbLastName = nameParts.slice(1).join(" ") || "";
+
+  // Use detailed data if available, otherwise use database data
+  const firstName = person?.first_name || dbFirstName;
+  const lastName = person?.last_name || dbLastName;
   const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
-  const photo = person.photo || null;
-  const skills = person.skills || [];
-  const linkedInUrl = person.linkedin_info?.public_profile_url;
-  const location = person.location?.name || "";
+  const photo = person?.photo || searchCandidate.candidate.photoUrl || null;
+  // dbSkills are already objects with {name: "..."} structure, so don't wrap them
+  const skills = person?.skills || dbSkills;
+  const linkedInUrl = person?.linkedin_info?.public_profile_url || searchCandidate.candidate.linkedinUrl;
+  const location = person?.location?.name || dbLocation?.name || "";
 
-  const roleDateRange = `${formatDate(detailedCandidate.start_date)}${
+  const roleDateRange = detailedCandidate ? `${formatDate(detailedCandidate.start_date)}${
     detailedCandidate.end_date ? ` - ${formatDate(detailedCandidate.end_date)}` : detailedCandidate.is_current ? " - Present" : ""
-  }`;
+  }` : "";
   
-  const roleDuration = calculateDuration(detailedCandidate.start_date, detailedCandidate.end_date);
-  
-  // Masked email and phone for default display
-  const fakeMaskedEmail = "••••••••••@••••••.com";
-  const fakeMaskedPhone = "+1 (•••) •••-••••";
+  const roleDuration = detailedCandidate ? calculateDuration(detailedCandidate.start_date, detailedCandidate.end_date) : "";
 
   return (
     <TooltipProvider>
@@ -176,42 +216,19 @@ export function CandidateDetailsSheet({ candidate, onClose }: CandidateDetailsSh
 
               {/* Name and info */}
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h1 className="text-xl font-bold text-foreground">
-                    {firstName} {lastName}
-                  </h1>
-                  {linkedInUrl && (
-                    <Link
-                      href={linkedInUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex flex-shrink-0"
-                    >
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                      >
-                        <Image
-                          src={BRANDFETCH_LINKEDIN_LOGO_URL}
-                          alt="LinkedIn"
-                          width={24}
-                          height={24}
-                        />
-                      </Button>
-                    </Link>
-                  )}
-                </div>
+                <h1 className="text-xl font-bold text-foreground">
+                  {firstName} {lastName}
+                </h1>
 
-                {detailedCandidate.role_title && (
+                {(detailedCandidate?.role_title || currentExperience.role_title || searchCandidate.candidate.headline) && (
                   <p className="text-sm font-medium text-foreground truncate">
-                    {detailedCandidate.role_title}
+                    {detailedCandidate?.role_title || currentExperience.role_title || searchCandidate.candidate.headline}
                   </p>
                 )}
 
-                {organization?.name && (
+                {(organization?.name || currentExperience.organization_name) && (
                   <p className="text-sm text-muted-foreground truncate">
-                    {organization.name}
+                    {organization?.name || currentExperience.organization_name}
                   </p>
                 )}
 
@@ -232,62 +249,53 @@ export function CandidateDetailsSheet({ candidate, onClose }: CandidateDetailsSh
                 className="gap-2"
               >
                 <Plus className="h-4 w-4" />
-                Add to Sequence
+                Add to Outreach
               </Button>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div
-                    className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
-                    onClick={() => setRevealedEmail(!revealedEmail)}
-                  >
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <span
-                      className={`text-sm text-foreground transition-all ${
-                        revealedEmail ? "" : "blur-xs"
-                      }`}
-                    >
-                      {revealedEmail ? person?.email || fakeMaskedEmail : fakeMaskedEmail}
-                    </span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p>
-                    {revealedEmail
-                      ? "Click to hide email"
-                      : "1 credit to reveal email"}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div
-                    className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
-                    onClick={() => setRevealedPhone(!revealedPhone)}
-                  >
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    <span
-                      className={`text-sm text-foreground transition-all ${
-                        revealedPhone ? "" : "blur-xs"
-                      }`}
-                    >
-                      {revealedPhone ? person?.phone || fakeMaskedPhone : fakeMaskedPhone}
-                    </span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p>
-                    {revealedPhone
-                      ? "Click to hide phone"
-                      : "2 credits to reveal phone"}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
+              
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button size="sm" variant="outline">
+                      <Star className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Add to shortlist</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button size="sm" variant="outline">
+                      <ThumbsDown className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Reject candidate</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              {linkedInUrl && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => window.open(linkedInUrl, "_blank", "noopener,noreferrer")}
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Open LinkedIn profile</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
             </div>
 
             <Separator />
 
             {/* Current Role Section */}
-            {detailedCandidate.role_title && organization && (
+            {(detailedCandidate?.role_title || currentExperience.role_title) && (organization || currentExperience.organization_name) && (
               <>
                 <div>
                   <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
@@ -296,9 +304,9 @@ export function CandidateDetailsSheet({ candidate, onClose }: CandidateDetailsSh
 
                   <div className="space-y-3">
                     {/* Company info */}
-                    {organization && (
+                    {(organization || currentExperience.organization_name) && (
                       <div className="flex gap-3">
-                        {organization.logo && (
+                        {organization?.logo && (
                           <div className="flex-shrink-0">
                             <Image
                               src={organization.logo}
@@ -311,10 +319,10 @@ export function CandidateDetailsSheet({ candidate, onClose }: CandidateDetailsSh
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-foreground truncate">
-                            {detailedCandidate.role_title}
+                            {detailedCandidate?.role_title || currentExperience.role_title}
                           </p>
                           <p className="text-sm text-muted-foreground truncate">
-                            {organization.name}
+                            {organization?.name || currentExperience.organization_name}
                           </p>
                           {roleDateRange && (
                             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
@@ -464,45 +472,9 @@ export function CandidateDetailsSheet({ candidate, onClose }: CandidateDetailsSh
               </>
             )}
 
-            {/* Contact Information */}
-            {(person.email || person.phone) && (
-              <>
-                <div>
-                  <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
-                    Contact
-                  </h2>
-                  <div className="space-y-2">
-                    {person.email && (
-                      <Link
-                        href={`mailto:${person.email}`}
-                        className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors group"
-                      >
-                        <Mail className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-                        <span className="text-sm text-foreground break-all">
-                          {revealedEmail ? person.email : "••••••••••••"}
-                        </span>
-                      </Link>
-                    )}
-                    {person.phone && (
-                      <Link
-                        href={`tel:${person.phone}`}
-                        className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors group"
-                      >
-                        <Phone className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-                        <span className="text-sm text-foreground break-all">
-                          {revealedPhone ? person.phone : "••••••••••••"}
-                        </span>
-                      </Link>
-                    )}
-                  </div>
-                </div>
-                
-                <Separator />
-              </>
-            )}
 
             {/* Description */}
-            {person.description && (
+            {person?.description && (
               <>
                 <div>
                   <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-2">
@@ -518,7 +490,7 @@ export function CandidateDetailsSheet({ candidate, onClose }: CandidateDetailsSh
             )}
 
             {/* Work Experience History */}
-            {person.roles && person.roles.length > 0 && (
+            {person?.roles && person.roles.length > 0 && (
               <>
                 <div>
                   <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
@@ -621,7 +593,7 @@ export function CandidateDetailsSheet({ candidate, onClose }: CandidateDetailsSh
             )}
 
             {/* Education */}
-            {person.educations && person.educations.length > 0 && (
+            {person?.educations && person.educations.length > 0 && (
               <>
                 <div>
                   <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
@@ -698,7 +670,7 @@ export function CandidateDetailsSheet({ candidate, onClose }: CandidateDetailsSh
             )}
 
             {/* Certifications */}
-            {person.certifications && person.certifications.length > 0 && (
+            {person?.certifications && person.certifications.length > 0 && (
               <>
                 <div>
                   <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
@@ -737,7 +709,7 @@ export function CandidateDetailsSheet({ candidate, onClose }: CandidateDetailsSh
             )}
 
             {/* Languages */}
-            {person.languages && person.languages.length > 0 && (
+            {person?.languages && person.languages.length > 0 && (
               <>
                 <div>
                   <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
@@ -764,7 +736,7 @@ export function CandidateDetailsSheet({ candidate, onClose }: CandidateDetailsSh
             )}
 
             {/* Courses */}
-            {(person as any).courses && (person as any).courses.length > 0 && (
+            {(person as any)?.courses && (person as any).courses.length > 0 && (
               <>
                 <div>
                   <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
@@ -786,7 +758,7 @@ export function CandidateDetailsSheet({ candidate, onClose }: CandidateDetailsSh
             )}
 
             {/* Test Scores */}
-            {(person as any).test_scores && (person as any).test_scores.length > 0 && (
+            {(person as any)?.test_scores && (person as any).test_scores.length > 0 && (
               <>
                 <div>
                   <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">

@@ -58,9 +58,9 @@ export default async function OrganizationSettingsPage() {
   })
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="w-full max-w-4xl mx-auto space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Organization Settings</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold">Organization Settings</h1>
         <p className="text-muted-foreground mt-1">
           Manage your organization settings and members
         </p>

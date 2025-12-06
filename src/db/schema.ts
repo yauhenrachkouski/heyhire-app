@@ -7,6 +7,10 @@ export const contactSourceEnum = pgEnum('contact_source', ['linkedin', 'surfe', 
 export const scrapeStatusEnum = pgEnum('scrape_status', ['pending', 'scraping', 'completed', 'failed']);
 export const candidateStatusEnum = pgEnum('candidate_status', ['new', 'reviewing', 'contacted', 'rejected', 'hired']);
 
+// Enums for credits system
+export const transactionTypeEnum = pgEnum('transaction_type', ['subscription_grant', 'manual_grant', 'purchase', 'consumption']);
+export const creditTypeEnum = pgEnum('credit_type', ['contact_lookup', 'export', 'general']);
+
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -77,6 +81,7 @@ export const organization = pgTable("organization", {
   logo: text("logo"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   metadata: text("metadata"),
+  credits: integer("credits").default(0).notNull(),
 });
 
 export const member = pgTable("member", {
@@ -126,12 +131,32 @@ export const search = pgTable("search", {
   name: text("name").notNull(),
   query: text("query").notNull(),
   params: text("params").notNull(),
+  scoringPrompt: text("scoring_prompt"), // Custom scoring prompt (optional)
   userId: text("user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
   organizationId: text("organization_id")
     .notNull()
     .references(() => organization.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const creditTransactions = pgTable("credit_transactions", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  type: transactionTypeEnum("type").notNull(),
+  creditType: creditTypeEnum("credit_type").notNull(),
+  amount: integer("amount").notNull(),
+  balanceBefore: integer("balance_before").notNull(),
+  balanceAfter: integer("balance_after").notNull(),
+  relatedEntityId: text("related_entity_id"),
+  description: text("description").notNull(),
+  metadata: text("metadata"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -213,6 +238,7 @@ export const userRelations = relations(user, ({ many }) => ({
   members: many(member),
   invitations: many(invitation),
   searches: many(search),
+  creditTransactions: many(creditTransactions),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -233,6 +259,7 @@ export const organizationRelations = relations(organization, ({ many }) => ({
   members: many(member),
   invitations: many(invitation),
   searches: many(search),
+  creditTransactions: many(creditTransactions),
 }));
 
 export const memberRelations = relations(member, ({ one }) => ({
@@ -289,5 +316,16 @@ export const searchCandidatesRelations = relations(searchCandidates, ({ one }) =
   candidate: one(candidates, {
     fields: [searchCandidates.candidateId],
     references: [candidates.id],
+  }),
+}));
+
+export const creditTransactionsRelations = relations(creditTransactions, ({ one }) => ({
+  organization: one(organization, {
+    fields: [creditTransactions.organizationId],
+    references: [organization.id],
+  }),
+  user: one(user, {
+    fields: [creditTransactions.userId],
+    references: [user.id],
   }),
 }));

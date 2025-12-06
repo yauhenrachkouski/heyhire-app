@@ -21,8 +21,11 @@ export default async function SearchPage({ params }: SearchPageProps) {
   const search = searchResult.data;
   
   return (
-    <div className="container mx-auto">
-      <SearchResultsClient search={search} />
-    </div>
+    <>
+      <div className="fixed inset-0 bg-sidebar -z-10" />
+      <div className="container mx-auto">
+        <SearchResultsClient search={search} />
+      </div>
+    </>
   );
 }

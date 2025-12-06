@@ -1,14 +1,33 @@
 import type { ParsedQuery } from "@/types/search";
 import type { SourceProvider, SourceResult } from "./types";
-import { serperProvider } from "./serper-provider";
+// import { serperProvider } from "./serper-provider"; // Serper is currently commented out
+import { foragerProvider } from "./forager-provider";
+
+// Determine which provider to use based on environment variable
+// Defaults to "forager" if not set
+const ACTIVE_SOURCE_PROVIDER = process.env.ACTIVE_SOURCE_PROVIDER || "forager";
 
 // Registry of all available source providers
-const providers: SourceProvider[] = [
-  serperProvider,
-  // Add more providers here in the future:
-  // linkedInRecruiterProvider,
-  // otherProvider,
-];
+const providers: SourceProvider[] = [];
+
+// Conditionally add the active provider
+if (ACTIVE_SOURCE_PROVIDER === "forager") {
+  providers.push(foragerProvider);
+  console.log("[SourceRegistry] Using Forager as the active source provider");
+} else if (ACTIVE_SOURCE_PROVIDER === "serper") {
+  // Note: Serper provider is currently commented out
+  // To use Serper, uncomment serperProvider in serper-provider.ts
+  console.warn("[SourceRegistry] Serper provider is currently disabled (code is commented out)");
+  console.warn("[SourceRegistry] Please uncomment the code in serper-provider.ts to use Serper");
+} else {
+  console.warn(`[SourceRegistry] Unknown provider: ${ACTIVE_SOURCE_PROVIDER}, defaulting to Forager`);
+  providers.push(foragerProvider);
+}
+
+// Future providers can be added here:
+// if (ACTIVE_SOURCE_PROVIDER === "linkedin-recruiter") {
+//   providers.push(linkedInRecruiterProvider);
+// }
 
 /**
  * Search all registered sources in parallel
@@ -67,5 +86,6 @@ export function getUniqueUrls(sourceResults: SourceResult[]): string[] {
   
   return Array.from(allUrls);
 }
+
 
 

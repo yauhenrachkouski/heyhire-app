@@ -3,6 +3,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { ParsedQuery } from "@/types/search";
+import { getDefaultScoringPrompt, buildScoringPrompt } from "@/lib/scoring-prompt";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -22,11 +23,13 @@ type CandidateScoreResult = z.infer<typeof candidateScoringSchema>;
  * Score a candidate against search criteria using Claude
  * @param candidate - The candidate data from the database
  * @param parsedQuery - The parsed search query
+ * @param customPrompt - Optional custom scoring prompt
  * @returns Score result with pros, cons, and overall score
  */
 export async function scoreCandidateMatch(
   candidate: any,
-  parsedQuery: ParsedQuery
+  parsedQuery: ParsedQuery,
+  customPrompt?: string | null
 ): Promise<{ success: boolean; data?: CandidateScoreResult; error?: string }> {
   try {
     console.log("[Scoring] Scoring candidate:", candidate.id);
@@ -41,42 +44,30 @@ export async function scoreCandidateMatch(
     // Get current role
     const currentExperience = experiences[0] || {};
 
-    // Build the prompt
-    const prompt = `You are a recruitment AI. Score this candidate against search criteria.
+    // Use custom prompt or default
+    const customRules = customPrompt || getDefaultScoringPrompt();
 
-SEARCH CRITERIA:
-Job Title: ${parsedQuery.job_title || 'Not specified'}
-Location: ${parsedQuery.location || 'Not specified'}
-Skills: ${parsedQuery.skills || 'Not specified'}
-Experience: ${parsedQuery.years_of_experience ? `${parsedQuery.years_of_experience} years` : 'Not specified'}
-Industry: ${parsedQuery.industry || 'Not specified'}
-
-CANDIDATE:
-Name: ${candidate.fullName || 'Unknown'}
-Current: ${currentExperience.role_title || 'No current role'} at ${currentExperience.organization_name || 'Unknown'}
-Location: ${location?.name || 'Unknown'}
-Skills: ${skills.map((s: any) => s.name).join(', ') || 'None listed'}
-Experience: ${experiences.length} positions listed
-Education: ${educations[0]?.degree || 'Not specified'} from ${educations[0]?.school_name || 'Not specified'}
-
-Return ONLY valid JSON (no markdown, no code blocks):
-{
-  "score": 75,
-  "pros": ["Candidate has 5 years Next.js experience", "Currently in similar role"],
-  "cons": ["Location doesn't match", "No finance industry background"]
-}
-
-Rules:
-- score: 0-100 number (0 = poor match, 100 = perfect match)
-- pros: max 4 specific, concise reasons why this is a good match
-- cons: max 4 specific, concise reasons why this might not be ideal
-- Be specific and reference actual data points
-- If criteria not specified in search, don't penalize candidate`;
+    // Build complete prompt with custom rules wrapped by format requirements
+    const prompt = buildScoringPrompt(
+      customRules,
+      parsedQuery.job_title || 'Not specified',
+      parsedQuery.location ? JSON.stringify(parsedQuery.location) : 'Not specified',
+      parsedQuery.skills ? JSON.stringify(parsedQuery.skills) : 'Not specified',
+      parsedQuery.years_of_experience ? `${parsedQuery.years_of_experience} years` : 'Not specified',
+      parsedQuery.industry || 'Not specified',
+      candidate.fullName || 'Unknown',
+      currentExperience.role_title || 'No current role',
+      currentExperience.organization_name || 'Unknown',
+      location?.name || 'Unknown',
+      skills.map((s: any) => s.name).join(', ') || 'None listed',
+      experiences.length.toString(),
+      `${educations[0]?.degree || 'Not specified'} from ${educations[0]?.school_name || 'Not specified'}`
+    );
 
     console.log("[Scoring] Sending to Claude for evaluation...");
 
     const message = await anthropic.messages.create({
-      model: "claude-3-5-haiku-20241022",
+      model: "claude-haiku-4-5",
       max_tokens: 1024,
       messages: [
         {

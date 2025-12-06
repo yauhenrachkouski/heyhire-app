@@ -216,30 +216,22 @@ export function CandidateCardActionBar({
         </DataTableActionBarAction>
 
         <DataTableActionBarAction
-          tooltip="Add to sequence"
+          tooltip="Add to outreach"
           onClick={handleAddToSequenceClick}
           isPending={isAddingToSequence}
         >
           <Plus />
-          Add to Sequence
+          Add to Outreach
         </DataTableActionBarAction>
 
-        <DataTableActionBarAction
-          tooltip="Send email to selected"
-          onClick={handleEmailClick}
-          isPending={isSendingEmail}
-        >
-          <Mail />
-          Email
-        </DataTableActionBarAction>
 
         <DataTableActionBarAction
-          tooltip="Decline selected"
+          tooltip="Reject selected"
           onClick={handleDeclineClick}
           variant="destructive"
         >
           <ThumbsDown />
-          Decline
+          Reject
         </DataTableActionBarAction>
 
         <DataTableActionBarAction

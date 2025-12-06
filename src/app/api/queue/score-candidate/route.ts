@@ -38,9 +38,9 @@ async function handler(req: Request) {
     const parsedQuery = JSON.parse(searchRecord.params);
     console.log("[Scoring Webhook] Parsed query:", parsedQuery);
 
-    // Score the candidate
+    // Score the candidate (with custom prompt if available)
     console.log("[Scoring Webhook] Scoring candidate...");
-    const result = await scoreCandidateMatch(candidate, parsedQuery);
+    const result = await scoreCandidateMatch(candidate, parsedQuery, searchRecord.scoringPrompt);
 
     if (result.success && result.data) {
       console.log("[Scoring Webhook] Score:", result.data.score, "%");
@@ -78,5 +78,9 @@ async function handler(req: Request) {
 }
 
 export const POST = verifySignatureAppRouter(handler);
+
+
+
+
 
 

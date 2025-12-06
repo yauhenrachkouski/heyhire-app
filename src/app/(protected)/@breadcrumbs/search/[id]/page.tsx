@@ -26,3 +26,10 @@ export default async function SearchBreadcrumb({ params }: SearchBreadcrumbProps
   return <Breadcrumbs routes={['search', searchName]} />
 }
 
+
+
+
+
+
+
+

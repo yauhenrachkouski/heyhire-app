@@ -119,16 +119,16 @@ export function SimpleMembersTable({ members, organizationId, currentUserId }: S
     <>
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-1">
               <CardTitle>Members ({members.length})</CardTitle>
               <CardDescription>
                 Manage your organization members and invitations
               </CardDescription>
             </div>
-            <Button onClick={() => setShowInviteDialog(true)} size="sm">
+            <Button onClick={() => setShowInviteDialog(true)} size="sm" className="w-full sm:w-auto">
               <Icon name="user-plus" className="h-4 w-4" />
-              Invite
+              Invite Member
             </Button>
           </div>
         </CardHeader>
@@ -138,16 +138,16 @@ export function SimpleMembersTable({ members, organizationId, currentUserId }: S
             No members found
           </div>
         ) : (
-          <div className="rounded-md border">
+          <div className="rounded-md border overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Member</TableHead>
-                  <TableHead>Email</TableHead>
+                  <TableHead className="hidden sm:table-cell">Email</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Joined</TableHead>
-                  <TableHead className="w-[100px]"></TableHead>
+                  <TableHead className="hidden md:table-cell">Joined</TableHead>
+                  <TableHead className="w-[80px] sm:w-[100px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -159,18 +159,23 @@ export function SimpleMembersTable({ members, organizationId, currentUserId }: S
                   return (
                     <TableRow key={member.id}>
                       <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Avatar className="h-8 w-8">
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-7 w-7 sm:h-8 sm:w-8 shrink-0">
                             <AvatarFallback className="text-xs">
                               {getInitials(memberName)}
                             </AvatarFallback>
                           </Avatar>
-                          <span className={`font-medium ${isPending ? "text-muted-foreground" : ""}`}>
-                            {memberName}
-                          </span>
+                          <div className="min-w-0">
+                            <span className={`font-medium block truncate ${isPending ? "text-muted-foreground" : ""}`}>
+                              {memberName}
+                            </span>
+                            <span className="text-xs text-muted-foreground sm:hidden truncate block">
+                              {memberEmail}
+                            </span>
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
+                      <TableCell className="text-muted-foreground hidden sm:table-cell">
                         {memberEmail}
                       </TableCell>
                       <TableCell>
@@ -186,7 +191,7 @@ export function SimpleMembersTable({ members, organizationId, currentUserId }: S
                           {isPending ? "Invited" : "Active"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
+                      <TableCell className="text-muted-foreground hidden md:table-cell">
                         {isPending ? "Not joined" : formatDate(member.createdAt)}
                       </TableCell>
                       <TableCell>
@@ -202,7 +207,7 @@ export function SimpleMembersTable({ members, organizationId, currentUserId }: S
                             ) : (
                               <Icon name="x" className="h-4 w-4" />
                             )}
-                            <span className="ml-1">Cancel</span>
+                            <span className="ml-1 hidden sm:inline">Cancel</span>
                           </Button>
                         ) : (
                           <Button
@@ -217,7 +222,7 @@ export function SimpleMembersTable({ members, organizationId, currentUserId }: S
                             ) : (
                               <Icon name="trash" className="h-4 w-4" />
                             )}
-                            <span className="ml-1">Remove</span>
+                            <span className="ml-1 hidden sm:inline">Remove</span>
                           </Button>
                         )}
                       </TableCell>

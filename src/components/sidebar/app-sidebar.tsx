@@ -34,6 +34,7 @@ import {
 import { Icon, IconName } from "@/components/ui/icon"
 import { NavUser } from "@/components/sidebar/nav-user"
 import { SupportModal } from "@/components/sidebar/support-modal"
+import { CreditBalance } from "@/components/sidebar/credit-balance"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import type { subscription } from "@/db/schema"
@@ -48,6 +49,7 @@ interface Organization {
   logo?: string | null
   metadata?: Record<string, any> | null
   createdAt: Date
+  credits?: number
 }
 
 // User type based on better-auth session
@@ -120,7 +122,7 @@ const data: { navMain: NavGroup[] } = {
         },
         
         {
-          title: "Billing",
+          title: "Billing & Plan",
           url: "/billing",
           icon: "credit-card" as IconName,
         },
@@ -396,6 +398,9 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
         ))}
       </SidebarContent>
       <SidebarFooter>
+        {activeOrganization && activeOrganization.credits !== undefined && (
+          <CreditBalance credits={activeOrganization.credits} currentPlan={subscription?.plan as "starter" | "pro" | "enterprise" | null | undefined} />
+        )}
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton

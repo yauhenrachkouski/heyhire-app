@@ -2,11 +2,22 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Send, Mic } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { IconLoader2, IconSend, IconMicrophone, IconPaperclip, IconSparkles, IconSearch } from "@tabler/icons-react";
 import { parseQueryWithClaude } from "@/actions/search";
 import type { ParsedQuery } from "@/types/search";
 import { useToast } from "@/hooks/use-toast";
 import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
+import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { SearchInterpretation } from "@/components/search/search-interpretation";
 
 interface SearchInputProps {
   onQueryParsed: (query: ParsedQuery) => void;
@@ -16,6 +27,102 @@ interface SearchInputProps {
   hasParsedQuery?: boolean;
   value?: string; // Allow controlled query value
   onQueryTextChange?: (text: string) => void; // Notify parent of text changes
+  className?: string;
+  hideInterpretation?: boolean;
+  hideSearchButton?: boolean;
+}
+
+/**
+ * Helper to format a field value (handles both single and multi-value)
+ */
+function formatFieldForDisplay(field: string | { values: string[]; operator: string } | undefined): string {
+  if (!field) return "";
+  
+  if (typeof field === 'string') {
+    return `"${field}"`;
+  }
+  
+  if (typeof field === 'object' && 'values' in field) {
+    const { values, operator } = field;
+    if (values.length === 0) return "";
+    if (values.length === 1) return `"${values[0]}"`;
+    
+    const quotedValues = values.map((v) => `"${v}"`).join(` ${operator} `);
+    return `(${quotedValues})`;
+  }
+  
+  return "";
+}
+
+/**
+ * Generate boolean search string from parsed query
+ * Format: "Job Title" AND (skill1 OR skill2) AND (location1 OR location2) AND industry
+ * Supports all fields including new ones
+ */
+function generateBooleanSearch(parsedQuery: ParsedQuery): string {
+  const parts: string[] = [];
+
+  // Add "current" modifier
+  if (parsedQuery.is_current) {
+    parts.push('"Current"');
+  }
+
+  // Add job title
+  const jobTitle = formatFieldForDisplay(parsedQuery.job_title);
+  if (jobTitle) parts.push(jobTitle);
+
+  // Add skills
+  const skills = formatFieldForDisplay(parsedQuery.skills);
+  if (skills) parts.push(skills);
+
+  // Add location
+  const location = formatFieldForDisplay(parsedQuery.location);
+  if (location) parts.push(location);
+
+  // Add company
+  const company = formatFieldForDisplay(parsedQuery.company);
+  if (company) parts.push(company);
+
+  // Add industry
+  const industry = formatFieldForDisplay(parsedQuery.industry);
+  if (industry) parts.push(industry);
+
+  // Add years of experience
+  const experience = formatFieldForDisplay(parsedQuery.years_of_experience);
+  if (experience) parts.push(experience);
+
+  // Add education
+  const education = formatFieldForDisplay(parsedQuery.education);
+  if (education) parts.push(education);
+
+  // Add remote preference
+  if (parsedQuery.remote_preference) {
+    parts.push(`"${parsedQuery.remote_preference}"`);
+  }
+
+  // Add company size
+  const companySize = formatFieldForDisplay(parsedQuery.company_size);
+  if (companySize) parts.push(companySize);
+
+  // Add funding types
+  const funding = formatFieldForDisplay(parsedQuery.funding_types);
+  if (funding) parts.push(funding);
+
+  // Add web technologies
+  const webTech = formatFieldForDisplay(parsedQuery.web_technologies);
+  if (webTech) parts.push(webTech);
+
+  // Add revenue range
+  const revenue = formatFieldForDisplay(parsedQuery.revenue_range);
+  if (revenue) parts.push(revenue);
+
+  // Add founded year range
+  if (parsedQuery.founded_year_range) {
+    parts.push(`"${parsedQuery.founded_year_range}"`);
+  }
+
+  // Join all parts with AND
+  return parts.join(" AND ");
 }
 
 export function SearchInput({ 
@@ -25,13 +132,22 @@ export function SearchInput({
   isLoading = false, 
   hasParsedQuery = false,
   value,
-  onQueryTextChange
+  onQueryTextChange,
+  className,
+  hideInterpretation = false,
+  hideSearchButton = false
 }: SearchInputProps) {
   const [query, setQuery] = useState("");
   const [isParsing, setIsParsing] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [parsedQuery, setParsedQuery] = useState<ParsedQuery | null>(null);
+  const [originalParsedQuery, setOriginalParsedQuery] = useState<ParsedQuery | null>(null);
+  const [booleanSearch, setBooleanSearch] = useState("");
+  const [showScenarios, setShowScenarios] = useState(false);
+  const [scenarios, setScenarios] = useState<{ id: string; label: string; category: string }[]>([]);
+  const [selectedScenarios, setSelectedScenarios] = useState<string[]>([]);
   const { toast } = useToast();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -43,18 +159,104 @@ export function SearchInput({
     }
   }, [value]);
 
+  // Update parsed query when scenarios are toggled
+  useEffect(() => {
+    if (!originalParsedQuery) return;
+
+    const newQuery = { ...originalParsedQuery };
+    
+    // If a category is NOT in selected scenarios, remove it from the query
+    scenarios.forEach(scenario => {
+      if (!selectedScenarios.includes(scenario.id)) {
+        // @ts-ignore - dynamic access to typed object
+        newQuery[scenario.category as keyof ParsedQuery] = undefined;
+      }
+    });
+
+    setParsedQuery(newQuery);
+    onQueryParsed(newQuery);
+  }, [selectedScenarios, originalParsedQuery, scenarios]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleScenarioToggle = (id: string) => {
+    setSelectedScenarios(prev => {
+      const newSelected = prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id];
+      return newSelected;
+    });
+  };
+
+  const generateScenariosFromQuery = (parsed: ParsedQuery) => {
+    const newScenarios: { id: string; label: string; category: string }[] = [];
+    
+    if (parsed.job_title) {
+      const val = formatFieldForDisplay(parsed.job_title).replace(/"/g, '');
+      if (val) newScenarios.push({ id: 'job_title', label: `Job Title: ${val}`, category: 'job_title' });
+    }
+    if (parsed.location) {
+      const val = formatFieldForDisplay(parsed.location).replace(/"/g, '');
+      if (val) newScenarios.push({ id: 'location', label: `Location: ${val}`, category: 'location' });
+    }
+    if (parsed.skills) {
+      const val = formatFieldForDisplay(parsed.skills).replace(/"/g, '');
+      if (val) newScenarios.push({ id: 'skills', label: `Skills: ${val}`, category: 'skills' });
+    }
+    if (parsed.company) {
+      const val = formatFieldForDisplay(parsed.company).replace(/"/g, '');
+      if (val) newScenarios.push({ id: 'company', label: `Company: ${val}`, category: 'company' });
+    }
+    if (parsed.industry) {
+      const val = formatFieldForDisplay(parsed.industry).replace(/"/g, '');
+      if (val) newScenarios.push({ id: 'industry', label: `Industry: ${val}`, category: 'industry' });
+    }
+    if (parsed.education) {
+      const val = formatFieldForDisplay(parsed.education).replace(/"/g, '');
+      if (val) newScenarios.push({ id: 'education', label: `Education: ${val}`, category: 'education' });
+    }
+    if (parsed.years_of_experience) {
+      const val = formatFieldForDisplay(parsed.years_of_experience).replace(/"/g, '');
+      if (val) newScenarios.push({ id: 'years_of_experience', label: `Experience: ${val}`, category: 'years_of_experience' });
+    }
+    if (parsed.funding_types) {
+      const val = formatFieldForDisplay(parsed.funding_types).replace(/"/g, '');
+      if (val) newScenarios.push({ id: 'funding_types', label: `Funding: ${val}`, category: 'funding_types' });
+    }
+    
+    return newScenarios;
+  };
+
   const handleParse = async (searchQuery: string) => {
     if (!searchQuery.trim()) {
+      setBooleanSearch("");
       return;
     }
 
     setIsParsing(true);
     onParsingChange?.(true);
+    // Close scenarios while parsing
+    setShowScenarios(false);
+    
     try {
       const result = await parseQueryWithClaude(searchQuery);
       if (result.success && result.data) {
         onQueryParsed(result.data);
+        setParsedQuery(result.data);
+        setOriginalParsedQuery(result.data);
+        
+        // Generate scenarios from the parsed query
+        const generated = generateScenariosFromQuery(result.data);
+        setScenarios(generated);
+        setSelectedScenarios(generated.map(s => s.id)); // Select all by default
+        
+        // Show scenarios window if we have any
+        if (generated.length > 0) {
+          setShowScenarios(true);
+        }
+
+        // Generate boolean search string
+        const booleanSearchString = generateBooleanSearch(result.data);
+        setBooleanSearch(booleanSearchString);
       } else {
+        setBooleanSearch("");
+        setParsedQuery(null);
         toast({
           title: "Error",
           description: result.error || "Failed to parse query",
@@ -63,6 +265,7 @@ export function SearchInput({
       }
     } catch (error) {
       console.error("Search error:", error);
+      setBooleanSearch("");
       toast({
         title: "Error",
         description: "An unexpected error occurred",
@@ -177,53 +380,179 @@ export function SearchInput({
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      if (!isParsing && !isLoading && !isSearching && query.trim() && !isRecording && !isTranscribing) {
+        handleButtonClick();
+      }
+    }
+  };
+
   return (
-    <div className="relative">
-      <div className="relative flex items-start">
-        <button
-          type="button"
-          onClick={handleMicClick}
-          disabled={isLoading || isParsing || isTranscribing}
-          className={`absolute left-3 top-3 flex items-center justify-center p-2 rounded-md transition-colors z-10 ${
-            isRecording
-              ? "bg-red-500 text-white hover:bg-red-600"
-              : "bg-transparent text-blue-600 hover:bg-blue-50"
-          }`}
-          title={isRecording ? "Stop recording" : "Start recording"}
+    <div className={cn("relative group", className)}>
+      {/* Scenarios Window */}
+      {showScenarios && (
+        <div className="absolute bottom-full mb-2 left-0 w-full bg-popover border border-border rounded-lg shadow-lg p-4 z-20 animate-in fade-in zoom-in-95 duration-200">
+          <div className="space-y-2 p-2">
+            <h4 className="font-medium text-sm text-muted-foreground px-2">Search Scenarios</h4>
+            <div className="space-y-1">
+              {scenarios.map((scenario) => (
+                <div key={scenario.id} className="flex items-center space-x-3 px-2 hover:bg-muted/50 py-2 rounded-md transition-colors cursor-pointer" onClick={() => handleScenarioToggle(scenario.id)}>
+                  <Checkbox 
+                    id={scenario.id} 
+                    checked={selectedScenarios.includes(scenario.id)}
+                    onCheckedChange={() => handleScenarioToggle(scenario.id)}
+                  />
+                  <Label 
+                    htmlFor={scenario.id}
+                    className="text-sm font-normal leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
+                  >
+                    {scenario.label}
+                  </Label>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end px-2 pt-2 border-t border-border/50 mt-2">
+              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowScenarios(false)}>
+                Done
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Gradient Tongue Element */}
+      <div className="absolute -top-8 left-0 z-0 w-full h-9">
+        <div 
+          className="w-full h-full bg-gradient-to-r from-black to-black animate-gradient-x flex items-center"
+          style={{ 
+            clipPath: "inset(0 calc(100% - 220px) 0 0 round 16px 16px 0 0)" 
+          }}
         >
-          <Mic className="h-4 w-4" />
-        </button>
-        <Textarea
-          placeholder="Software engineer with next.js skills living in Miami"
-          value={query}
-          onChange={handleInputChange}
-          disabled={isLoading || isRecording || isTranscribing}
-          className="pl-12 pr-14 pt-3 pb-12 text-sm border-0 min-h-[80px] resize-none bg-white"
-          rows={3}
-        />
-        {hasParsedQuery && (
-          <button
-            type="button"
-            onClick={handleButtonClick}
-            disabled={isParsing || isLoading || isSearching || !query.trim() || isRecording || isTranscribing}
-            className="absolute right-3 bottom-3 bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400 cursor-pointer flex items-center justify-center p-2 rounded-md z-10"
-            title="Start sourcing"
-          >
-            {isRecording ? (
-              <span className="inline-block animate-pulse w-2 h-2 bg-red-500 rounded-full"></span>
-            ) : isTranscribing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : isParsing || isSearching || isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-          </button>
-        )}
+           <div className="px-4 flex items-center justify-center w-[220px]">
+             <span className="text-sm font-medium text-white relative z-10">Who are you sourcing for?</span>
+           </div>
+        </div>
       </div>
-      <p className="text-sm text-white/50 mt-2 px-1">
-        Enter job description, and we will find suitable candidates for you
-      </p>
+
+      {/* Gradient Border Wrapper */}
+      <div className="relative rounded-2xl rounded-tl-none p-[2px] bg-gradient-to-r from-black to-black animate-gradient-x z-10">
+        <div className="relative bg-background rounded-xl overflow-hidden flex flex-col">
+          <Textarea
+            placeholder={isParsing ? "Preparing search scenarios..." : "Software engineer with next.js skills living in Miami"}
+            value={query}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            disabled={isLoading || isRecording || isTranscribing}
+            className="border-0 focus-visible:ring-0 resize-none min-h-[110px] shadow-none bg-transparent px-4 py-5 pb-16 pr-12 !text-base placeholder:text-muted-foreground/60"
+            rows={4}
+            
+          />
+          
+          {/* Top Right Submit Button */}
+          <div className="absolute top-4 right-4 z-10">
+             <Button
+                 type="button"
+                 variant="ghost"
+                 size="icon"
+                 onClick={handleButtonClick}
+                 disabled={isLoading || isSearching || !query.trim()}
+                 className={cn(
+                   "h-9 w-9 rounded-md transition-all duration-200",
+                   (query.trim() || isParsing)
+                     ? "text-foreground hover:bg-muted" 
+                     : "text-muted-foreground cursor-not-allowed hover:bg-transparent"
+                 )}
+               >
+                 {isSearching || isParsing ? <IconLoader2 className="h-6 w-6 animate-spin" /> : <IconSend className="size-4.5" />}
+               </Button>
+          </div>
+
+          {/* Bottom Toolbar */}
+          <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-3 pb-3 pt-1 bg-muted/30 border-t border-border/10">
+            {/* Left Actions */}
+            <div className="flex items-center gap-2">
+              
+
+             
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      type="button" 
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleMicClick}
+                      className={cn(
+                        "rounded-md transition-colors",
+                        isRecording ? "bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                      )}
+                    >
+                      <IconMicrophone className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Voice Message</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
+              <div className="h-4 w-px bg-border/50 mx-2" />
+
+              <Button 
+                type="button" 
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  if (query.trim().length > 0) {
+                    setShowScenarios(!showScenarios);
+                  }
+                }}
+                className={cn(
+                  "flex items-center gap-2 px-2 py-1.5 h-auto text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors",
+                  query.trim().length === 0 && "opacity-0 pointer-events-none w-0 p-0 overflow-hidden"
+                )}
+              >
+                {isParsing ? <IconLoader2 className="h-4 w-4 animate-spin" /> : <IconSparkles className="h-4 w-4" />}
+                <span className="font-mono text-sm">Search Scenarios</span>
+              </Button>
+            </div>
+
+            {/* Right Actions */}
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-muted-foreground font-mono">
+                {query.length} / 3,000
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Helper Footer */}
+      {/* <div className="flex items-center justify-between mt-2 px-1">
+        <div className="text-sm text-muted-foreground h-5 flex items-center">
+          {(isParsing || isTranscribing) ? (
+            <span className="flex items-center gap-2 text-primary font-medium animate-pulse">
+              Analyzing requirements...
+            </span>
+          ) : (
+            "Type a job description, or paste requirements."
+          )}
+        </div>
+        <div className="hidden sm:flex items-center gap-2">
+          <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+            <span className="text-sm">⌘</span>Enter
+          </kbd>
+          <span className="text-sm text-muted-foreground">to search</span>
+        </div>
+      </div> */}
+
+      {/* Parsed Fields Display */}
+      {/* {parsedQuery && (
+        <div className="mt-4 space-y-3">
+          {!hideInterpretation && <SearchInterpretation parsedQuery={parsedQuery} />}
+        </div>
+      )} */}
     </div>
   );
 }

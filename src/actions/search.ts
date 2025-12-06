@@ -1,5 +1,11 @@
 "use server";
 
+import "server-only"
+
+import {
+  revalidatePath
+} from "next/cache";
+import { headers } from "next/headers";
 import { getErrorMessage } from "@/lib/handle-error";
 import {
   parsedQuerySchema,
@@ -16,7 +22,8 @@ import { db } from "@/db/drizzle";
 import { search } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { generateId } from "@/lib/id";
-import { searchLinkedInWithSerper } from "./serper";
+import { auth } from "@/lib/auth";
+// import { searchLinkedInWithSerper } from "./serper"; // Not currently used - using provider system instead
 import { scrapeLinkedInProfilesBatch } from "./linkedin-scraper";
 import { searchAllSources, getUniqueUrls } from "@/lib/sources";
 import { createOrUpdateCandidate, addCandidateToSearch } from "./candidates";
@@ -29,10 +36,11 @@ const FORAGER_ACCOUNT_ID = process.env.FORAGER_ACCOUNT_ID;
 const CLAUDE_PROMPT = `You are a job search query parser. Your task is to extract structured information from user queries and return valid JSON.
 
 IMPORTANT CORRECTION RULES:
-1. SPELLING CORRECTIONS: Automatically correct any spelling mistakes in cities, countries, job titles, and other fields
+1. SPELLING CORRECTIONS: Automatically correct any spelling mistakes in cities, countries, job titles, companies, and other fields
    - Example: "san francisko" → "San Francisco"
    - Example: "sofware engineer" → "Software Engineer"
    - Example: "new yourk" → "New York"
+   - Example: "googl" → "Google"
 
 2. LOCATION STANDARDIZATION:
    - Expand ALL city/state abbreviations to their full, proper names
@@ -55,21 +63,85 @@ IMPORTANT CORRECTION RULES:
 
 4. GRAMMAR AND FORMATTING:
    - Fix any grammatical errors
-   - Standardize technology names (e.g., "reactjs" → "React", "nodejs" → "Node.js", "next.js" → "Next.js")
+   - Standardize technology names (e.g., "reactjs" → "React", "nodejs" → "Node.js", "next.js" → "Next.js", "aws" → "AWS")
+   - Standardize company names (e.g., "google" → "Google", "meta" → "Meta", "amazon" → "Amazon")
    - Ensure consistent formatting across all fields
 
+5. MULTIPLE VALUES WITH OR/AND LOGIC (APPLIES TO ALL FIELDS):
+   - ALL fields can have multiple values with OR/AND operators
+   - For multiple values, return as an object with "values" array and "operator" field
+   - Examples:
+     * Job titles: "Software Engineer or DevOps Engineer" → {"values": ["Software Engineer", "DevOps Engineer"], "operator": "OR"}
+     * Location: "miami or san francisco" → {"values": ["Miami", "San Francisco"], "operator": "OR"}
+     * Skills: "react and typescript" → {"values": ["React", "TypeScript"], "operator": "AND"}
+     * Companies: "Google, Meta, or Amazon" → {"values": ["Google", "Meta", "Amazon"], "operator": "OR"}
+     * Education: "Bachelor's or Master's degree" → {"values": ["Bachelor's degree", "Master's degree"], "operator": "OR"}
+     * Industries: "Fintech and SaaS" → {"values": ["Fintech", "SaaS"], "operator": "AND"}
+     * Company size: "10-50 or 50-100 employees" → {"values": ["10-50", "50-100"], "operator": "OR"}
+   - For single values, return as a plain string
+   - Commas without explicit OR/AND imply OR as default
+   - If user doesn't specify OR/AND for multiple items, use OR as default
+
+6. CURRENT ROLE DETECTION:
+   - If user specifies "current" before a job title, set is_current to true
+   - Examples:
+     * "current CTO" → is_current: true
+     * "current Software Engineer at Google" → is_current: true
+   - If not mentioned, set is_current to null
+
+7. REMOTE PREFERENCE:
+   - Detect keywords: "remote", "hybrid", "onsite", "in-office"
+   - Example: "remote Software Engineer" → remote_preference: "remote"
+   - Example: "hybrid Frontend Developer" → remote_preference: "hybrid"
+
+8. COMPANY SIZE:
+   - Parse employee ranges: "10-50 employees", "50-100 employees", "100+ employees"
+   - Normalize format: "10-50", "50-100", "100-250", "250-500", "500-1000", "1000+"
+   - For multiple sizes, use multi-value: "10-50 or 50-100 employees" → {"values": ["10-50", "50-100"], "operator": "OR"}
+   - For tags: {"category": "company_size", "value": "10-50"}
+
+9. FUNDING TYPES:
+   - Detect: "Series A", "Series B", "Series C", "seed", "angel", "pre-seed"
+   - Example: "Series A or Series B funded" → {"values": ["Series A", "Series B"], "operator": "OR"}
+
+10. YEARS OF EXPERIENCE:
+   - IMPORTANT: Always expand ranges into individual year values for Forager compatibility
+   - Parse ranges: "3-5 years" → {"values": ["3 years", "4 years", "5 years"], "operator": "OR"}
+   - Parse single: "5 years" → "5 years"
+   - Parse multiple: "3 years or 5 years" → {"values": ["3 years", "5 years"], "operator": "OR"}
+   - For tags, ALWAYS extract just the numeric value: {"category": "years_of_experience", "value": "3"}
+   - For multi-value, create a tag for each year with just the number
+   - Examples:
+     * "3-5 years" → field: {"values": ["3 years", "4 years", "5 years"], "operator": "OR"}
+       tags: [{"category": "years_of_experience", "value": "3"}, {"category": "years_of_experience", "value": "4"}, {"category": "years_of_experience", "value": "5"}]
+     * "5 years" → field: "5 years", tags: [{"category": "years_of_experience", "value": "5"}]
+     * "5+ years" → {"values": ["5 years", "6 years", "7 years", "8 years", "9 years", "10 years"], "operator": "OR"}
+
 Parse the user's query and extract the following fields:
-- job_title: The position or role being searched for (CORRECTED and in Title Case)
-- location: The geographic location specified (CORRECTED, expanded from abbreviations, properly capitalized)
-- years_of_experience: The required or specified years of experience
-- industry: The industry or sector mentioned (properly formatted)
-- skills: The specific skills, technologies, or expertise required (properly formatted technology names)
+
+CORE FIELDS (all support multi-value with operators):
+- job_title: String OR {"values": [...], "operator": "OR"|"AND"}
+- location: String OR {"values": [...], "operator": "OR"|"AND"}
+- years_of_experience: String OR {"values": [...], "operator": "OR"|"AND"}
+- industry: String OR {"values": [...], "operator": "OR"|"AND"}
+- skills: String OR {"values": [...], "operator": "OR"|"AND"}
+- company: String OR {"values": [...], "operator": "OR"|"AND"}
+- education: String OR {"values": [...], "operator": "OR"|"AND"}
+
+NEW FIELDS:
+- is_current: true|false|null (true if "current" mentioned before job title, null otherwise)
+- company_size: String OR {"values": [...], "operator": "OR"|"AND"} (e.g., "10-50", "50-100")
+- revenue_range: String OR {"values": [...], "operator": "OR"|"AND"} (e.g., "$1M-$10M")
+- remote_preference: String (one of: "remote", "hybrid", "onsite", or "")
+- funding_types: String OR {"values": [...], "operator": "OR"|"AND"} (e.g., "Series A", "angel")
+- founded_year_range: String (e.g., "2020-2025" or "")
+- web_technologies: String OR {"values": [...], "operator": "OR"|"AND"} (e.g., "React", "AWS")
 
 Additionally, create a 'tags' array where each item is an object with:
-- category: one of ["job_title", "location", "years_of_experience", "industry", "skills"]
+- category: one of ["job_title", "location", "years_of_experience", "industry", "skills", "company", "education", "company_size", "revenue_range", "remote_preference", "funding_types", "founded_year_range", "web_technologies"]
 - value: the CORRECTED and STANDARDIZED value for that category
 
-If any field is not mentioned in the query, return an empty string "" for that field, and DO NOT include it in the tags array.
+If any field is not mentioned in the query, return an empty string "" for that field (or null for is_current), and DO NOT include it in the tags array.
 
 Return ONLY a valid JSON object in this exact format:
 {
@@ -78,26 +150,91 @@ Return ONLY a valid JSON object in this exact format:
   "years_of_experience": "",
   "industry": "",
   "skills": "",
-  "tags": [
-    {"category": "job_title", "value": "..."},
-    {"category": "location", "value": "..."}
-  ]
+  "company": "",
+  "education": "",
+  "is_current": null,
+  "company_size": "",
+  "revenue_range": "",
+  "remote_preference": "",
+  "funding_types": "",
+  "founded_year_range": "",
+  "web_technologies": "",
+  "tags": []
 }
 
 Examples:
-- Query: "I'm looking for software engineer in SF"
-  Output: {"job_title": "Software Engineer", "location": "San Francisco", "years_of_experience": "", "industry": "", "skills": "", "tags": [{"category": "job_title", "value": "Software Engineer"}, {"category": "location", "value": "San Francisco"}]}
 
-- Query: "sofware engineer with next.js 5 years experience in Finance from gdansk"
-  Output: {"job_title": "Software Engineer", "location": "Gdansk", "years_of_experience": "5 years", "industry": "Finance", "skills": "Next.js", "tags": [{"category": "job_title", "value": "Software Engineer"}, {"category": "location", "value": "Gdansk"}, {"category": "years_of_experience", "value": "5 years"}, {"category": "industry", "value": "Finance"}, {"category": "skills", "value": "Next.js"}]}
+- Query: "software engineer miami or san francisco"
+  Output: {"job_title": "Software Engineer", "location": {"values": ["Miami", "San Francisco"], "operator": "OR"}, "years_of_experience": "", "industry": "", "skills": "", "company": "", "education": "", "is_current": null, "company_size": "", "revenue_range": "", "remote_preference": "", "funding_types": "", "founded_year_range": "", "web_technologies": "", "tags": [{"category": "job_title", "value": "Software Engineer"}, {"category": "location", "value": "Miami"}, {"category": "location", "value": "San Francisco"}]}
 
-- Query: "senior react develper in NYC with 3 years experience in fintech"
-  Output: {"job_title": "Senior React Developer", "location": "New York", "years_of_experience": "3 years", "industry": "Fintech", "skills": "React", "tags": [{"category": "job_title", "value": "Senior React Developer"}, {"category": "location", "value": "New York"}, {"category": "years_of_experience", "value": "3 years"}, {"category": "industry", "value": "Fintech"}, {"category": "skills", "value": "React"}]}
+- Query: "software engineer with react and typescript"
+  Output: {"job_title": "Software Engineer", "location": "", "years_of_experience": "", "industry": "", "skills": {"values": ["React", "TypeScript"], "operator": "AND"}, "company": "", "education": "", "is_current": null, "company_size": "", "revenue_range": "", "remote_preference": "", "funding_types": "", "founded_year_range": "", "web_technologies": "", "tags": [{"category": "job_title", "value": "Software Engineer"}, {"category": "skills", "value": "React"}, {"category": "skills", "value": "TypeScript"}]}
 
-- Query: "FRONTEND DEVELOPER miami with reactjs"
-  Output: {"job_title": "Frontend Developer", "location": "Miami", "years_of_experience": "", "industry": "", "skills": "React", "tags": [{"category": "job_title", "value": "Frontend Developer"}, {"category": "location", "value": "Miami"}, {"category": "skills", "value": "React"}]}
+- Query: "Software Engineer or DevOps Engineer at Google, Amazon, or Microsoft in SF, NYC, or Seattle with React and TypeScript and 3-5 years experience in Fintech or SaaS with Bachelor's or Master's degree"
+  Output: {"job_title": {"values": ["Software Engineer", "DevOps Engineer"], "operator": "OR"}, "location": {"values": ["San Francisco", "New York", "Seattle"], "operator": "OR"}, "years_of_experience": {"values": ["3 years", "4 years", "5 years"], "operator": "OR"}, "industry": {"values": ["Fintech", "SaaS"], "operator": "OR"}, "skills": {"values": ["React", "TypeScript"], "operator": "AND"}, "company": {"values": ["Google", "Amazon", "Microsoft"], "operator": "OR"}, "education": {"values": ["Bachelor's degree", "Master's degree"], "operator": "OR"}, "is_current": null, "company_size": "", "revenue_range": "", "remote_preference": "", "funding_types": "", "founded_year_range": "", "web_technologies": "", "tags": [{"category": "job_title", "value": "Software Engineer"}, {"category": "job_title", "value": "DevOps Engineer"}, {"category": "company", "value": "Google"}, {"category": "company", "value": "Amazon"}, {"category": "company", "value": "Microsoft"}, {"category": "location", "value": "San Francisco"}, {"category": "location", "value": "New York"}, {"category": "location", "value": "Seattle"}, {"category": "skills", "value": "React"}, {"category": "skills", "value": "TypeScript"}, {"category": "years_of_experience", "value": "3"}, {"category": "years_of_experience", "value": "4"}, {"category": "years_of_experience", "value": "5"}, {"category": "industry", "value": "Fintech"}, {"category": "industry", "value": "SaaS"}, {"category": "education", "value": "Bachelor's degree"}, {"category": "education", "value": "Master's degree"}]}
+
+- Query: "current CTO at Series A funded companies"
+  Output: {"job_title": "CTO", "location": "", "years_of_experience": "", "industry": "", "skills": "", "company": "", "education": "", "is_current": true, "company_size": "", "revenue_range": "", "remote_preference": "", "funding_types": "Series A", "founded_year_range": "", "web_technologies": "", "tags": [{"category": "job_title", "value": "CTO"}, {"category": "funding_types", "value": "Series A"}]}
+
+- Query: "remote Frontend Developer with 5 years experience"
+  Output: {"job_title": "Frontend Developer", "location": "", "years_of_experience": "5 years", "industry": "", "skills": "", "company": "", "education": "", "is_current": null, "company_size": "", "revenue_range": "", "remote_preference": "remote", "funding_types": "", "founded_year_range": "", "web_technologies": "", "tags": [{"category": "job_title", "value": "Frontend Developer"}, {"category": "years_of_experience", "value": "5"}, {"category": "remote_preference", "value": "remote"}]}
+
+- Query: "Backend Engineer at startups with 10-50 employees using AWS and Docker"
+  Output: {"job_title": "Backend Engineer", "location": "", "years_of_experience": "", "industry": "", "skills": "", "company": "", "education": "", "is_current": null, "company_size": "10-50", "revenue_range": "", "remote_preference": "", "funding_types": "", "founded_year_range": "", "web_technologies": {"values": ["AWS", "Docker"], "operator": "AND"}, "tags": [{"category": "job_title", "value": "Backend Engineer"}, {"category": "company_size", "value": "10-50"}, {"category": "web_technologies", "value": "AWS"}, {"category": "web_technologies", "value": "Docker"}]}
+
+- Query: "Engineering Manager with 5-7 years experience at 50-100 or 100-250 employee companies"
+  Output: {"job_title": "Engineering Manager", "location": "", "years_of_experience": {"values": ["5 years", "6 years", "7 years"], "operator": "OR"}, "industry": "", "skills": "", "company": "", "education": "", "is_current": null, "company_size": {"values": ["50-100", "100-250"], "operator": "OR"}, "revenue_range": "", "remote_preference": "", "funding_types": "", "founded_year_range": "", "web_technologies": "", "tags": [{"category": "job_title", "value": "Engineering Manager"}, {"category": "years_of_experience", "value": "5"}, {"category": "years_of_experience", "value": "6"}, {"category": "years_of_experience", "value": "7"}, {"category": "company_size", "value": "50-100"}, {"category": "company_size", "value": "100-250"}]}
 
 Parse the following query and return only the JSON object:`;
+
+export async function updateScoringPrompt(
+  searchId: string,
+  scoringPrompt: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const sessionData = await auth.api.getSession({
+      headers: await headers()
+    });
+    
+    if (!sessionData?.user || !sessionData?.session) {
+      return { success: false, error: "Unauthorized" };
+    }
+    
+    const { user: authUser, session } = sessionData;
+
+    // Verify search belongs to user's organization
+    const searchResult = await db
+      .select()
+      .from(search)
+      .where(eq(search.id, searchId))
+      .limit(1);
+
+    if (searchResult.length === 0) {
+      return { success: false, error: "Search not found" };
+    }
+
+    const searchRecord = searchResult[0];
+    if (searchRecord.organizationId !== session.activeOrganizationId) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    // Update scoring prompt
+    await db
+      .update(search)
+      .set({ scoringPrompt: scoringPrompt })
+      .where(eq(search.id, searchId));
+
+    revalidatePath(`/search/${searchId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error("[updateScoringPrompt] Error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to update scoring prompt",
+    };
+  }
+}
 
 export async function parseQueryWithClaude(
   userQuery: string
@@ -117,7 +254,7 @@ export async function parseQueryWithClaude(
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-3-5-haiku-20241022",
+        model: "claude-haiku-4-5",
         max_tokens: 1024,
         messages: [
           {
@@ -494,61 +631,65 @@ export async function parseQueryWithClaude(
 //   }
 // }
 
-/**
- * NEW - Search people using Serper.dev + RapidAPI LinkedIn scraper
- * This replaces the Forager search flow
- * 
- * @param parsedQuery - Parsed query with job_title, location, skills, industry
- * @returns Array of PeopleSearchResult from scraped LinkedIn profiles
- */
-export async function searchPeopleWithSerper(
-  parsedQuery: ParsedQuery
-): Promise<SearchPeopleResponse> {
-  try {
-    console.log("[Search] Starting Serper-based search with query:", parsedQuery);
+// COMMENTED OUT - This function is not currently used
+// The new non-blocking search flow uses searchPeopleNonBlocking with the provider system
+// To re-enable Serper-based search, uncomment this function and the import above
+//
+// /**
+//  * NEW - Search people using Serper.dev + RapidAPI LinkedIn scraper
+//  * This replaces the Forager search flow
+//  * 
+//  * @param parsedQuery - Parsed query with job_title, location, skills, industry
+//  * @returns Array of PeopleSearchResult from scraped LinkedIn profiles
+//  */
+// export async function searchPeopleWithSerper(
+//   parsedQuery: ParsedQuery
+// ): Promise<SearchPeopleResponse> {
+//   try {
+//     console.log("[Search] Starting Serper-based search with query:", parsedQuery);
 
-    // Step 1: Search LinkedIn URLs using Serper.dev
-    const serperResult = await searchLinkedInWithSerper(parsedQuery);
-    
-    if (!serperResult.success) {
-      throw new Error(serperResult.error || "Failed to search LinkedIn with Serper");
-    }
+//     // Step 1: Search LinkedIn URLs using Serper.dev
+//     const serperResult = await searchLinkedInWithSerper(parsedQuery);
+//     
+//     if (!serperResult.success) {
+//       throw new Error(serperResult.error || "Failed to search LinkedIn with Serper");
+//     }
 
-    if (!serperResult.data || serperResult.data.length === 0) {
-      console.log("[Search] No LinkedIn profiles found via Serper");
-      return {
-        success: true,
-        data: [],
-      };
-    }
+//     if (!serperResult.data || serperResult.data.length === 0) {
+//       console.log("[Search] No LinkedIn profiles found via Serper");
+//       return {
+//         success: true,
+//         data: [],
+//       };
+//     }
 
-    const linkedinUsernames = serperResult.data;
-    console.log(`[Search] Found ${linkedinUsernames.length} LinkedIn usernames from Serper`);
+//     const linkedinUsernames = serperResult.data;
+//     console.log(`[Search] Found ${linkedinUsernames.length} LinkedIn usernames from Serper`);
 
-    // Step 2: Scrape profiles using RapidAPI
-    console.log("[Search] Starting batch scraping with RapidAPI...");
-    const scrapingResult = await scrapeLinkedInProfilesBatch(linkedinUsernames);
+//     // Step 2: Scrape profiles using RapidAPI
+//     console.log("[Search] Starting batch scraping with RapidAPI...");
+//     const scrapingResult = await scrapeLinkedInProfilesBatch(linkedinUsernames);
 
-    if (!scrapingResult.success) {
-      throw new Error(scrapingResult.error || "Failed to scrape LinkedIn profiles");
-    }
+//     if (!scrapingResult.success) {
+//       throw new Error(scrapingResult.error || "Failed to scrape LinkedIn profiles");
+//     }
 
-    const scrapedProfiles = scrapingResult.data || [];
-    console.log(`[Search] Successfully scraped ${scrapedProfiles.length} profiles`);
+//     const scrapedProfiles = scrapingResult.data || [];
+//     console.log(`[Search] Successfully scraped ${scrapedProfiles.length} profiles`);
 
-    return {
-      success: true,
-      data: scrapedProfiles,
-    };
-  } catch (error) {
-    const errorMessage = getErrorMessage(error);
-    console.error("[Search] Error in Serper-based search:", errorMessage);
-    return {
-      success: false,
-      error: errorMessage,
-    };
-  }
-}
+//     return {
+//       success: true,
+//       data: scrapedProfiles,
+//     };
+//   } catch (error) {
+//     const errorMessage = getErrorMessage(error);
+//     console.error("[Search] Error in Serper-based search:", errorMessage);
+//     return {
+//       success: false,
+//       error: errorMessage,
+//     };
+//   }
+// }
 
 /**
  * NEW NON-BLOCKING FLOW - Search people and queue scraping jobs
@@ -579,8 +720,18 @@ export async function searchPeopleNonBlocking(
     const sourceResults = await searchAllSources(parsedQuery);
     console.log("[Search] Source results:", sourceResults);
 
-    // Step 2: Get unique URLs
-    const uniqueUrls = getUniqueUrls(sourceResults);
+    // Step 2: Build a map of URLs to their source provider
+    const urlToProviderMap = new Map<string, string>();
+    for (const sourceResult of sourceResults) {
+      for (const url of sourceResult.urls) {
+        // Track which provider found this URL (first one wins if multiple providers find same URL)
+        if (!urlToProviderMap.has(url)) {
+          urlToProviderMap.set(url, sourceResult.provider);
+        }
+      }
+    }
+
+    const uniqueUrls = Array.from(urlToProviderMap.keys());
     console.log("[Search] Found", uniqueUrls.length, "unique LinkedIn URLs");
 
     if (uniqueUrls.length === 0) {
@@ -607,6 +758,9 @@ export async function searchPeopleNonBlocking(
 
         console.log("[Search] Processing URL:", url, "username:", username);
 
+        // Get the provider that found this URL
+        const sourceProvider = urlToProviderMap.get(url) || 'unknown';
+
         // Create or get candidate
         const candidateResult = await createOrUpdateCandidate({
           linkedinUrl: url,
@@ -617,11 +771,11 @@ export async function searchPeopleNonBlocking(
         const candidateId = candidateResult.candidateId;
         candidatesCreated++;
 
-        // Link candidate to search
+        // Link candidate to search with the correct source provider
         const { searchCandidateId } = await addCandidateToSearch(
           searchId,
           candidateId,
-          'serper' // source provider that found this candidate
+          sourceProvider // source provider that found this candidate (e.g., 'forager', 'serper')
         );
 
         // Enqueue scraping job to QStash
@@ -784,18 +938,90 @@ export async function getPersonDetailFromForager(
 }
 
 /**
+ * Helper to format a field for search name (handles both single and multi-value)
+ */
+function formatFieldForName(field: string | { values: string[]; operator: string } | undefined): string {
+  if (!field) return "";
+  
+  if (typeof field === 'string') {
+    return field;
+  }
+  
+  if (typeof field === 'object' && 'values' in field) {
+    if (field.values.length === 0) return "";
+    if (field.values.length === 1) return field.values[0];
+    
+    const operator = field.operator.toLowerCase();
+    if (field.values.length === 2) {
+      return field.values.join(` ${operator} `);
+    }
+    
+    // For 3+ values: "A, B, or C"
+    const last = field.values[field.values.length - 1];
+    const rest = field.values.slice(0, -1);
+    return `${rest.join(", ")}, ${operator} ${last}`;
+  }
+  
+  return "";
+}
+
+/**
  * Generate a human-readable name from a parsed query
  */
 function generateSearchName(query: ParsedQuery): string {
   const parts: string[] = [];
   
-  if (query.job_title) parts.push(query.job_title);
-  if (query.location) parts.push(`in ${query.location}`);
-  if (query.skills) parts.push(`with ${query.skills}`);
-  if (query.years_of_experience) parts.push(`(${query.years_of_experience})`);
-  if (query.industry) parts.push(`- ${query.industry}`);
+  const jobTitle = formatFieldForName(query.job_title);
+  if (jobTitle) parts.push(jobTitle);
+  
+  // Handle location
+  const location = formatFieldForName(query.location);
+  if (location) {
+    parts.push(`in ${location}`);
+  }
+  
+  // Handle skills
+  const skills = formatFieldForName(query.skills);
+  if (skills) {
+    parts.push(`with ${skills}`);
+  }
+  
+  // Handle years of experience
+  const experience = formatFieldForName(query.years_of_experience);
+  if (experience) {
+    parts.push(`(${experience})`);
+  }
+  
+  // Handle industry
+  const industry = formatFieldForName(query.industry);
+  if (industry) {
+    parts.push(`- ${industry}`);
+  }
   
   return parts.length > 0 ? parts.join(" ") : "Untitled Search";
+}
+
+export async function updateSearchName(
+  searchId: string,
+  newName: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!newName.trim()) {
+      return { success: false, error: "Search name cannot be empty" };
+    }
+
+    await db.update(search)
+      .set({ name: newName })
+      .where(eq(search.id, searchId));
+
+    revalidatePath("/search");
+
+    return { success: true };
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    console.error("[Search] Error updating search name:", errorMessage);
+    return { success: false, error: errorMessage };
+  }
 }
 
 /**
@@ -892,6 +1118,53 @@ export async function getRecentSearches(
 /**
  * Get a search by ID
  */
+/**
+ * Build Forager payload for debugging (without making API call)
+ * @param parsedQuery - The parsed query
+ * @returns Forager payload that would be sent to the API
+ */
+export async function buildForagerPayloadForDebug(
+  parsedQuery: ParsedQuery
+): Promise<{
+  success: boolean;
+  data?: {
+    foragerIds: any;
+    foragerPayload: any;
+  };
+  error?: string;
+}> {
+  try {
+    // Import here to avoid circular dependencies
+    const { resolveForagerIds } = await import("@/lib/forager/autocomplete");
+    const { buildForagerPayload } = await import("@/lib/forager/mapper");
+
+    console.log("[Debug] Building Forager payload for:", parsedQuery);
+
+    // Step 1: Resolve IDs
+    const foragerIds = await resolveForagerIds(parsedQuery);
+    console.log("[Debug] Resolved IDs:", foragerIds);
+
+    // Step 2: Build payload
+    const foragerPayload = buildForagerPayload(parsedQuery, foragerIds, 0);
+    console.log("[Debug] Built payload:", foragerPayload);
+
+    return {
+      success: true,
+      data: {
+        foragerIds,
+        foragerPayload,
+      },
+    };
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    console.error("[Debug] Error building Forager payload:", errorMessage);
+    return {
+      success: false,
+      error: errorMessage,
+    };
+  }
+}
+
 export async function getSearchById(
   id: string
 ): Promise<{
@@ -901,6 +1174,7 @@ export async function getSearchById(
     name: string;
     query: string;
     params: ParsedQuery;
+    scoringPrompt?: string | null;
     createdAt: Date;
   };
   error?: string;
@@ -927,6 +1201,7 @@ export async function getSearchById(
       name: s.name,
       query: s.query,
       params: JSON.parse(s.params) as ParsedQuery,
+      scoringPrompt: s.scoringPrompt,
       createdAt: s.createdAt,
     };
     

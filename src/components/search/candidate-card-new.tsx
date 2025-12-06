@@ -269,3 +269,10 @@ export function CandidateCard({
 }
 
 
+
+
+
+
+
+
+

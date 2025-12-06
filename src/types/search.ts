@@ -2,21 +2,55 @@ import { z } from "zod";
 
 // Tag with category
 export const categoryTagSchema = z.object({
-  category: z.enum(["job_title", "location", "years_of_experience", "industry", "skills", "company", "education"]),
+  category: z.enum([
+    "job_title",
+    "location",
+    "years_of_experience",
+    "industry",
+    "skills",
+    "company",
+    "education",
+    "company_size",
+    "revenue_range",
+    "remote_preference",
+    "funding_types",
+    "founded_year_range",
+    "web_technologies",
+  ]),
   value: z.string(),
 });
 
 export type CategoryTag = z.infer<typeof categoryTagSchema>;
 
-// Parsed Query from Claude - now with categorized tags
+// Multi-value field with operator support
+export const multiValueFieldSchema = z.object({
+  values: z.array(z.string()),
+  operator: z.enum(["OR", "AND"]).default("OR"),
+});
+
+export type MultiValueField = z.infer<typeof multiValueFieldSchema>;
+
+// Parsed Query from Claude - ALL fields support multi-value with operators
 export const parsedQuerySchema = z.object({
-  job_title: z.string().default(""),
-  location: z.string().default(""),
-  years_of_experience: z.string().default(""),
-  industry: z.string().default(""),
-  skills: z.string().default(""),
-  company: z.string().default(""),
-  education: z.string().default(""),
+  // Core fields (all support multi-value)
+  job_title: z.union([z.string(), multiValueFieldSchema]).default(""),
+  location: z.union([z.string(), multiValueFieldSchema]).default(""),
+  years_of_experience: z.union([z.string(), multiValueFieldSchema]).default(""),
+  industry: z.union([z.string(), multiValueFieldSchema]).default(""),
+  skills: z.union([z.string(), multiValueFieldSchema]).default(""),
+  company: z.union([z.string(), multiValueFieldSchema]).default(""),
+  education: z.union([z.string(), multiValueFieldSchema]).default(""),
+  
+  // New fields for enhanced Forager integration
+  is_current: z.boolean().nullable().optional(), // Filter for current roles only
+  company_size: z.union([z.string(), multiValueFieldSchema]).default(""), // e.g., "10-50", "50-100"
+  revenue_range: z.union([z.string(), multiValueFieldSchema]).default(""), // e.g., "$1M-$10M"
+  remote_preference: z.string().default(""), // "remote", "hybrid", "onsite"
+  funding_types: z.union([z.string(), multiValueFieldSchema]).default(""), // e.g., "Series A", "angel"
+  founded_year_range: z.string().default(""), // e.g., "2020-2025"
+  web_technologies: z.union([z.string(), multiValueFieldSchema]).default(""), // e.g., "React", "AWS"
+  
+  // Tags for UI display
   tags: z.array(categoryTagSchema).default([]),
 });
 

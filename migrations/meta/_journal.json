@@ -36,6 +36,20 @@
       "when": 1762469180961,
       "tag": "0004_add_search_status",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1762484697011,
+      "tag": "0005_dizzy_robbie_robertson",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1763233161161,
+      "tag": "0006_spotty_dazzler",
+      "breakpoints": true
     }
   ]
 }

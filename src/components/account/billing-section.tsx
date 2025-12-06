@@ -187,225 +187,180 @@ export function BillingSection({ subscription: initialSubscription }: BillingSec
   const currentPlanData = plans.find(p => p.planId === currentPlan);
 
   return (
-    <div className="space-y-6">
-      {/* Current Subscription Card */}
-      <Card>
+    <Card>
+        <CardHeader>
+          <CardTitle>Current Subscription</CardTitle>
+          <CardDescription>Manage your billing and subscription settings</CardDescription>
+        </CardHeader>
         
         <CardContent className="space-y-6">
           {!subscription ? (
             <Alert>
-              <Icon name="sparkles" className="h-4 w-4" />
               <AlertDescription>
                 You don't have an active subscription. Choose a plan below to get started.
               </AlertDescription>
             </Alert>
           ) : (
             <>
-              {/* Current Plan Info */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Current Plan</p>
-                    <p className="text-2xl font-bold capitalize">{subscription.plan}</p>
-                  </div>
+              {/* Current Plan Card */}
+              <div className="rounded-lg border p-4">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                  <p className="text-lg sm:text-xl font-bold capitalize">{subscription.plan} Plan</p>
+                  {currentPlanData && !currentPlanData.isCustom && (
+                    <Badge variant="secondary" className="font-medium">
+                      ${currentPlanData.price}/month
+                    </Badge>
+                  )}
                   {getStatusBadge()}
                 </div>
-
-                {/* Subscription Details */}
-                <div className="grid gap-4 md:grid-cols-3">
-                  {subscription.periodEnd && (
-                    <div className="flex items-start gap-3">
-                      <Icon name="calendar" className="h-5 w-5 text-muted-foreground mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium">
-                          {subscription.cancelAtPeriodEnd ? "Cancels on" : "Renews on"}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {formatDate(subscription.periodEnd)}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {currentPlanData && !currentPlanData.isCustom && (
-                    <div className="flex items-start gap-3">
-                      <Icon name="credit-card" className="h-5 w-5 text-muted-foreground mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium">Billing Amount</p>
-                        <p className="text-sm text-muted-foreground">
-                          ${currentPlanData.price}/month
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {subscription.seats && (
-                    <div className="flex items-start gap-3">
-                      <Icon name="users" className="h-5 w-5 text-muted-foreground mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium">Seats</p>
-                        <p className="text-sm text-muted-foreground">
-                          {subscription.seats} {subscription.seats === 1 ? 'seat' : 'seats'}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Warning for canceling subscription */}
-                {subscription.cancelAtPeriodEnd && (
-                  <Alert variant="destructive">
-                    <Icon name="alert-triangle" className="h-4 w-4" />
-                    <AlertDescription>
-                      Your subscription will be canceled on {formatDate(subscription.periodEnd)}. 
-                      You'll lose access to premium features after this date.
-                    </AlertDescription>
-                  </Alert>
+                {currentPlanData && (
+                  <p className="text-sm text-muted-foreground">{currentPlanData.description}</p>
                 )}
+              </div>
 
-                {/* Action Buttons */}
-                <div className="flex flex-wrap gap-3">
-                <Button
-                    onClick={handleManageBilling}
-                    disabled={isLoading}
-                    variant="outline"
-                  >
-                    <Icon name="credit-card" className="h-4 w-4" />
-                    Manage Payment Method
-                  </Button>
-
-                  <Button
-                    onClick={handleManageBilling}
-                    disabled={isLoading}
-                    variant="outline"
-                  >
-                    <Icon name="file-text" className="h-4 w-4" />
-                    View Invoices
-                  </Button>
-                  {subscription && (
-                    <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                      <DialogTrigger asChild>
-                        <Button variant="outline">
-                          <Icon name="refresh-cw" className="h-4 w-4" />
-                          Change Plan
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="w-[95vw] sm:!max-w-[95vw] md:!max-w-[1400px] max-h-[90vh] overflow-y-auto">
-                        <div className="text-center my-8">
-                          <h2 className="text-4xl font-bold mb-4">
-                            Change Your Plan
-                          </h2>
-                          <p className="text-lg text-muted-foreground">
-                            Upgrade or downgrade your subscription at any time
-                          </p>
-                        </div>
-                        <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto mb-8">
-                          {plans.map((plan) => {
-                            const isCurrentPlan = currentPlan === plan.planId;
-                            
-                            return (
-                              <Card
-                                key={plan.planId}
-                                className={`relative flex flex-col ${
-                                  isCurrentPlan ? "border-primary shadow-lg scale-105" : ""
-                                }`}
-                              >
-                                {isCurrentPlan && (
-                                  <Badge className="absolute -top-3 left-1/2 -translate-x-1/2">
-                                    Current Plan
-                                  </Badge>
-                                )}
-
-                                <CardHeader>
-                                  <CardTitle className="text-2xl">{plan.name}</CardTitle>
-                                  <CardDescription>{plan.description}</CardDescription>
-                                </CardHeader>
-
-                                <CardContent className="flex-1">
-                                  <div className="mb-6">
-                                    {plan.isCustom ? (
-                                      <div className="text-4xl font-bold">Custom</div>
-                                    ) : (
-                                      <div className="text-4xl font-bold">
-                                        ${plan.price}
-                                        <span className="text-lg font-normal text-muted-foreground">
-                                          /month
-                                        </span>
-                                      </div>
-                                    )}
-                                    <p className="text-xs text-muted-foreground mt-3">
-                                      Switch or cancel at any time
-                                    </p>
-                                  </div>
-
-                                  <ul className="space-y-3">
-                                    {plan.features.map((feature, index) => (
-                                      <li key={index} className="flex items-start gap-2">
-                                        <Check className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                                        <span className="text-sm">{feature}</span>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </CardContent>
-
-                                <CardFooter>
-                                  <Button
-                                    className="w-full"
-                                    size="lg"
-                                    variant={isCurrentPlan ? "secondary" : "default"}
-                                    disabled={isCurrentPlan || isLoading}
-                                    onClick={() => {
-                                      if (plan.isCustom) {
-                                        const subject = encodeURIComponent("Enterprise Plan Inquiry");
-                                        const body = encodeURIComponent("Hi,\n\nI'm interested in learning more about the Enterprise plan for HeyHire.\n\nCould you please provide more information about:\n- Custom pricing\n- Available features\n- Implementation timeline\n\nThank you!");
-                                        window.location.href = `mailto:support@heyhire.ai?subject=${subject}&body=${body}`;
-                                      } else {
-                                        handleManageBilling();
-                                      }
-                                    }}
-                                  >
-                                    {isCurrentPlan ? "Current Plan" : plan.isCustom ? "Contact Sales" : "Change Plan"}
-                                  </Button>
-                                </CardFooter>
-                              </Card>
-                            );
-                          })}
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+              {/* Billing Information */}
+              <div className="space-y-3">
+                <h3 className="text-base font-semibold">Billing Information</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {subscription.periodEnd && (
+                    <div className="rounded-lg border p-4">
+                      <p className="text-sm text-muted-foreground mb-1">
+                        {subscription.cancelAtPeriodEnd ? "Cancels on" : "Next billing date"}
+                      </p>
+                      <p className="font-medium">{formatDate(subscription.periodEnd)}</p>
+                    </div>
                   )}
-                  {subscription.cancelAtPeriodEnd ? (
-                    <Button
-                      onClick={handleResume}
-                      disabled={isLoading}
-                      variant="default"
-                    >
-                      <Icon name="refresh-cw" className="h-4 w-4" />
-                      Resume Subscription
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={handleCancel}
-                      disabled={isLoading}
-                      className="bg-background border border-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60"
-                    >
-                      <Icon name="x" className="h-4 w-4" />
-                      Cancel Subscription
-                    </Button>
-                  )}
-
-                
-
-                  
-
-                  
+                  <div className="rounded-lg border p-4">
+                    <p className="text-sm text-muted-foreground mb-1">Payment method</p>
+                    <p className="font-medium">Credit Card</p>
+                  </div>
                 </div>
+              </div>
+
+              {/* Warning for canceling subscription */}
+              {subscription.cancelAtPeriodEnd && (
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    Your subscription will be canceled on {formatDate(subscription.periodEnd)}. 
+                    You'll lose access to premium features after this date.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+                  <DialogTrigger asChild>
+                    <Button disabled={isLoading}>
+                      Update Plan
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="w-[95vw] sm:!max-w-[95vw] md:!max-w-[1400px] max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+                    <div className="text-center my-4 sm:my-8">
+                      <DialogTitle className="text-2xl sm:text-4xl font-bold mb-2 sm:mb-4">
+                        Change Your Plan
+                      </DialogTitle>
+                      <p className="text-sm sm:text-lg text-muted-foreground">
+                        Upgrade or downgrade your subscription at any time
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-8 max-w-6xl mx-auto mb-4 sm:mb-8">
+                      {plans.map((plan) => {
+                        const isCurrentPlan = currentPlan === plan.planId;
+                        
+                        return (
+                          <Card
+                            key={plan.planId}
+                            className={`relative flex flex-col ${
+                              isCurrentPlan ? "border-primary shadow-lg scale-105" : ""
+                            }`}
+                          >
+                            {isCurrentPlan && (
+                              <Badge className="absolute -top-3 left-1/2 -translate-x-1/2">
+                                Current Plan
+                              </Badge>
+                            )}
+
+                            <CardHeader>
+                              <CardTitle className="text-2xl">{plan.name}</CardTitle>
+                              <CardDescription>{plan.description}</CardDescription>
+                            </CardHeader>
+
+                            <CardContent className="flex-1">
+                              <div className="mb-6">
+                                {plan.isCustom ? (
+                                  <div className="text-4xl font-bold">Custom</div>
+                                ) : (
+                                  <div className="text-4xl font-bold">
+                                    ${plan.price}
+                                    <span className="text-lg font-normal text-muted-foreground">
+                                      /month
+                                    </span>
+                                  </div>
+                                )}
+                                <p className="text-xs text-muted-foreground mt-3">
+                                  Switch or cancel at any time
+                                </p>
+                              </div>
+
+                              <ul className="space-y-3">
+                                {plan.features.map((feature, index) => (
+                                  <li key={index} className="flex items-start gap-2">
+                                    <Check className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                                    <span className="text-sm">{feature}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </CardContent>
+
+                            <CardFooter>
+                              <Button
+                                className="w-full"
+                                size="lg"
+                                variant={isCurrentPlan ? "secondary" : "default"}
+                                disabled={isCurrentPlan || isLoading}
+                                onClick={() => {
+                                  if (plan.isCustom) {
+                                    const subject = encodeURIComponent("Enterprise Plan Inquiry");
+                                    const body = encodeURIComponent("Hi,\n\nI'm interested in learning more about the Enterprise plan for HeyHire.\n\nCould you please provide more information about:\n- Custom pricing\n- Available features\n- Implementation timeline\n\nThank you!");
+                                    window.location.href = `mailto:support@heyhire.ai?subject=${subject}&body=${body}`;
+                                  } else {
+                                    handleManageBilling();
+                                  }
+                                }}
+                              >
+                                {isCurrentPlan ? "Current Plan" : plan.isCustom ? "Contact Sales" : "Change Plan"}
+                              </Button>
+                            </CardFooter>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </DialogContent>
+                </Dialog>
+
+                {subscription.cancelAtPeriodEnd ? (
+                  <Button
+                    onClick={handleResume}
+                    disabled={isLoading}
+                    variant="default"
+                  >
+                    Resume Subscription
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleCancel}
+                    disabled={isLoading}
+                    variant="outline"
+                  >
+                    Cancel Subscription
+                  </Button>
+                )}
               </div>
             </>
           )}
         </CardContent>
       </Card>
-    </div>
   );
 }
 

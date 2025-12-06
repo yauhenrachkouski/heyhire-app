@@ -124,7 +124,7 @@ export function CandidateCard({
 
   return (
     <div
-      className={`group relative rounded-lg border bg-card p-4 transition-all hover:shadow-md ${
+      className={`group relative rounded-lg border bg-card p-4 transition-all ${
         isSelected ? "ring-2 ring-primary" : ""
       } ${isLoading ? "opacity-60" : ""}`}
     >
@@ -154,13 +154,13 @@ export function CandidateCard({
             <div className="flex-1 min-w-0 space-y-1">
               <h3 className="font-semibold text-lg leading-tight">{fullName}</h3>
               
-              <p className="text-sm  mt-0.5">{currentRole} {organizationName &&  `at ${organizationName}`}</p>
+              <p className="text-sm mt-0.5">
+                {currentRole} {organizationName && `at ${organizationName}`}
+                {location && <span className="text-muted-foreground"> · {location.name}</span>}
+              </p>
               
-              {location && (
-                <p className="text-xs text-muted-foreground">{location.name}</p>
-              )}
               {candidate.summary && (
-                <p className="text-sm  mt-3 line-clamp-2">{candidate.summary}</p>
+                <p className="text-sm mt-3 line-clamp-2">{candidate.summary}</p>
               )}
               
             </div>

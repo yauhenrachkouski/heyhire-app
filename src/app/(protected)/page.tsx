@@ -13,7 +13,8 @@ export default async function DashboardPage() {
  }
  
   return (
-    <div className="space-y-4 p-4">
+    <div className="w-full max-w-4xl mx-auto space-y-6">
+      {/* Empty dashboard - redirect to search */}
     </div>
   )
 } 

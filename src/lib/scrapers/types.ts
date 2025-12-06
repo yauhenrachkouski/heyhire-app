@@ -10,3 +10,10 @@ export interface ScraperProvider {
 }
 
 
+
+
+
+
+
+
+

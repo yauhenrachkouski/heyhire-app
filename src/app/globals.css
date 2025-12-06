@@ -137,24 +137,34 @@
 }
 
 @layer base {
-    * {
-      @apply border-border outline-ring/50;
-    }
+  * {
+    @apply border-border outline-ring/50;
+  }
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground font-sans antialiased;
   }
 
   button:not([disabled]),
   [role="button"]:not([disabled]) {
     cursor: pointer;
   }
-}
 
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
   }
-  body {
-    @apply bg-background text-foreground;
+  
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border/50 hover:bg-muted-foreground/30 rounded-full transition-colors;
+  }
+
+  /* Selection */
+  ::selection {
+    @apply bg-brand/20 text-foreground;
   }
 }
