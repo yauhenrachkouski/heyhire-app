@@ -3,7 +3,26 @@
 import { useState, useRef, useEffect } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { IconLoader2, IconSend, IconMicrophone, IconPaperclip, IconSparkles, IconSearch } from "@tabler/icons-react";
+import { 
+  IconLoader2, 
+  IconSend, 
+  IconMicrophone, 
+  IconSparkles, 
+  IconX,
+  IconBriefcase,
+  IconMapPin,
+  IconTool,
+  IconBuildingSkyscraper,
+  IconSchool,
+  IconCalendarStats,
+  IconCoin,
+  IconWorld,
+  IconUsers,
+  IconBuildingBank,
+  IconHome,
+  IconCalendar,
+  IconInfoCircle
+} from "@tabler/icons-react";
 import { parseQueryWithClaude } from "@/actions/search";
 import type { ParsedQuery } from "@/types/search";
 import { useToast } from "@/hooks/use-toast";
@@ -11,6 +30,8 @@ import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
@@ -125,6 +146,14 @@ function generateBooleanSearch(parsedQuery: ParsedQuery): string {
   return parts.join(" AND ");
 }
 
+interface Scenario {
+  id: string;
+  label: string;
+  category: string;
+  value: string;
+  importance: "low" | "medium" | "high";
+}
+
 export function SearchInput({ 
   onQueryParsed, 
   onParsingChange, 
@@ -146,7 +175,7 @@ export function SearchInput({
   const [originalParsedQuery, setOriginalParsedQuery] = useState<ParsedQuery | null>(null);
   const [booleanSearch, setBooleanSearch] = useState("");
   const [showScenarios, setShowScenarios] = useState(false);
-  const [scenarios, setScenarios] = useState<{ id: string; label: string; category: string }[]>([]);
+  const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [selectedScenarios, setSelectedScenarios] = useState<string[]>([]);
   const { toast } = useToast();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -172,6 +201,15 @@ export function SearchInput({
         newQuery[scenario.category as keyof ParsedQuery] = undefined;
       }
     });
+    
+    // Also update tags with importance info
+    newQuery.tags = newQuery.tags.map(tag => {
+        const scenario = scenarios.find(s => s.category === tag.category);
+        if (scenario) {
+            return { ...tag, importance: scenario.importance };
+        }
+        return tag;
+    });
 
     setParsedQuery(newQuery);
     onQueryParsed(newQuery);
@@ -184,40 +222,44 @@ export function SearchInput({
     });
   };
 
+  const handleImportanceChange = (id: string, importance: "low" | "medium" | "high") => {
+    setScenarios(prev => prev.map(s => s.id === id ? { ...s, importance } : s));
+  };
+
   const generateScenariosFromQuery = (parsed: ParsedQuery) => {
-    const newScenarios: { id: string; label: string; category: string }[] = [];
+    const newScenarios: Scenario[] = [];
     
     if (parsed.job_title) {
       const val = formatFieldForDisplay(parsed.job_title).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'job_title', label: `Job Title: ${val}`, category: 'job_title' });
+      if (val) newScenarios.push({ id: 'job_title', label: `Job Title: ${val}`, category: 'job_title', value: val, importance: 'medium' });
     }
     if (parsed.location) {
       const val = formatFieldForDisplay(parsed.location).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'location', label: `Location: ${val}`, category: 'location' });
+      if (val) newScenarios.push({ id: 'location', label: `Location: ${val}`, category: 'location', value: val, importance: 'medium' });
     }
     if (parsed.skills) {
       const val = formatFieldForDisplay(parsed.skills).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'skills', label: `Skills: ${val}`, category: 'skills' });
+      if (val) newScenarios.push({ id: 'skills', label: `Skills: ${val}`, category: 'skills', value: val, importance: 'medium' });
     }
     if (parsed.company) {
       const val = formatFieldForDisplay(parsed.company).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'company', label: `Company: ${val}`, category: 'company' });
+      if (val) newScenarios.push({ id: 'company', label: `Company: ${val}`, category: 'company', value: val, importance: 'medium' });
     }
     if (parsed.industry) {
       const val = formatFieldForDisplay(parsed.industry).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'industry', label: `Industry: ${val}`, category: 'industry' });
+      if (val) newScenarios.push({ id: 'industry', label: `Industry: ${val}`, category: 'industry', value: val, importance: 'medium' });
     }
     if (parsed.education) {
       const val = formatFieldForDisplay(parsed.education).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'education', label: `Education: ${val}`, category: 'education' });
+      if (val) newScenarios.push({ id: 'education', label: `Education: ${val}`, category: 'education', value: val, importance: 'medium' });
     }
     if (parsed.years_of_experience) {
       const val = formatFieldForDisplay(parsed.years_of_experience).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'years_of_experience', label: `Experience: ${val}`, category: 'years_of_experience' });
+      if (val) newScenarios.push({ id: 'years_of_experience', label: `Experience: ${val}`, category: 'years_of_experience', value: val, importance: 'medium' });
     }
     if (parsed.funding_types) {
       const val = formatFieldForDisplay(parsed.funding_types).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'funding_types', label: `Funding: ${val}`, category: 'funding_types' });
+      if (val) newScenarios.push({ id: 'funding_types', label: `Funding: ${val}`, category: 'funding_types', value: val, importance: 'medium' });
     }
     
     return newScenarios;
@@ -389,39 +431,27 @@ export function SearchInput({
     }
   };
 
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case 'job_title': return <IconBriefcase className="size-3.5" />;
+      case 'location': return <IconMapPin className="size-3.5" />;
+      case 'skills': return <IconTool className="size-3.5" />;
+      case 'company': return <IconBuildingSkyscraper className="size-3.5" />;
+      case 'industry': return <IconBuildingBank className="size-3.5" />;
+      case 'education': return <IconSchool className="size-3.5" />;
+      case 'years_of_experience': return <IconCalendarStats className="size-3.5" />;
+      case 'funding_types': return <IconCoin className="size-3.5" />;
+      case 'web_technologies': return <IconWorld className="size-3.5" />;
+      case 'company_size': return <IconUsers className="size-3.5" />;
+      case 'remote_preference': return <IconHome className="size-3.5" />;
+      case 'founded_year_range': return <IconCalendar className="size-3.5" />;
+      case 'revenue_range': return <IconCoin className="size-3.5" />;
+      default: return <IconSparkles className="size-3.5" />;
+    }
+  };
+
   return (
     <div className={cn("relative group", className)}>
-      {/* Scenarios Window */}
-      {showScenarios && (
-        <div className="absolute bottom-full mb-2 left-0 w-full bg-popover border border-border rounded-lg shadow-lg p-4 z-20 animate-in fade-in zoom-in-95 duration-200">
-          <div className="space-y-2 p-2">
-            <h4 className="font-medium text-sm text-muted-foreground px-2">Search Scenarios</h4>
-            <div className="space-y-1">
-              {scenarios.map((scenario) => (
-                <div key={scenario.id} className="flex items-center space-x-3 px-2 hover:bg-muted/50 py-2 rounded-md transition-colors cursor-pointer" onClick={() => handleScenarioToggle(scenario.id)}>
-                  <Checkbox 
-                    id={scenario.id} 
-                    checked={selectedScenarios.includes(scenario.id)}
-                    onCheckedChange={() => handleScenarioToggle(scenario.id)}
-                  />
-                  <Label 
-                    htmlFor={scenario.id}
-                    className="text-sm font-normal leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
-                  >
-                    {scenario.label}
-                  </Label>
-                </div>
-              ))}
-            </div>
-            <div className="flex justify-end px-2 pt-2 border-t border-border/50 mt-2">
-              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowScenarios(false)}>
-                Done
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Gradient Tongue Element */}
       <div className="absolute -top-8 left-0 z-0 w-full h-9">
         <div 
@@ -439,92 +469,160 @@ export function SearchInput({
       {/* Gradient Border Wrapper */}
       <div className="relative rounded-2xl rounded-tl-none p-[2px] bg-gradient-to-r from-black to-black animate-gradient-x z-10">
         <div className="relative bg-background rounded-xl overflow-hidden flex flex-col">
-          <Textarea
-            placeholder={isParsing ? "Preparing search scenarios..." : "Software engineer with next.js skills living in Miami"}
-            value={query}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            disabled={isLoading || isRecording || isTranscribing}
-            className="border-0 focus-visible:ring-0 resize-none min-h-[110px] shadow-none bg-transparent px-4 py-5 pb-16 pr-12 !text-base placeholder:text-muted-foreground/60"
-            rows={4}
-            
-          />
-          
-          {/* Top Right Submit Button */}
-          <div className="absolute top-4 right-4 z-10">
-             <Button
-                 type="button"
-                 variant="ghost"
-                 size="icon"
-                 onClick={handleButtonClick}
-                 disabled={isLoading || isSearching || !query.trim()}
-                 className={cn(
-                   "h-9 w-9 rounded-md transition-all duration-200",
-                   (query.trim() || isParsing)
-                     ? "text-foreground hover:bg-muted" 
-                     : "text-muted-foreground cursor-not-allowed hover:bg-transparent"
-                 )}
-               >
-                 {isSearching || isParsing ? <IconLoader2 className="h-6 w-6 animate-spin" /> : <IconSend className="size-4.5" />}
-               </Button>
-          </div>
+          {/* Input Area Wrapper */}
+          <div className="relative">
+            <Textarea
+              placeholder={isParsing ? "Preparing search scenarios..." : "Software engineer with next.js skills living in Miami"}
+              value={query}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              disabled={isLoading || isRecording || isTranscribing}
+              className="border-0 focus-visible:ring-0 resize-none min-h-[110px] shadow-none bg-transparent px-4 py-5 pb-16 pr-12 !text-base placeholder:text-muted-foreground/60"
+              rows={4}
+            />
 
-          {/* Bottom Toolbar */}
-          <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-3 pb-3 pt-1 bg-muted/30 border-t border-border/10">
-            {/* Left Actions */}
-            <div className="flex items-center gap-2">
-              
-
-             
-
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button 
-                      type="button" 
-                      variant="ghost"
-                      size="icon"
-                      onClick={handleMicClick}
-                      className={cn(
-                        "rounded-md transition-colors",
-                        isRecording ? "bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                      )}
-                    >
-                      <IconMicrophone className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Voice Message</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              
-              <div className="h-4 w-px bg-border/50 mx-2" />
-
-              <Button 
-                type="button" 
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  if (query.trim().length > 0) {
-                    setShowScenarios(!showScenarios);
-                  }
-                }}
-                className={cn(
-                  "flex items-center gap-2 px-2 py-1.5 h-auto text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors",
-                  query.trim().length === 0 && "opacity-0 pointer-events-none w-0 p-0 overflow-hidden"
-                )}
-              >
-                {isParsing ? <IconLoader2 className="h-4 w-4 animate-spin" /> : <IconSparkles className="h-4 w-4" />}
-                <span className="font-mono text-sm">Search Scenarios</span>
-              </Button>
+            {/* Top Right Submit Button */}
+            <div className="absolute top-4 right-4 z-10">
+               <Button
+                   type="button"
+                   variant="ghost"
+                   size="icon"
+                   onClick={handleButtonClick}
+                   disabled={isLoading || isSearching || !query.trim()}
+                   className={cn(
+                     "h-9 w-9 rounded-md transition-all duration-200",
+                     (query.trim() || isParsing)
+                       ? "text-foreground hover:bg-muted" 
+                       : "text-muted-foreground cursor-not-allowed hover:bg-transparent"
+                   )}
+                 >
+                   {isSearching || isParsing ? <IconLoader2 className="h-6 w-6 animate-spin" /> : <IconSend className="size-4.5" />}
+                 </Button>
             </div>
 
-            {/* Right Actions */}
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-muted-foreground font-mono">
-                {query.length} / 3,000
-              </span>
+            {/* Bottom Toolbar */}
+            <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-3 pb-3 pt-1 bg-muted/30 border-t border-border/10">
+              {/* Left Actions */}
+              <div className="flex items-center gap-1">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        type="button" 
+                        variant="ghost"
+                        size="icon"
+                        onClick={handleMicClick}
+                        className={cn(
+                          "rounded-md transition-colors",
+                          isRecording ? "bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                        )}
+                      >
+                        <IconMicrophone className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Voice Message</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                
+                <div className="h-4 w-px bg-border/50 mx-2" />
+
+                <Button 
+                  type="button" 
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (query.trim().length > 0) {
+                      setShowScenarios(!showScenarios);
+                    }
+                  }}
+                  className={cn(
+                    "flex items-center gap-2 px-2 py-1.5 h-auto text-sm rounded-md transition-colors",
+                    showScenarios 
+                      ? "bg-muted text-foreground font-medium" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted",
+                    query.trim().length === 0 && "opacity-0 pointer-events-none w-0 p-0 overflow-hidden"
+                  )}
+                >
+                  {isParsing ? <IconLoader2 className="h-4 w-4 animate-spin" /> : <IconSparkles className="h-4 w-4" />}
+                  <span className="font-mono text-sm">Search criteria</span>
+                </Button>
+              </div>
+
+              {/* Right Actions */}
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground font-mono">
+                  {query.length} / 3,000
+                </span>
+              </div>
             </div>
           </div>
+
+          {/* Scenarios List */}
+          {showScenarios && scenarios.length > 0 && (
+            <div className="px-4 pb-4 pt-4 space-y-4 bg-muted/10 border-t border-border/50">
+              {scenarios.map((scenario) => (
+                <div key={scenario.id} className="space-y-2 group/item">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground/70">
+                      {getCategoryIcon(scenario.category)}
+                    </span>
+                    <span className="text-xs font-semibold text-muted-foreground capitalize">
+                      {scenario.category.replace('_', ' ')}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 bg-background border border-border/50 p-2 rounded-md  transition-colors group-hover/item:border-border">
+                    <span className="text-sm font-medium truncate flex-1 px-1">
+                      {scenario.value}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <TooltipProvider>
+                        <Tooltip delayDuration={0}>
+                          <TooltipTrigger asChild>
+                            <IconInfoCircle className="size-4 text-muted-foreground/40 hover:text-muted-foreground cursor-help transition-colors" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" align="end">
+                            <div className="flex flex-col gap-1">
+                              <p className="font-medium border-b border-background/20 pb-1 mb-1">Match Importance</p>
+                              <div className="grid grid-cols-[32px_1fr] gap-2">
+                                <span className="font-medium opacity-70">Low</span>
+                                <span>Nice to have</span>
+                              </div>
+                              <div className="grid grid-cols-[32px_1fr] gap-2">
+                                <span className="font-medium opacity-70">Med</span>
+                                <span>Important</span>
+                              </div>
+                              <div className="grid grid-cols-[32px_1fr] gap-2">
+                                <span className="font-medium opacity-70">High</span>
+                                <span>Mandatory</span>
+                              </div>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <ToggleGroup 
+                        type="single" 
+                        value={scenario.importance} 
+                        variant="outline"
+                        onValueChange={(val) => val && handleImportanceChange(scenario.id, val as any)}
+                        className="shrink-0"
+                      >
+                        <ToggleGroupItem value="low" size="sm">
+                          Low
+                        </ToggleGroupItem>
+                        <ToggleGroupItem value="medium" size="sm">
+                          Med
+                        </ToggleGroupItem>
+                        <ToggleGroupItem value="high" size="sm">
+                          High
+                        </ToggleGroupItem>
+                      </ToggleGroup>
+                      
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
       

@@ -18,6 +18,7 @@ export const categoryTagSchema = z.object({
     "web_technologies",
   ]),
   value: z.string(),
+  importance: z.enum(["low", "medium", "high"]).default("medium").optional(),
 });
 
 export type CategoryTag = z.infer<typeof categoryTagSchema>;

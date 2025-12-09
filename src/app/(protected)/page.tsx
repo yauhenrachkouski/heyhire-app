@@ -11,6 +11,7 @@ export default async function DashboardPage() {
  if (!session) {
     return redirect("/auth/signin")
  }
+ redirect("/search")
  
   return (
     <div className="w-full max-w-4xl mx-auto space-y-6">
