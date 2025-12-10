@@ -1,6 +1,219 @@
 import { z } from "zod";
 
-// Tag with category
+// --- Criteria Schemas ---
+
+export const criteriaValueSchema = z.object({
+  val: z.union([z.string(), z.number()]).nullable(),
+  imp: z.enum(["high", "low"]).nullable().optional(),
+});
+
+export type CriteriaValue = z.infer<typeof criteriaValueSchema>;
+
+export const sourcingCriteriaSchema = z.object({
+  titles: z.array(criteriaValueSchema).nullable().optional(),
+  seniority: criteriaValueSchema.nullable().optional(),
+  family: criteriaValueSchema.nullable().optional(),
+  empl_type: criteriaValueSchema.nullable().optional(),
+  locs: z.array(criteriaValueSchema).nullable().optional(),
+  inds: z.array(criteriaValueSchema).nullable().optional(),
+  langs: z.array(criteriaValueSchema).nullable().optional(),
+  hard: z.array(criteriaValueSchema).nullable().optional(),
+  tools: z.array(criteriaValueSchema).nullable().optional(),
+  soft: z.array(criteriaValueSchema).nullable().optional(),
+  exp_yrs: criteriaValueSchema.nullable().optional(),
+  edu_lvl: criteriaValueSchema.nullable().optional(),
+  edu_fields: z.array(criteriaValueSchema).nullable().optional(),
+  comp_target: z.array(criteriaValueSchema).nullable().optional(),
+  comp_excl: z.array(criteriaValueSchema).nullable().optional(),
+  univ_target: z.array(criteriaValueSchema).nullable().optional(),
+});
+
+export type SourcingCriteria = z.infer<typeof sourcingCriteriaSchema>;
+
+export const jobParsingResponseSchema = z.object({
+  project_id: z.string().nullable().optional(),
+  criteria: sourcingCriteriaSchema,
+});
+
+export type JobParsingResponse = z.infer<typeof jobParsingResponseSchema>;
+
+// --- Strategy Schemas ---
+
+export const apifyPayloadSchema = z.object({
+  profileScraperMode: z.enum(["Short", "Full", "Full + email search"]).default("Full").optional(),
+  searchQuery: z.string().max(300).nullable().optional(),
+  maxItems: z.number().max(2500).default(5).optional(),
+  locations: z.array(z.string()).max(20).nullable().optional(),
+  currentCompanies: z.array(z.string()).max(10).nullable().optional(),
+  pastCompanies: z.array(z.string()).max(10).nullable().optional(),
+  schools: z.array(z.string()).max(10).nullable().optional(),
+  currentJobTitles: z.array(z.string()).max(20).nullable().optional(),
+  pastJobTitles: z.array(z.string()).max(20).nullable().optional(),
+  yearsOfExperienceIds: z.array(z.enum(["1", "2", "3", "4", "5"])).nullable().optional(),
+  seniorityLevelIds: z.array(z.string()).nullable().optional(),
+  functionIds: z.array(z.string()).nullable().optional(),
+  industryIds: z.array(z.string()).max(20).nullable().optional(),
+  profileLanguages: z.array(z.string()).nullable().optional(),
+  startPage: z.number().min(1).max(100).default(1).optional(),
+  takePages: z.number().min(0).max(100).nullable().optional(),
+  excludeLocations: z.array(z.string()).max(20).nullable().optional(),
+  excludeCurrentCompanies: z.array(z.string()).max(10).nullable().optional(),
+}).passthrough();
+
+export type ApifyPayload = z.infer<typeof apifyPayloadSchema>;
+
+export const sourcingStrategyItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  layer: z.number().nullable().optional(),
+  apify_payload: apifyPayloadSchema,
+});
+
+export type SourcingStrategyItem = z.infer<typeof sourcingStrategyItemSchema>;
+
+export const sgrReasoningSchema = z.object({
+  market_understanding: z.string(),
+  criteria_analysis: z.string(),
+  strategy_plan: z.string(),
+  boolean_approach: z.string(),
+});
+
+export type SGRReasoning = z.infer<typeof sgrReasoningSchema>;
+
+export const strategyGenerationRequestSchema = z.object({
+  raw_text: z.string(),
+  parsed_with_criteria: z.union([z.record(z.string(), z.any()), z.string()]),
+  request_id: z.union([z.string(), z.number()]),
+});
+
+export type StrategyGenerationRequest = z.infer<typeof strategyGenerationRequestSchema>;
+
+export const strategyGenerationResponseSchema = z.object({
+  request_id: z.string(),
+  reasoning: sgrReasoningSchema.nullable().optional(),
+  strategies: z.array(sourcingStrategyItemSchema),
+});
+
+export type StrategyGenerationResponse = z.infer<typeof strategyGenerationResponseSchema>;
+
+export const strategyExecutionRequestSchema = z.object({
+  project_id: z.string(),
+  strategies: z.array(sourcingStrategyItemSchema),
+});
+
+export type StrategyExecutionRequest = z.infer<typeof strategyExecutionRequestSchema>;
+
+export const strategyExecutionResponseSchema = z.object({
+  task_id: z.string(),
+  status: z.string(),
+  strategies_launched: z.number(),
+});
+
+export type StrategyExecutionResponse = z.infer<typeof strategyExecutionResponseSchema>;
+
+// --- Candidate Schemas ---
+
+export const candidateLocationSchema = z.object({
+  city: z.string().nullable().optional(),
+  country: z.string().nullable().optional(),
+  linkedinText: z.string().nullable().optional(),
+});
+
+export type CandidateLocation = z.infer<typeof candidateLocationSchema>;
+
+export const candidateExperienceSchema = z.object({
+  title: z.string().nullable().optional(),
+  company: z.string().nullable().optional(),
+  companyUrl: z.string().nullable().optional(),
+  location: z.string().nullable().optional(),
+  startDate: z.string().nullable().optional(),
+  endDate: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  isCurrent: z.boolean().nullable().optional(),
+});
+
+export type CandidateExperience = z.infer<typeof candidateExperienceSchema>;
+
+export const candidateEducationSchema = z.object({
+  school: z.string().nullable().optional(),
+  schoolUrl: z.string().nullable().optional(),
+  degree: z.string().nullable().optional(),
+  fieldOfStudy: z.string().nullable().optional(),
+  startDate: z.string().nullable().optional(),
+  endDate: z.string().nullable().optional(),
+});
+
+export type CandidateEducation = z.infer<typeof candidateEducationSchema>;
+
+export const candidateProfileSchema = z.object({
+  id: z.string().nullable().optional(),
+  publicIdentifier: z.string().nullable().optional(),
+  linkedinUrl: z.string().nullable().optional(),
+  fullName: z.string().nullable().optional(),
+  firstName: z.string().nullable().optional(),
+  lastName: z.string().nullable().optional(),
+  headline: z.string().nullable().optional(),
+  position: z.string().nullable().optional(),
+  summary: z.string().nullable().optional(),
+  location: candidateLocationSchema.nullable().optional(),
+  location_text: z.string().nullable().optional(),
+  experiences: z.array(candidateExperienceSchema).nullable().optional(),
+  educations: z.array(candidateEducationSchema).nullable().optional(),
+  skills: z.array(z.string()).nullable().optional(),
+  email: z.string().nullable().optional(),
+  raw_data: z.record(z.string(), z.any()).optional(),
+  source_strategy_ids: z.array(z.string()).nullable().optional(),
+  project_id: z.string().nullable().optional(),
+  score: z.number().nullable().optional(),
+}).passthrough();
+
+export type CandidateProfile = z.infer<typeof candidateProfileSchema>;
+
+export const strategyResultsResponseSchema = z.object({
+  status: z.enum(["running", "completed", "failed", "pending", "processing", "started"]),
+  total_candidates: z.number().optional(),
+  candidates: z.array(candidateProfileSchema).optional(),
+  results: z.array(candidateProfileSchema).nullable().optional(),
+  strategies_completed: z.number().optional(),
+  strategies_total: z.number().optional(),
+  error: z.string().nullable().optional(),
+  message: z.string().optional(),
+}).passthrough();
+
+export type StrategyResultsResponse = z.infer<typeof strategyResultsResponseSchema>;
+
+// --- Scoring Schemas ---
+
+export const scoreResultSchema = z.object({
+  request_id: z.string(),
+  candidate_id: z.string(),
+  match_score: z.number(),
+  verdict: z.string(),
+  primary_issue: z.string().optional(),
+  total_penalty: z.number(),
+  high_importance_missing: z.array(z.string()),
+  reasoning: z.object({
+    location_analysis: z.string(),
+    title_analysis: z.string(),
+    skills_analysis: z.string(),
+    experience_analysis: z.string(),
+    overall_assessment: z.string(),
+  }),
+  criteria_scores: z.array(z.object({
+    criterion: z.string(),
+    importance: z.enum(["low", "medium", "high"]),
+    found: z.boolean(),
+    evidence: z.string().nullable(),
+    penalty: z.number(),
+    reasoning: z.string(),
+  })),
+});
+
+export type ScoreResult = z.infer<typeof scoreResultSchema>;
+
+// --- UI Schemas ---
+
 export const categoryTagSchema = z.object({
   category: z.enum([
     "job_title",
@@ -16,6 +229,17 @@ export const categoryTagSchema = z.object({
     "funding_types",
     "founded_year_range",
     "web_technologies",
+    "job_family",
+    "seniority",
+    "employment_type",
+    "language",
+    "soft_skills",
+    "hard_skills",
+    "tools",
+    "education_level",
+    "education_field",
+    "university",
+    "excluded_company"
   ]),
   value: z.string(),
   importance: z.enum(["low", "medium", "high"]).default("medium").optional(),
@@ -23,7 +247,6 @@ export const categoryTagSchema = z.object({
 
 export type CategoryTag = z.infer<typeof categoryTagSchema>;
 
-// Multi-value field with operator support
 export const multiValueFieldSchema = z.object({
   values: z.array(z.string()),
   operator: z.enum(["OR", "AND"]).default("OR"),
@@ -31,9 +254,7 @@ export const multiValueFieldSchema = z.object({
 
 export type MultiValueField = z.infer<typeof multiValueFieldSchema>;
 
-// Parsed Query from Claude - ALL fields support multi-value with operators
 export const parsedQuerySchema = z.object({
-  // Core fields (all support multi-value)
   job_title: z.union([z.string(), multiValueFieldSchema]).default(""),
   location: z.union([z.string(), multiValueFieldSchema]).default(""),
   years_of_experience: z.union([z.string(), multiValueFieldSchema]).default(""),
@@ -41,216 +262,20 @@ export const parsedQuerySchema = z.object({
   skills: z.union([z.string(), multiValueFieldSchema]).default(""),
   company: z.union([z.string(), multiValueFieldSchema]).default(""),
   education: z.union([z.string(), multiValueFieldSchema]).default(""),
-  
-  // New fields for enhanced Forager integration
-  is_current: z.boolean().nullable().optional(), // Filter for current roles only
-  company_size: z.union([z.string(), multiValueFieldSchema]).default(""), // e.g., "10-50", "50-100"
-  revenue_range: z.union([z.string(), multiValueFieldSchema]).default(""), // e.g., "$1M-$10M"
-  remote_preference: z.string().default(""), // "remote", "hybrid", "onsite"
-  funding_types: z.union([z.string(), multiValueFieldSchema]).default(""), // e.g., "Series A", "angel"
-  founded_year_range: z.string().default(""), // e.g., "2020-2025"
-  web_technologies: z.union([z.string(), multiValueFieldSchema]).default(""), // e.g., "React", "AWS"
-  
-  // Tags for UI display
+  is_current: z.boolean().nullable().optional(),
+  company_size: z.union([z.string(), multiValueFieldSchema]).default(""),
+  revenue_range: z.union([z.string(), multiValueFieldSchema]).default(""),
+  remote_preference: z.string().default(""),
+  funding_types: z.union([z.string(), multiValueFieldSchema]).default(""),
+  founded_year_range: z.string().default(""),
+  web_technologies: z.union([z.string(), multiValueFieldSchema]).default(""),
   tags: z.array(categoryTagSchema).default([]),
 });
 
 export type ParsedQuery = z.infer<typeof parsedQuerySchema>;
 
-// Forager Autocomplete Response
-export const foragerAutocompleteItemSchema = z.object({
-  id: z.union([z.string(), z.number()]),  // Can be string or number
-  text: z.string(),  // Changed from 'name' to 'text' (actual API field)
-  name: z.string().optional(),  // Optional fallback
-});
+// --- Response Schemas ---
 
-export const foragerAutocompleteResponseSchema = z.object({
-  results: z.array(foragerAutocompleteItemSchema),
-  pagination: z.object({
-    more: z.boolean(),
-  }).optional(),
-});
-
-export type ForagerAutocompleteResponse = z.infer<typeof foragerAutocompleteResponseSchema>;
-
-// Forager IDs collection
-export const foragerIdsSchema = z.object({
-  skills: z.array(z.number()).default([]),
-  locations: z.array(z.number()).default([]),
-  industries: z.array(z.number()).default([]),
-});
-
-export type ForagerIds = z.infer<typeof foragerIdsSchema>;
-
-// LinkedIn Info
-export const linkedInInfoSchema = z.object({
-  public_identifier: z.string().nullable().optional(),
-  public_profile_url: z.string().nullable().optional(),
-  industry: z.object({
-    id: z.number().optional(),
-    name: z.string().optional(),
-  }).nullable().optional(),
-}).passthrough();
-
-// Skill
-export const skillSchema = z.object({
-  name: z.string().optional(),
-}).passthrough();
-
-// Person role
-export const personRoleSchema = z.object({
-  title: z.string().nullable().optional(),
-  description: z.string().nullable().optional(),
-  is_current: z.boolean().optional(),
-  position_start_date: z.string().nullable().optional(),
-  position_end_date: z.string().nullable().optional(),
-  years_on_position_start: z.number().optional(),
-  years_on_position_end: z.number().optional(),
-}).passthrough();
-
-// Organization schema with LinkedIn info and logo
-export const organizationSchema = z.object({
-  id: z.number().optional(),
-  name: z.string().optional(),
-  domain: z.string().nullable().optional(),
-  description: z.string().nullable().optional(),
-  logo: z.string().nullable().optional(),
-  website: z.string().nullable().optional(),
-  employees_range: z.string().nullable().optional(),
-  linkedin_info: linkedInInfoSchema.optional(),
-  location: z.object({
-    id: z.number().optional(),
-    name: z.string().optional(),
-  }).nullable().optional(),
-  addresses: z.array(z.object({
-    street_number: z.string().nullable().optional(),
-    street_name: z.string().nullable().optional(),
-    city: z.string().nullable().optional(),
-    state: z.string().nullable().optional(),
-    postcode: z.string().nullable().optional(),
-    country: z.string().nullable().optional(),
-  })).nullable().optional(),
-  keywords: z.array(z.union([
-    z.string(),
-    z.object({
-      id: z.number().optional(),
-      name: z.string().optional(),
-    }).passthrough(),
-  ])).nullable().optional(),
-}).passthrough();
-
-// Person schema with LinkedIn info
-export const personSchema = z.object({
-  id: z.number().optional(),
-  full_name: z.string().optional(),
-  first_name: z.string().optional(),
-  last_name: z.string().nullable().optional(),
-  headline: z.string().nullable().optional(),
-  description: z.string().nullable().optional(),
-  photo: z.string().nullable().optional(),
-  gender: z.string().nullable().optional(),
-  email: z.string().nullable().optional(),
-  phone: z.string().nullable().optional(),
-  linkedin_info: linkedInInfoSchema.optional(),
-  location: z.object({
-    id: z.number().optional(),
-    name: z.string().optional(),
-  }).nullable().optional(),
-  skills: z.array(skillSchema).optional(),
-  // Enriched data from person detail lookup
-  roles: z.array(z.object({
-    id: z.number().optional(),
-    role_title: z.string().nullable().optional(),
-    start_date: z.string().nullable().optional(),
-    end_date: z.string().nullable().optional(),
-    duration: z.string().nullable().optional(),
-    description: z.string().nullable().optional(),
-    is_current: z.boolean().optional(),
-    organization: z.any().optional(),
-    organization_name: z.string().nullable().optional(),
-  }).passthrough()).optional(),
-  educations: z.array(z.object({
-    id: z.number().optional(),
-    school_name: z.string().nullable().optional(),
-    organization: z.any().optional(),
-    description: z.string().nullable().optional(),
-    grade: z.string().nullable().optional(),
-    degree: z.string().nullable().optional(),
-    activities: z.string().nullable().optional(),
-    field_of_study: z.string().nullable().optional(),
-    start_date: z.string().nullable().optional(),
-    end_date: z.string().nullable().optional(),
-  }).passthrough()).optional(),
-  certifications: z.array(z.object({
-    id: z.number().optional(),
-    organization_id: z.number().nullable().optional(),
-    name: z.string().nullable().optional(),
-    certificate_id: z.string().nullable().optional(),
-    authority: z.string().nullable().optional(),
-    url: z.string().nullable().optional(),
-  }).passthrough()).optional(),
-  languages: z.array(z.object({
-    id: z.number().optional(),
-    name: z.string().nullable().optional(),
-    proficiency: z.string().nullable().optional(),
-  }).passthrough()).optional(),
-  courses: z.array(z.object({
-    id: z.number().optional(),
-    name: z.string().nullable().optional(),
-    number: z.string().nullable().optional(),
-    associated_role_id: z.number().nullable().optional(),
-    associated_education_id: z.number().nullable().optional(),
-  }).passthrough()).optional(),
-  honors: z.array(z.any()).optional(),
-  organizations: z.array(z.any()).optional(),
-  patents: z.array(z.any()).optional(),
-  publications: z.array(z.any()).optional(),
-  test_scores: z.array(z.object({
-    id: z.number().optional(),
-    name: z.string().nullable().optional(),
-    description: z.string().nullable().optional(),
-    score: z.string().nullable().optional(),
-    date_on: z.string().nullable().optional(),
-    associated_role_id: z.number().nullable().optional(),
-    associated_education_id: z.number().nullable().optional(),
-  }).passthrough()).optional(),
-  projects: z.array(z.any()).optional(),
-  volunteering: z.array(z.any()).optional(),
-}).passthrough();
-
-export const peopleSearchResultSchema = z.object({
-  id: z.number().optional(),
-  role_title: z.string().optional(),
-  start_date: z.string().nullable().optional(),
-  end_date: z.string().nullable().optional(),
-  duration: z.string().nullable().optional(),
-  description: z.string().nullable().optional(),
-  is_current: z.boolean().optional(),
-  person_roles: z.array(personRoleSchema).optional(),
-  person_skills: z.array(z.any()).optional(),
-  person_locations: z.array(z.any()).optional(),
-  person_industries: z.array(z.any()).optional(),
-  organization: organizationSchema.nullable().optional(),
-  person: personSchema.optional(),
-  date_updated: z.string().optional(),
-}).passthrough();
-
-export type PeopleSearchResult = z.infer<typeof peopleSearchResultSchema>;
-
-// Search response
-export const searchResponseSchema = z.object({
-  search_results: z.array(peopleSearchResultSchema).optional(),
-  total_search_results: z.number().optional(),
-  results: z.array(peopleSearchResultSchema).optional(),
-  total_count: z.number().optional(),
-  pagination: z.object({
-    more: z.boolean(),
-  }).optional(),
-}).passthrough();
-
-export type SearchResponse = z.infer<typeof searchResponseSchema>;
-
-// Server action responses
 export const parseQueryResponseSchema = z.object({
   success: z.boolean(),
   data: parsedQuerySchema.optional(),
@@ -258,19 +283,3 @@ export const parseQueryResponseSchema = z.object({
 });
 
 export type ParseQueryResponse = z.infer<typeof parseQueryResponseSchema>;
-
-export const getForagerIdsResponseSchema = z.object({
-  success: z.boolean(),
-  data: foragerIdsSchema.optional(),
-  error: z.string().optional(),
-});
-
-export type GetForagerIdsResponse = z.infer<typeof getForagerIdsResponseSchema>;
-
-export const searchPeopleResponseSchema = z.object({
-  success: z.boolean(),
-  data: z.array(peopleSearchResultSchema).optional(),
-  error: z.string().optional(),
-});
-
-export type SearchPeopleResponse = z.infer<typeof searchPeopleResponseSchema>;
