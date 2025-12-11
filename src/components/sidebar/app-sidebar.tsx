@@ -3,6 +3,7 @@
 import * as React from "react"
 import { OrganizationSwitcher } from "@/components/sidebar/organization-switcher"
 import { RecentSearches } from "@/components/sidebar/recent-searches"
+import { SearchSearches } from "@/components/sidebar/search-searches"
 import {
   Sidebar,
   SidebarContent,
@@ -164,6 +165,9 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
           organizations={organizations}
           activeOrganization={activeOrganization}
         />
+        {activeOrganization && (
+          <SearchSearches organizationId={activeOrganization.id} />
+        )}
       </SidebarHeader>
       <SidebarContent>
         {/* We create a SidebarGroup for each parent. */}

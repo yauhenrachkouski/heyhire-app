@@ -8,7 +8,7 @@ import { getErrorMessage } from "@/lib/handle-error";
 import { parsedQuerySchema, type ParsedQuery } from "@/types/search";
 import { db } from "@/db/drizzle";
 import { search } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, ilike, and } from "drizzle-orm";
 import { generateId } from "@/lib/id";
 import { auth } from "@/lib/auth";
 
@@ -182,6 +182,63 @@ export async function getRecentSearches(
   } catch (error) {
     const errorMessage = getErrorMessage(error);
     console.error("[Search] Error fetching recent searches:", errorMessage);
+    return {
+      success: false,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Search through searches by title using full-text search (ILIKE)
+ */
+export async function searchSearchesByTitle(
+  organizationId: string,
+  query: string,
+  limit: number = 10
+): Promise<{
+  success: boolean;
+  data?: Array<{
+    id: string;
+    name: string;
+    query: string;
+    createdAt: Date;
+  }>;
+  error?: string;
+}> {
+  try {
+    if (!query.trim()) {
+      return { success: true, data: [] };
+    }
+
+    console.log("[Search] Searching searches by title:", query, "for org:", organizationId);
+
+    const searches = await db
+      .select({
+        id: search.id,
+        name: search.name,
+        query: search.query,
+        createdAt: search.createdAt,
+      })
+      .from(search)
+      .where(
+        and(
+          eq(search.organizationId, organizationId),
+          ilike(search.name, `%${query}%`)
+        )
+      )
+      .orderBy(desc(search.createdAt))
+      .limit(limit);
+
+    console.log("[Search] Found", searches.length, "matching searches");
+
+    return {
+      success: true,
+      data: searches,
+    };
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    console.error("[Search] Error searching searches by title:", errorMessage);
     return {
       success: false,
       error: errorMessage,
