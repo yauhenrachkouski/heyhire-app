@@ -43,12 +43,12 @@ export function AppliedFilters({ params, hideRefineButton, initialQueryText, onR
 
   return (
     <div className="space-y-3">
-      <SearchInterpretation 
+      {/* <SearchInterpretation 
         parsedQuery={params} 
         action={!hideRefineButton && (
           <RefineSearchModal params={params} initialQueryText={initialQueryText} />
         )}
-      />
+      /> */}
     </div>
   );
 }

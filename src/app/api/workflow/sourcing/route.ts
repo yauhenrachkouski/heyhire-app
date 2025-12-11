@@ -1,5 +1,6 @@
 import { serve } from "@upstash/workflow/nextjs";
 import type { WorkflowContext } from "@upstash/workflow";
+import { Client } from "@upstash/qstash";
 import { db } from "@/db/drizzle";
 import { search, sourcingStrategies } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
@@ -14,6 +15,11 @@ import {
 } from "@/types/search";
 
 const API_BASE_URL = "http://57.131.25.45";
+
+// QStash client for triggering scoring workflow
+const qstashClient = new Client({
+  token: process.env.QSTASH_TOKEN!,
+});
 
 interface SourcingWorkflowPayload {
   searchId: string;
@@ -395,53 +401,117 @@ export const { POST } = serve<SourcingWorkflowPayload>(
     
     // Get parsedQuery from search params
     const searchRecord = await context.run("get-search-params", async () => {
+      console.log("[Workflow] Fetching search params for:", searchId);
       const result = await db.query.search.findFirst({
         where: eq(search.id, searchId),
       });
+      console.log("[Workflow] Search params fetched:", result ? "found" : "not found");
       return result;
     });
 
+    let savedCandidatesCount = 0;
+    
     if (searchRecord && candidatesData.length > 0) {
       const parsedQuery = JSON.parse(searchRecord.params);
       
-      await context.run("save-candidates", async () => {
-        // @ts-expect-error - candidatesData is typed correctly from API
-        await saveCandidatesFromSearch(searchId, candidatesData, rawText, parsedQuery);
-        console.log("[Workflow] Saved", candidatesData.length, "candidates to database");
-        
-        // NOTE: Don't emit "completed" status here - let finalize step handle it
-        // Emitting "completed" here causes race condition where UI shows empty state
-        // before candidates are refetched
-        await realtime.channel(channel).emit( "progress.updated", {
-          progress: 95,
-          message: `Saved ${candidatesData.length} candidates, finalizing...`
-        });
+      const saveResult = await context.run("save-candidates", async () => {
+        console.log("[Workflow] Starting candidate save for", candidatesData.length, "candidates");
+        try {
+          // @ts-expect-error - candidatesData is typed correctly from API
+          const result = await saveCandidatesFromSearch(searchId, candidatesData, rawText, parsedQuery);
+          console.log("[Workflow] Batch save complete. New:", result.saved, "Linked:", result.linked);
+          
+          // NOTE: Don't emit "completed" status here - let finalize step handle it
+          await realtime.channel(channel).emit("progress.updated", {
+            progress: 95,
+            message: `Saved ${candidatesData.length} candidates, finalizing...`
+          });
+          
+          return result;
+        } catch (error) {
+          console.error("[Workflow] Error saving candidates:", error);
+          // Return partial result so workflow can continue
+          return { success: false, saved: 0, linked: 0 };
+        }
       });
+      
+      savedCandidatesCount = saveResult?.saved || 0;
+      console.log("[Workflow] Candidates saved, proceeding to finalize step. Saved:", savedCandidatesCount);
+    } else {
+      console.log("[Workflow] No candidates to save, proceeding to finalize step");
     }
 
-    // Step 9: Update final status
+    // Step 9: Update final status and emit completion event
     await context.run("finalize", async () => {
-      await db
-        .update(search)
-        .set({ status: "completed", progress: 100 })
-        .where(eq(search.id, searchId));
+      console.log("[Workflow] Finalize step starting for search:", searchId);
       
-      await db
-        .update(sourcingStrategies)
-        .set({ 
-          status: "completed", 
-          candidatesFound: candidatesData.length 
-        })
-        .where(inArray(sourcingStrategies.id, strategyIds));
+      try {
+        // Update search status to completed
+        await db
+          .update(search)
+          .set({ status: "completed", progress: 100 })
+          .where(eq(search.id, searchId));
+        console.log("[Workflow] Updated search status to completed");
+      } catch (error) {
+        console.error("[Workflow] Error updating search status:", error);
+      }
       
-      await realtime.channel(channel).emit( "search.completed", {
-        candidatesCount: candidatesData.length,
-        status: "completed"
-      });
+      try {
+        // Update strategies status
+        await db
+          .update(sourcingStrategies)
+          .set({ 
+            status: "completed", 
+            candidatesFound: candidatesData.length 
+          })
+          .where(inArray(sourcingStrategies.id, strategyIds));
+        console.log("[Workflow] Updated strategies status to completed");
+      } catch (error) {
+        console.error("[Workflow] Error updating strategies status:", error);
+      }
+      
+      // Emit completion event to frontend - this is critical for UI update
+      try {
+        console.log("[Workflow] Emitting search.completed event with", candidatesData.length, "candidates");
+        await realtime.channel(channel).emit("search.completed", {
+          candidatesCount: candidatesData.length,
+          status: "completed"
+        });
+        console.log("[Workflow] Realtime event emitted successfully");
+      } catch (error) {
+        console.error("[Workflow] Error emitting realtime event:", error);
+      }
 
       console.log("[Workflow] Search completed successfully");
     });
 
+    // Step 10: Trigger scoring via QStash (separate async process)
+    // This queues individual scoring jobs for each candidate
+    if (candidatesData.length > 0) {
+      await context.run("trigger-scoring", async () => {
+        console.log("[Workflow] Triggering scoring for", candidatesData.length, "candidates");
+        
+        try {
+          const scoringUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/workflow/scoring`;
+          
+          await qstashClient.publishJSON({
+            url: scoringUrl,
+            body: {
+              searchId,
+              parallelism: 5, // Score 5 candidates in parallel
+            },
+          });
+          
+          console.log("[Workflow] Scoring triggered successfully via QStash");
+        } catch (error) {
+          console.error("[Workflow] Error triggering scoring:", error);
+          // Don't throw - sourcing is complete, scoring failure shouldn't affect that
+        }
+      });
+    }
+
+    console.log("[Workflow] Workflow finished for search:", searchId);
+    
     return {
       success: true,
       searchId,

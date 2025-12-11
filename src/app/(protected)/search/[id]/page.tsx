@@ -24,7 +24,8 @@ export default async function SearchPage({ params }: SearchPageProps) {
     <>
       <div className="fixed inset-0 bg-sidebar -z-10" />
       <div className="container mx-auto">
-        <SearchResultsClient search={search} />
+        {/* Key ensures component remounts when navigating between searches */}
+        <SearchResultsClient key={search.id} search={search} />
       </div>
     </>
   );

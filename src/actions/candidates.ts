@@ -51,113 +51,156 @@ function transformCandidateToDb(candidate: CandidateProfile) {
 }
 
 /**
- * Save candidates from search API to database
+ * Save candidates from search API to database using batch operations
  * Creates or updates candidates, links them to the search
- * NOTE: Scoring is now triggered from the client side for better UX
+ * NOTE: Scoring is triggered from the client side AFTER sourcing completes for better UX
  */
 export async function saveCandidatesFromSearch(
   searchId: string,
   candidateProfiles: CandidateProfile[],
-  rawText: string,
-  parsedQuery: ParsedQuery
-): Promise<{ success: boolean; saved: number; linked: number; scored: number }> {
-  console.log("[Candidates] Saving", candidateProfiles.length, "candidates for search:", searchId);
+  _rawText: string,
+  _parsedQuery: ParsedQuery
+): Promise<{ success: boolean; saved: number; linked: number }> {
+  console.log("[Candidates] Batch saving", candidateProfiles.length, "candidates for search:", searchId);
   
-  let saved = 0;
-  let linked = 0;
+  // Filter profiles with valid LinkedIn URLs
+  const validProfiles = candidateProfiles.filter(profile => {
+    if (!profile.linkedinUrl) {
+      console.log("[Candidates] Skipping candidate without LinkedIn URL");
+      return false;
+    }
+    return true;
+  });
 
-  // Step 1: Save all candidates to database first (fast)
-  const candidateMap: Map<string, { candidateId: string; searchCandidateId: string; data: any }> = new Map();
+  if (validProfiles.length === 0) {
+    console.log("[Candidates] No valid candidates to save");
+    return { success: true, saved: 0, linked: 0 };
+  }
 
-  for (const profile of candidateProfiles) {
-    try {
-      if (!profile.linkedinUrl) {
-        console.log("[Candidates] Skipping candidate without LinkedIn URL");
-        continue;
-      }
+  // Step 1: Get all existing candidates by LinkedIn URL in one query
+  const linkedinUrls = validProfiles.map(p => p.linkedinUrl!);
+  const existingCandidates = await db.query.candidates.findMany({
+    where: inArray(candidates.linkedinUrl, linkedinUrls),
+  });
+  
+  const existingByUrl = new Map(existingCandidates.map(c => [c.linkedinUrl, c]));
+  console.log("[Candidates] Found", existingCandidates.length, "existing candidates");
 
-      // Check if candidate already exists
-      const existing = await db.query.candidates.findFirst({
-        where: eq(candidates.linkedinUrl, profile.linkedinUrl),
+  // Step 2: Prepare batch data
+  const candidatesToInsert: Array<typeof candidates.$inferInsert> = [];
+  const candidatesToUpdate: Array<{ id: string; data: Partial<typeof candidates.$inferInsert> }> = [];
+  const candidateIdMap = new Map<string, string>(); // linkedinUrl -> candidateId
+
+  for (const profile of validProfiles) {
+    const candidateData = transformCandidateToDb(profile);
+    const existing = existingByUrl.get(profile.linkedinUrl!);
+
+    if (existing) {
+      // Update existing
+      candidatesToUpdate.push({
+        id: existing.id,
+        data: { ...candidateData, updatedAt: new Date() },
       });
-
-      let candidateId: string;
-      const candidateData = transformCandidateToDb(profile);
-
-      if (existing) {
-        candidateId = existing.id;
-        // Update existing candidate with fresh data
-        await db
-          .update(candidates)
-          .set({
-            ...candidateData,
-            updatedAt: new Date(),
-          })
-          .where(eq(candidates.id, candidateId));
-        console.log("[Candidates] Updated existing candidate:", candidateId);
-      } else {
-        // Create new candidate
-        candidateId = generateId();
-        await db.insert(candidates).values({
-          id: candidateId,
-          ...candidateData,
-        });
-        saved++;
-        console.log("[Candidates] Created new candidate:", candidateId);
-      }
-
-      // Link candidate to search (if not already linked)
-      const existingLink = await db.query.searchCandidates.findFirst({
-        where: and(
-          eq(searchCandidates.searchId, searchId),
-          eq(searchCandidates.candidateId, candidateId)
-        ),
+      candidateIdMap.set(profile.linkedinUrl!, existing.id);
+    } else {
+      // Insert new
+      const newId = generateId();
+      candidatesToInsert.push({
+        id: newId,
+        ...candidateData,
       });
-
-      let searchCandidateId: string;
-
-      if (!existingLink) {
-        searchCandidateId = generateId();
-        await db.insert(searchCandidates).values({
-          id: searchCandidateId,
-          searchId,
-          candidateId,
-          sourceProvider: "api",
-          status: "new",
-        });
-        linked++;
-        console.log("[Candidates] Linked candidate to search:", searchCandidateId);
-      } else {
-        searchCandidateId = existingLink.id;
-        console.log("[Candidates] Candidate already linked to search");
-      }
-
-      // Store for parallel scoring
-      candidateMap.set(profile.linkedinUrl, {
-        candidateId,
-        searchCandidateId,
-        data: candidateData,
-      });
-    } catch (error) {
-      console.error("[Candidates] Error processing candidate:", profile.linkedinUrl, error);
+      candidateIdMap.set(profile.linkedinUrl!, newId);
     }
   }
 
-  // Trigger batch scoring for newly linked candidates
-  const searchCandidateIdsToScore = Array.from(candidateMap.values())
-    .map(c => c.searchCandidateId);
-    
-  if (searchCandidateIdsToScore.length > 0) {
-    console.log("[Candidates] Triggering batch scoring for", searchCandidateIdsToScore.length, "candidates");
-    // We don't await this to keep response fast, or we could if reliability is more important than speed
-    // Given the user wants "server triggered", we should ideally await it or ensure it runs.
-    // Since this function is called from a polled endpoint, awaiting is safer to ensure it completes.
-    await scoreBatchCandidates(searchCandidateIdsToScore);
+  // Step 3: Batch insert new candidates
+  if (candidatesToInsert.length > 0) {
+    try {
+      await db.insert(candidates).values(candidatesToInsert);
+      console.log("[Candidates] Batch inserted", candidatesToInsert.length, "new candidates");
+    } catch (error) {
+      console.error("[Candidates] Error batch inserting candidates:", error);
+      throw error;
+    }
   }
 
-  console.log("[Candidates] All candidates saved and scored.");
+  // Step 4: Update existing candidates sequentially
+  // IMPORTANT: Neon serverless can't handle parallel connections well - must be sequential
+  if (candidatesToUpdate.length > 0) {
+    console.log("[Candidates] Starting sequential update of", candidatesToUpdate.length, "existing candidates");
+    let updated = 0;
+    
+    for (const { id, data } of candidatesToUpdate) {
+      try {
+        await db.update(candidates).set(data).where(eq(candidates.id, id));
+        updated++;
+        
+        // Log progress every 5 candidates
+        if (updated % 5 === 0) {
+          console.log(`[Candidates] Updated ${updated}/${candidatesToUpdate.length} candidates`);
+        }
+      } catch (error) {
+        console.error(`[Candidates] Error updating candidate ${id}:`, error);
+        // Continue with remaining candidates instead of failing entirely
+      }
+    }
+    console.log("[Candidates] Sequential update complete:", updated, "of", candidatesToUpdate.length, "candidates");
+  }
+
+  // Step 5: Get existing search_candidate links in one query
+  console.log("[Candidates] Fetching existing links for", candidateIdMap.size, "candidates");
+  const allCandidateIds = Array.from(candidateIdMap.values());
   
-  return { success: true, saved, linked, scored: searchCandidateIdsToScore.length };
+  let existingLinks: Array<{ candidateId: string }> = [];
+  try {
+    existingLinks = await db.query.searchCandidates.findMany({
+      where: and(
+        eq(searchCandidates.searchId, searchId),
+        inArray(searchCandidates.candidateId, allCandidateIds)
+      ),
+      columns: {
+        candidateId: true,
+      },
+    });
+    console.log("[Candidates] Found", existingLinks.length, "existing links");
+  } catch (error) {
+    console.error("[Candidates] Error fetching existing links:", error);
+    // Continue with empty links - we'll insert all as new
+  }
+  
+  const existingLinkSet = new Set(existingLinks.map(l => l.candidateId));
+
+  // Step 6: Batch insert new search_candidate links
+  const linksToInsert: Array<typeof searchCandidates.$inferInsert> = [];
+  
+  for (const candidateId of allCandidateIds) {
+    if (!existingLinkSet.has(candidateId)) {
+      linksToInsert.push({
+        id: generateId(),
+        searchId,
+        candidateId,
+        sourceProvider: "api",
+        status: "new",
+      });
+    }
+  }
+
+  if (linksToInsert.length > 0) {
+    try {
+      await db.insert(searchCandidates).values(linksToInsert);
+      console.log("[Candidates] Batch linked", linksToInsert.length, "candidates to search");
+    } catch (error) {
+      console.error("[Candidates] Error batch linking candidates:", error);
+      // Don't throw - we've already saved the candidates, links can be retried
+    }
+  }
+
+  const saved = candidatesToInsert.length;
+  const linked = linksToInsert.length;
+  
+  console.log("[Candidates] Batch save complete. New:", saved, "Linked:", linked);
+  
+  return { success: true, saved, linked };
 }
 
 /**
@@ -233,8 +276,9 @@ export async function scoreSingleCandidate(searchCandidateId: string) {
 }
 
 /**
- * Score a batch of candidates in parallel with concurrency limit
+ * Score a batch of candidates in parallel
  * This updates the database as each candidate is scored, allowing for progressive UI updates
+ * No concurrency limit - executes all scoring tasks immediately
  */
 export async function scoreBatchCandidates(searchCandidateIds: string[]) {
   console.log("[Candidates] Scoring batch of candidates:", searchCandidateIds.length);
@@ -256,59 +300,51 @@ export async function scoreBatchCandidates(searchCandidateIds: string[]) {
     return { success: false, error: "No candidates found" };
   }
 
-  // Use a simple concurrency limit
-  const BATCH_SIZE = 5;
-  let scoredCount = 0;
-  let errorCount = 0;
-
-  for (let i = 0; i < searchCandidatesList.length; i += BATCH_SIZE) {
-    const batch = searchCandidatesList.slice(i, i + BATCH_SIZE);
-    
-    const results = await Promise.all(batch.map(async (searchCandidate) => {
-      try {
-        if (!searchCandidate.candidate || !searchCandidate.search) {
-          return false;
-        }
-
-        const candidateData = searchCandidate.candidate;
-        const searchData = searchCandidate.search;
-        
-        let parsedQuery: ParsedQuery;
-        try {
-          parsedQuery = JSON.parse(searchData.params);
-        } catch (e) {
-          return false;
-        }
-
-        const candidateForScoring = prepareCandidateForScoring(candidateData);
-
-        const scoreResult = await scoreCandidateMatch(
-          candidateForScoring,
-          parsedQuery,
-          searchData.query,
-          candidateData.id
-        );
-
-        if (scoreResult.success && scoreResult.data) {
-          const notesJson = JSON.stringify(scoreResult.data);
-          await updateMatchScore(
-            searchCandidate.id,
-            scoreResult.data.match_score,
-            notesJson
-          );
-          console.log("[Candidates] Batch: Scored:", searchCandidate.id, "Score:", scoreResult.data.match_score);
-          return true;
-        }
-        return false;
-      } catch (error) {
-        console.error("[Candidates] Batch: Error scoring:", searchCandidate.id, error);
+  // Run all scorings in parallel
+  const results = await Promise.all(searchCandidatesList.map(async (searchCandidate) => {
+    try {
+      if (!searchCandidate.candidate || !searchCandidate.search) {
         return false;
       }
-    }));
-    
-    scoredCount += results.filter(Boolean).length;
-    errorCount += results.filter(r => !r).length;
-  }
+
+      const candidateData = searchCandidate.candidate;
+      const searchData = searchCandidate.search;
+      
+      let parsedQuery: ParsedQuery;
+      try {
+        parsedQuery = JSON.parse(searchData.params);
+      } catch (e) {
+        return false;
+      }
+
+      const candidateForScoring = prepareCandidateForScoring(candidateData);
+
+      const scoreResult = await scoreCandidateMatch(
+        candidateForScoring,
+        parsedQuery,
+        searchData.query,
+        candidateData.id
+      );
+
+      if (scoreResult.success && scoreResult.data) {
+        const notesJson = JSON.stringify(scoreResult.data);
+        await updateMatchScore(
+          searchCandidate.id,
+          scoreResult.data.match_score,
+          notesJson
+        );
+        console.log("[Candidates] Batch: Scored:", searchCandidate.id, "Score:", scoreResult.data.match_score);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("[Candidates] Batch: Error scoring:", searchCandidate.id, error);
+      return false;
+    }
+  }));
+  
+  const scoredCount = results.filter(Boolean).length;
+  const errorCount = results.filter(r => !r).length;
 
   return { success: true, scored: scoredCount, errors: errorCount };
 }

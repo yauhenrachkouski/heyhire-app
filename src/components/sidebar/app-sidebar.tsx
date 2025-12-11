@@ -104,7 +104,7 @@ const data: { navMain: NavGroup[] } = {
       items: [
         
         {
-          title: "Talent Search",
+          title: "New Talent Search",
           url: "/search",
           icon: "search" as IconName,
         },
@@ -279,7 +279,7 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
         {/* Recent Searches Section */}
         {recentSearches && recentSearches.length > 0 && (
           <SidebarGroup>
-            <SidebarGroupLabel className="flex-shrink-0">Recent Searches</SidebarGroupLabel>
+            <SidebarGroupLabel className="flex-shrink-0">Recent</SidebarGroupLabel>
             <SidebarGroupContent className="overflow-auto">
               <SidebarMenu>
                 <RecentSearches searches={recentSearches} currentPath={pathname} />

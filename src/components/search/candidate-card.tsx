@@ -87,8 +87,8 @@ export function CandidateCard({
   
   // Current role from first experience
   const currentExperience = experiences[0] || {};
-  const currentRole = currentExperience.role_title || candidate.headline || "----";
-  const organizationName = currentExperience.organization_name || "";
+  const currentRole = currentExperience.role_title || currentExperience.position || candidate.headline || "----";
+  const organizationName = currentExperience.organization_name || currentExperience.companyName || "";
   
   // Generate initials for fallback avatar
   const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
@@ -156,7 +156,9 @@ export function CandidateCard({
               
               <p className="text-sm mt-0.5">
                 {currentRole} {organizationName && `at ${organizationName}`}
-                {location && <span className="text-muted-foreground"> · {location.name}</span>}
+                {(location?.name || location?.linkedinText || location?.city) && (
+                  <span className="text-muted-foreground"> · {location.name || location.linkedinText || location.city}</span>
+                )}
               </p>
               
               {candidate.summary && (
@@ -171,7 +173,7 @@ export function CandidateCard({
             <div className="flex flex-wrap gap-1.5 mb-4">
               {(expandedSkills ? skills : skills.slice(0, 5)).map((skill: any, index: number) => (
                 <Badge key={index} variant="secondary" className="text-xs">
-                  {skill.name}
+                  {typeof skill === "string" ? skill : skill.name}
                 </Badge>
               ))}
               {skills.length > 5 && (

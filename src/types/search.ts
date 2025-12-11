@@ -204,7 +204,7 @@ export const scoreResultSchema = z.object({
   }),
   criteria_scores: z.array(z.object({
     criterion: z.string(),
-    importance: z.enum(["low", "medium", "high"]),
+    importance: z.string(), // API may return values outside low/medium/high
     found: z.boolean(),
     evidence: z.string().nullable(),
     penalty: z.number(),

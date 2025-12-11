@@ -96,7 +96,7 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
         throw new Error(workflowResult.error || "Failed to start search workflow");
       }
 
-      console.log("[Search Client] Workflow triggered with ID:", workflowResult.workflowRunId);
+      console.log("[Search Client] Workflow triggered with run ID:", workflowResult.workflowRunId);
       
       toast({
         title: "Search Started",
@@ -104,7 +104,8 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
       });
 
       // Navigate to results page immediately
-      router.refresh();
+      // Don't refresh before push to avoid race conditions
+      console.log("[Search Client] Redirecting to:", `/search/${searchId}`);
       router.push(`/search/${searchId}`);
     } catch (error) {
       console.error("[Search Client] Error:", error);

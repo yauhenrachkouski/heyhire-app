@@ -111,6 +111,7 @@ export async function saveSearch(
     
     const name = generateSearchName(parsedQuery);
     const id = generateId();
+    console.log("[Search] Generated new search ID:", id);
     
     await db.insert(search).values({
       id,

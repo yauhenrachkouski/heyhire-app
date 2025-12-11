@@ -34,6 +34,26 @@ const schema = {
       message: z.string(),
     }),
   },
+  // Scoring events - separate from search events
+  scoring: {
+    started: z.object({
+      total: z.number(),
+    }),
+    progress: z.object({
+      candidateId: z.string(),
+      searchCandidateId: z.string(),
+      score: z.number(),
+      scored: z.number(),
+      total: z.number(),
+    }),
+    completed: z.object({
+      scored: z.number(),
+      errors: z.number(),
+    }),
+    failed: z.object({
+      error: z.string(),
+    }),
+  },
 };
 
 export const realtime = new Realtime({

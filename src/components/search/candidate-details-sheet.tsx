@@ -13,7 +13,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useState } from "react";
-import { capitalizeLocationParts } from "@/lib/utils";
+import { capitalizeLocationParts, formatDate, calculateDuration } from "@/lib/utils";
 
 interface SearchCandidate {
   id: string;
@@ -29,6 +29,7 @@ interface SearchCandidate {
     experiences: string | null;
     skills: string | null;
     educations: string | null;
+    certifications: string | null;
   };
   matchScore: number | null;
   notes: string | null;
@@ -37,40 +38,6 @@ interface SearchCandidate {
 interface CandidateDetailsSheetProps {
   searchCandidate: SearchCandidate | null;
   onClose: () => void;
-}
-
-function formatDate(dateString: string | null | undefined): string {
-  if (!dateString) return "";
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", { year: "numeric", month: "short" });
-  } catch {
-    return dateString;
-  }
-}
-
-function calculateDuration(startDate: string | null | undefined, endDate: string | null | undefined): string {
-  if (!startDate) return "";
-  
-  try {
-    const start = new Date(startDate);
-    const end = endDate ? new Date(endDate) : new Date();
-    
-    const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
-    const years = Math.floor(months / 12);
-    const remainingMonths = months % 12;
-    
-    let duration = "";
-    if (years > 0) duration += `${years} yr${years > 1 ? "s" : ""}`;
-    if (remainingMonths > 0) {
-      if (duration) duration += " ";
-      duration += `${remainingMonths} mo`;
-    }
-    
-    return duration || "< 1 mo";
-  } catch {
-    return "";
-  }
 }
 
 export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDetailsSheetProps) {
@@ -84,6 +51,7 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
   const experiences = candidate.experiences ? JSON.parse(candidate.experiences) : [];
   const skills = candidate.skills ? JSON.parse(candidate.skills) : [];
   const educations = candidate.educations ? JSON.parse(candidate.educations) : [];
+  const certifications = candidate.certifications ? JSON.parse(candidate.certifications) : [];
   const locationData = candidate.location ? JSON.parse(candidate.location) : null;
 
   // Extract name parts
@@ -149,9 +117,9 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
                     </p>
                   )}
 
-                  {currentExperience.company && (
+                  {(currentExperience.company || currentExperience.companyName) && (
                     <p className="text-sm text-muted-foreground truncate">
-                      {currentExperience.company}
+                      {currentExperience.company || currentExperience.companyName}
                     </p>
                   )}
 
@@ -325,6 +293,40 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
                 </>
               )}
 
+              {/* Certifications */}
+              {certifications.length > 0 && (
+                <>
+                  <div>
+                    <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
+                      Certifications
+                    </h2>
+                    <div className="space-y-3">
+                      {certifications.map((cert: any, idx: number) => (
+                        <div key={idx} className="border-l-2 border-muted-foreground/30 pl-3 pb-2">
+                          <p className="text-sm font-semibold text-foreground">
+                            {cert.title}
+                          </p>
+                          
+                          {cert.issuedBy && (
+                            <p className="text-sm text-muted-foreground">
+                              {cert.issuedBy}
+                            </p>
+                          )}
+                          
+                          {cert.issuedAt && (
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                              <Calendar className="h-3 w-3" />
+                              <span>{cert.issuedAt}</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Separator />
+                </>
+              )}
+
               {/* Skills */}
               {skills.length > 0 && (
                 <>
@@ -365,15 +367,15 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
                         <div key={idx} className="border-l-2 border-muted-foreground/30 pl-3 pb-2">
                           <div className="flex items-start justify-between gap-2 mb-1">
                             <p className="text-sm font-semibold text-foreground">
-                              {exp.title || exp.role_title}
+                              {exp.title || exp.role_title || exp.position}
                             </p>
                             {exp.isCurrent && (
                               <Badge variant="default" className="text-xs">Current</Badge>
                             )}
                           </div>
                           
-                          {exp.company && (
-                            <p className="text-sm text-muted-foreground">{exp.company}</p>
+                          {(exp.company || exp.companyName) && (
+                            <p className="text-sm text-muted-foreground">{exp.company || exp.companyName}</p>
                           )}
                           
                           {(exp.startDate || exp.start_date) && (
@@ -414,7 +416,7 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
                     {educations.map((edu: any, idx: number) => (
                       <div key={idx} className="border-l-2 border-muted-foreground/30 pl-3 pb-2">
                         <p className="text-sm font-semibold text-foreground">
-                          {edu.school || edu.school_name}
+                          {edu.school || edu.school_name || edu.title}
                         </p>
                         
                         {edu.degree && (
