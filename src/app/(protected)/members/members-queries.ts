@@ -7,7 +7,6 @@ import {
   type UseQueryOptions,
 } from "@tanstack/react-query";
 import {
-  createMember,
   deleteMembers,
   getMembers,
   updateMember,
@@ -27,27 +26,6 @@ export function useMembersQuery(
     queryKey: membersKeys.list(params),
     queryFn: () => getMembers(params),
     ...options,
-  });
-}
-
-// Create mutation
-export function useCreateMemberMutation() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: createMember,
-    onSuccess: (result) => {
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-
-      void queryClient.invalidateQueries({ queryKey: membersKeys.lists() });
-      toast.success("Member added successfully");
-    },
-    onError: (error) => {
-      toast.error(getErrorMessage(error));
-    },
   });
 }
 

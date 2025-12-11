@@ -17,7 +17,7 @@ export function exportTableToCSV<TData>(
   const headers = table
     .getAllLeafColumns()
     .map((column) => column.id)
-    .filter((id) => !excludeColumns.includes(id));
+    .filter((id) => !(excludeColumns as string[]).includes(id));
 
   const csvContent = [
     headers.join(","),

@@ -102,7 +102,7 @@ export function UpdateMemberSheet({
         <SheetHeader>
           <SheetTitle>Update Member</SheetTitle>
           <SheetDescription>
-            Update the role for {member?.userName}
+            Update the role for {member?.user.name}
           </SheetDescription>
         </SheetHeader>
 

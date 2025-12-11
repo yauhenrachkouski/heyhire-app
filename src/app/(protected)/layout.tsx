@@ -52,11 +52,11 @@ export default async function DashboardLayout({
     : { success: false, data: [] };
   const recentSearches = recentSearchesResponse.success ? recentSearchesResponse.data : [];
 
-  // Fetch credits for active organization
-  let activeOrgWithCredits = activeOrganization;
+  // Fetch credits for active organization and create extended type
+  let activeOrgWithCredits: (typeof activeOrganization & { credits?: number }) | null = activeOrganization;
   if (activeOrganization) {
     const credits = await getOrganizationCredits(activeOrganization.id);
-    activeOrgWithCredits = { ...activeOrganization, credits };
+    activeOrgWithCredits = { ...activeOrganization, credits } as typeof activeOrganization & { credits: number };
   }
 
   return (

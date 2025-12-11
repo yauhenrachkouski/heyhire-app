@@ -18,10 +18,13 @@ interface MembersTableClientProps {
 export function MembersTableClient({ initialData }: MembersTableClientProps) {
   const columns = React.useMemo(() => getMembersTableColumns(), []);
 
+  // Calculate pageCount from total (default 10 items per page)
+  const pageCount = Math.ceil(initialData.total / 10) || 1;
+
   const { table, advancedFilters } = useDataTable({
     data: initialData.data,
     columns,
-    pageCount: initialData.pageCount,
+    pageCount,
     enableAdvancedFilter: true,
     initialState: {
       columnPinning: { left: ["select"], right: [] },
@@ -61,7 +64,7 @@ export function MembersTableClient({ initialData }: MembersTableClientProps) {
   React.useEffect(() => {
     if (data) {
       table.options.data = data.data;
-      table.options.pageCount = data.pageCount;
+      table.options.pageCount = Math.ceil(data.total / 10) || 1;
     }
   }, [data, table]);
 

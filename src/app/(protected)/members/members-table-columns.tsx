@@ -40,7 +40,7 @@ export function getMembersTableColumns(): ColumnDef<Member>[] {
       enableHiding: false,
     },
     {
-      accessorKey: "userName",
+      accessorKey: "user.name",
       id: "userName",
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Name" />
@@ -51,7 +51,7 @@ export function getMembersTableColumns(): ColumnDef<Member>[] {
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className={`font-medium ${isPending ? "text-muted-foreground" : ""}`}>
-                {row.original.userName}
+                {row.original.user.name}
               </span>
               {isPending && (
                 <Badge variant="outline" className="text-xs">
@@ -60,7 +60,7 @@ export function getMembersTableColumns(): ColumnDef<Member>[] {
               )}
             </div>
             <span className="text-muted-foreground text-xs">
-              {row.original.userEmail}
+              {row.original.user.email}
             </span>
           </div>
         );
@@ -69,22 +69,6 @@ export function getMembersTableColumns(): ColumnDef<Member>[] {
       meta: {
         label: "Name",
         placeholder: "Search by name...",
-        variant: "text",
-      },
-    },
-    {
-      accessorKey: "organizationName",
-      id: "organizationName",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Organization" />
-      ),
-      cell: ({ row }) => {
-        return <span>{row.original.organizationName}</span>;
-      },
-      enableColumnFilter: true,
-      meta: {
-        label: "Organization",
-        placeholder: "Search organization...",
         variant: "text",
       },
     },
@@ -127,11 +111,6 @@ export function getMembersTableColumns(): ColumnDef<Member>[] {
             >
               {status === "pending" ? "Invited" : "Active"}
             </Badge>
-            {isPending && row.original.expiresAt && (
-              <span className="text-xs text-muted-foreground">
-                Expires {formatDate(row.original.expiresAt)}
-              </span>
-            )}
           </div>
         );
       },

@@ -53,37 +53,37 @@ export async function getMembers(input?: {
     });
 
     // Transform active members to our Member type
-    const activeMembers: Member[] = (membersResponse?.members || []).map((member: any) => ({
-      id: member.id,
-      organizationId: member.organizationId,
-      userId: member.userId,
-      role: member.role,
-      createdAt: member.createdAt,
+    const activeMembers: Member[] = (membersResponse?.members || []).map((member: Record<string, unknown>) => ({
+      id: member.id as string,
+      organizationId: member.organizationId as string,
+      userId: member.userId as string,
+      role: member.role as string,
+      createdAt: member.createdAt as Date,
       user: {
-        id: member.user.id,
-        name: member.user.name,
-        email: member.user.email,
+        id: (member.user as Record<string, unknown>).id as string,
+        name: (member.user as Record<string, unknown>).name as string,
+        email: (member.user as Record<string, unknown>).email as string,
       },
       status: "active" as const,
     }));
 
     // Transform pending invitations to our Member type
     const pendingMembers: Member[] = (invitationsResponse || [])
-      .filter((inv: any) => inv.status === "pending")
-      .map((inv: any) => ({
-        id: inv.id,
-        organizationId: inv.organizationId,
+      .filter((inv: Record<string, unknown>) => inv.status === "pending")
+      .map((inv: Record<string, unknown>) => ({
+        id: inv.id as string,
+        organizationId: inv.organizationId as string,
         userId: "",
-        role: inv.role,
+        role: inv.role as string,
         createdAt: new Date(), // Invitations may not have createdAt in the response
         user: {
           id: "",
-          name: inv.email.split("@")[0],
-          email: inv.email,
+          name: (inv.email as string).split("@")[0],
+          email: inv.email as string,
         },
         status: "pending" as const,
-        invitationId: inv.id,
-        email: inv.email,
+        invitationId: inv.id as string,
+        email: inv.email as string,
       }));
 
     // Combine both lists
@@ -143,6 +143,106 @@ export async function updateMemberRole(memberId: string, role: string) {
     };
   } catch (error) {
     console.error("Error updating member role:", error);
+    return {
+      success: false,
+      error: getErrorMessage(error),
+    };
+  }
+}
+
+/**
+ * Update a single member - wrapper for UI compatibility
+ * Uses native better-auth updateMemberRole
+ */
+export async function updateMember(input: { id: string; role: string }) {
+  return updateMemberRole(input.id, input.role);
+}
+
+/**
+ * Update multiple members' roles
+ * Uses native better-auth updateMemberRole in batch
+ */
+export async function updateMembers(input: { ids: string[]; role: string }) {
+  try {
+    const reqHeaders = await headers();
+    const results = await Promise.allSettled(
+      input.ids.map((id) => 
+        auth.api.updateMemberRole({
+          body: {
+            memberId: id,
+            role: input.role,
+          },
+          headers: reqHeaders,
+        })
+      )
+    );
+
+    const failures = results.filter((r) => r.status === "rejected");
+    if (failures.length > 0) {
+      console.error("Some member updates failed:", failures);
+      return {
+        success: false,
+        error: `Failed to update ${failures.length} of ${input.ids.length} members`,
+      };
+    }
+
+    return {
+      success: true,
+      message: `Successfully updated ${input.ids.length} members`,
+    };
+  } catch (error) {
+    console.error("Error updating members:", error);
+    return {
+      success: false,
+      error: getErrorMessage(error),
+    };
+  }
+}
+
+/**
+ * Delete multiple members from the organization
+ * Handles both active members and pending invitations
+ * Uses native better-auth removeMember and cancelInvitation
+ */
+export async function deleteMembers(input: { ids: string[] }) {
+  try {
+    const results = await Promise.allSettled(
+      input.ids.map(async (id) => {
+        // Try to remove as member first (works for both member ID and email)
+        try {
+          await auth.api.removeMember({
+            body: {
+              memberIdOrEmail: id,
+            },
+            headers: await headers(),
+          });
+        } catch {
+          // If removeMember fails, try to cancel as invitation
+          await auth.api.cancelInvitation({
+            body: {
+              invitationId: id,
+            },
+            headers: await headers(),
+          });
+        }
+      })
+    );
+
+    const failures = results.filter((r) => r.status === "rejected");
+    if (failures.length > 0) {
+      console.error("Some member deletions failed:", failures);
+      return {
+        success: false,
+        error: `Failed to remove ${failures.length} of ${input.ids.length} members`,
+      };
+    }
+
+    return {
+      success: true,
+      message: `Successfully removed ${input.ids.length} members`,
+    };
+  } catch (error) {
+    console.error("Error deleting members:", error);
     return {
       success: false,
       error: getErrorMessage(error),

@@ -38,9 +38,11 @@ interface SearchCandidate {
     photoUrl: string | null;
     location: string | null;
     linkedinUrl: string;
+    linkedinUsername?: string | null;
     experiences: string | null;
     skills: string | null;
     educations: string | null;
+    certifications: string | null;
   };
   matchScore: number | null;
   notes: string | null;

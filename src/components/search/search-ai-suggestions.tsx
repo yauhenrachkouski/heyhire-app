@@ -34,13 +34,22 @@ interface SuggestionQuestion {
 function generateQuestions(query: ParsedQuery): SuggestionQuestion[] {
   const questions: SuggestionQuestion[] = [];
 
+  // Helper to extract string from field that can be string or multi-value object
+  const getFieldString = (field: string | { values: string[]; operator: string } | undefined): string => {
+    if (!field) return "";
+    if (typeof field === "string") return field;
+    return field.values.join(" ");
+  };
+
   // Helper to check if a field has meaningful content
-  const isEmpty = (field: string | undefined): boolean => {
-    return !field || field.trim().length === 0;
+  const isEmpty = (field: string | { values: string[]; operator: string } | undefined): boolean => {
+    if (!field) return true;
+    if (typeof field === "string") return field.trim().length === 0;
+    return field.values.length === 0;
   };
 
   // Detect job type and industry context
-  const jobTitle = query.job_title?.toLowerCase() || "";
+  const jobTitle = getFieldString(query.job_title).toLowerCase();
   const isTechRole = jobTitle.includes("engineer") || jobTitle.includes("developer") || 
                      jobTitle.includes("software") || jobTitle.includes("programmer") ||
                      jobTitle.includes("devops") || jobTitle.includes("data scientist");

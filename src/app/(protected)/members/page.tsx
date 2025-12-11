@@ -23,7 +23,7 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
     headers: await headers(),
   });
 
-  // Prepare query params with defaults
+  // Prepare query params for table state (used for hydration key)
   const queryParams = {
     page: search.page ?? "1",
     perPage: search.perPage ?? "10",
@@ -32,11 +32,18 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
     joinOperator: (search.joinOperator as "and" | "or") ?? "and",
   };
 
+  // Parse pagination for server fetch
+  const page = parseInt(String(queryParams.page), 10) || 1;
+  const perPage = parseInt(String(queryParams.perPage), 10) || 10;
+
   // Create a new QueryClient for this request
   const queryClient = new QueryClient();
 
   // Prefetch data on the server
-  const data = await getMembers(queryParams);
+  const data = await getMembers({
+    limit: perPage,
+    offset: (page - 1) * perPage,
+  });
 
   // Hydrate the query client with the prefetched data
   await queryClient.prefetchQuery({

@@ -52,9 +52,6 @@ export function calculateDuration(
   if (!startDate) return "";
   
   try {
-    let start: Date;
-    let end: Date;
-
     // Helper to parse date
     const parseDate = (d: string | { month?: string; year?: number }) => {
       if (typeof d === 'object') {
@@ -66,8 +63,8 @@ export function calculateDuration(
       return new Date(d);
     };
 
-    start = parseDate(startDate);
-    end = endDate ? parseDate(endDate) : new Date();
+    const start = parseDate(startDate);
+    const end = endDate ? parseDate(endDate) : new Date();
     
     // Check for invalid dates
     if (isNaN(start.getTime()) || isNaN(end.getTime())) return "";
