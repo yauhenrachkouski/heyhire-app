@@ -2,14 +2,14 @@ import { pgTable, text, timestamp, boolean, integer, pgEnum, unique } from "driz
 import { relations } from "drizzle-orm";
 
 // Enums for candidate system
-export const candidateSourceEnum = pgEnum('candidate_source', ['rapidapi']);
-export const contactSourceEnum = pgEnum('contact_source', ['linkedin', 'surfe', 'contactout']);
-export const scrapeStatusEnum = pgEnum('scrape_status', ['pending', 'scraping', 'completed', 'failed']);
 export const candidateStatusEnum = pgEnum('candidate_status', ['new', 'reviewing', 'contacted', 'rejected', 'hired']);
 
 // Enums for credits system
 export const transactionTypeEnum = pgEnum('transaction_type', ['subscription_grant', 'manual_grant', 'purchase', 'consumption']);
 export const creditTypeEnum = pgEnum('credit_type', ['contact_lookup', 'export', 'general']);
+
+// Enums for sourcing strategies
+export const strategyStatusEnum = pgEnum('strategy_status', ['pending', 'executing', 'polling', 'completed', 'error']);
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -131,7 +131,7 @@ export const search = pgTable("search", {
   name: text("name").notNull(),
   query: text("query").notNull(),
   params: text("params").notNull(),
-  scoringPrompt: text("scoring_prompt"), // Custom scoring prompt (optional)
+  scoringPrompt: text("scoring_prompt"),
   userId: text("user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
@@ -139,6 +139,29 @@ export const search = pgTable("search", {
     .notNull()
     .references(() => organization.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  status: text("status").default("created").notNull(), // created, processing, completed, error
+  taskId: text("task_id"),
+  progress: integer("progress").default(0),
+});
+
+export const sourcingStrategies = pgTable("sourcing_strategies", {
+  id: text("id").primaryKey(),
+  searchId: text("search_id")
+    .notNull()
+    .references(() => search.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  apifyPayload: text("apify_payload").notNull(), // JSON: strategy params for external API
+  status: strategyStatusEnum("status").default("pending").notNull(),
+  taskId: text("task_id"), // External API task ID for polling
+  workflowRunId: text("workflow_run_id"), // QStash workflow run ID
+  candidatesFound: integer("candidates_found").default(0),
+  error: text("error"), // Error message if failed
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
 });
 
 export const creditTransactions = pgTable("credit_transactions", {
@@ -165,44 +188,35 @@ export const candidates = pgTable("candidates", {
   linkedinUrl: text("linkedin_url").notNull().unique(),
   linkedinUsername: text("linkedin_username"),
   linkedinUrn: text("linkedin_urn"),
-  source: candidateSourceEnum("source").default('rapidapi').notNull(),
   fullName: text("full_name"),
   firstName: text("first_name"),
   lastName: text("last_name"),
   headline: text("headline"),
+  position: text("position"),
   summary: text("summary"),
   photoUrl: text("photo_url"),
-  coverUrl: text("cover_url"),
-  location: text("location"), // JSON: { country, city, country_code }
+  location: text("location"), // JSON: { city, country, linkedinText }
+  locationText: text("location_text"), // Simple text location
+  email: text("email"),
   isPremium: boolean("is_premium").default(false),
-  isInfluencer: boolean("is_influencer").default(false),
   followerCount: integer("follower_count"),
   connectionCount: integer("connection_count"),
+  registeredAt: timestamp("registered_at"),
+  topSkills: text("top_skills"),
+  openToWork: boolean("open_to_work").default(false),
+  hiring: boolean("hiring").default(false),
+  currentPositions: text("current_positions"), // JSON: array of objects
   experiences: text("experiences"), // JSON: array of experience objects
   educations: text("educations"), // JSON: array of education objects
-  skills: text("skills"), // JSON: array of skill objects
-  certifications: text("certifications"), // JSON: array
-  languages: text("languages"), // JSON: array
-  publications: text("publications"), // JSON: array
-  rawData: text("raw_data"), // JSON: full RapidAPI response
-  scrapeStatus: scrapeStatusEnum("scrape_status").default('pending').notNull(),
-  scrapeError: text("scrape_error"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at")
-    .defaultNow()
-    .$onUpdate(() => new Date())
-    .notNull(),
-});
-
-export const contacts = pgTable("contacts", {
-  id: text("id").primaryKey(),
-  candidateId: text("candidate_id")
-    .notNull()
-    .references(() => candidates.id, { onDelete: "cascade" }),
-  type: text("type").notNull(), // 'email' or 'phone'
-  value: text("value").notNull(),
-  source: contactSourceEnum("source").notNull(),
+  certifications: text("certifications"), // JSON: array of certification objects
+  recommendations: text("recommendations"), // JSON: array of recommendation objects
+  skills: text("skills"), // JSON: array of strings
+  languages: text("languages"), // JSON: array of language objects
+  projects: text("projects"), // JSON: array of project objects
+  publications: text("publications"), // JSON: array of publication objects
+  featured: text("featured"), // JSON: featured object
   verified: boolean("verified").default(false),
+  sourceData: text("source_data"), // JSON: full API response
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
@@ -221,7 +235,7 @@ export const searchCandidates = pgTable("search_candidates", {
   matchScore: integer("match_score"), // 0-100
   notes: text("notes"), // JSON: { pros: [], cons: [] } or free text
   status: candidateStatusEnum("status").default('new'),
-  sourceProvider: text("source_provider"), // 'serper', 'linkedin', etc.
+  sourceProvider: text("source_provider"), // strategy name or 'api'
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
@@ -294,18 +308,18 @@ export const searchRelations = relations(search, ({ one, many }) => ({
     references: [organization.id],
   }),
   searchCandidates: many(searchCandidates),
+  sourcingStrategies: many(sourcingStrategies),
+}));
+
+export const sourcingStrategiesRelations = relations(sourcingStrategies, ({ one }) => ({
+  search: one(search, {
+    fields: [sourcingStrategies.searchId],
+    references: [search.id],
+  }),
 }));
 
 export const candidatesRelations = relations(candidates, ({ many }) => ({
-  contacts: many(contacts),
   searchCandidates: many(searchCandidates),
-}));
-
-export const contactsRelations = relations(contacts, ({ one }) => ({
-  candidate: one(candidates, {
-    fields: [contacts.candidateId],
-    references: [candidates.id],
-  }),
 }));
 
 export const searchCandidatesRelations = relations(searchCandidates, ({ one }) => ({

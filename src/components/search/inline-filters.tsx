@@ -21,7 +21,7 @@ interface InlineFiltersProps {
 export function InlineFilters({ onScoreRangeChange, onSortChange }: InlineFiltersProps) {
   const [minScore, setMinScore] = useState<number>(0); // Start with "All" candidates by default
   const [isCustom, setIsCustom] = useState<boolean>(false);
-  const [sortBy, setSortBy] = useState<string>("score-desc"); // Default: highest score first
+  const [sortBy, setSortBy] = useState<string>("date-desc"); // Default: newest first
 
   // Debounce the API call to avoid too many requests while dragging
   const debouncedScoreChange = useDebouncedCallback((min: number) => {
@@ -111,6 +111,8 @@ export function InlineFilters({ onScoreRangeChange, onSortChange }: InlineFilter
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="date-desc">Newest first</SelectItem>
+            <SelectItem value="date-asc">Oldest first</SelectItem>
             <SelectItem value="score-desc">Highest score first</SelectItem>
             <SelectItem value="score-asc">Lowest score first</SelectItem>
           </SelectContent>

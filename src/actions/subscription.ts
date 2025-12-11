@@ -22,7 +22,7 @@ export async function initiateSubscriptionCheckout(formData: FormData) {
   
   console.log('[initiateSubscriptionCheckout] User and org:', { userId, activeOrgId })
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+  const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
   
   console.log('[initiateSubscriptionCheckout] Calling better-auth subscription API:', {
     plan,
@@ -73,7 +73,7 @@ export async function initiateSubscriptionCheckout(formData: FormData) {
 export async function redirectToBillingPortal() {
   const { activeOrgId } = await getSessionWithOrg()
   
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+  const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
   
   console.log('[redirectToBillingPortal] Getting billing portal for org:', activeOrgId)
 

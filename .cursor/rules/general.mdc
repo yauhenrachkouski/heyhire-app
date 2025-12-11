@@ -13,3 +13,12 @@ Always use shdacn components with default style untill I will not  give you anot
 
 Don't create summary document after LLM done
 Don't add mr-2 to button component when icon exist inside button
+
+Migrations
+Modify schema.ts - Make your schema changes
+Generate migration - Run bun run db:generate (creates SQL in /migrations)
+Review the SQL - Check the generated migration file
+Apply migration - Run bun run db:migrate
+
+
+Do not create fallback. Always resolve the issues and make sure flow works.

@@ -9,29 +9,33 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { CandidateCardActionBar } from "./candidate-card-action-bar";
 import { SkeletonCard } from "./skeleton-card";
 
-// Type for candidate from new database schema
-interface Candidate {
+// Type for candidate from database schema
+interface SearchCandidate {
   id: string;
   candidate: {
     id: string;
     fullName: string | null;
     headline: string | null;
+    summary: string | null;
     photoUrl: string | null;
     location: string | null;
+    linkedinUrl: string;
     experiences: string | null;
     skills: string | null;
     educations: string | null;
-    scrapeStatus: string;
   };
   matchScore: number | null;
   notes: string | null;
 }
 
 interface CandidateCardListPaginatedProps {
-  candidates: Candidate[];
+  candidates: SearchCandidate[];
   searchId: string;
   viewMode?: "table" | "cards";
   pageSize?: number;
+  pageIndex?: number;
+  pageCount?: number;
+  onPaginationChange?: (pagination: { pageIndex: number; pageSize: number }) => void;
   onSelectionChange?: (selectedIds: string[]) => void;
   skeletonCount?: number;
 }
@@ -41,11 +45,13 @@ export function CandidateCardListPaginated({
   searchId,
   viewMode = "cards",
   pageSize = 10,
+  pageIndex = 0,
+  pageCount,
+  onPaginationChange,
   onSelectionChange,
   skeletonCount = 0,
 }: CandidateCardListPaginatedProps) {
-  const [pageIndex, setPageIndex] = useState(0);
-  const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
+  const [selectedCandidate, setSelectedCandidate] = useState<SearchCandidate | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   
   // Track previous candidate IDs to detect new candidates for animation
@@ -63,22 +69,31 @@ export function CandidateCardListPaginated({
         pageSize,
       },
     },
-    pageCount: Math.ceil((candidates.length || 0) / pageSize),
+    pageCount: pageCount ?? -1, // -1 means undefined/manual
     manualPagination: true,
     onPaginationChange: (updater) => {
-      const newPagination = typeof updater === 'function' 
-        ? updater({ pageIndex, pageSize })
-        : updater;
-      setPageIndex(newPagination.pageIndex);
+      if (typeof updater === 'function') {
+        const newState = updater({ pageIndex, pageSize });
+        onPaginationChange?.(newState);
+      } else {
+        onPaginationChange?.(updater);
+      }
     },
   });
+
+  // Calculate paginated candidates
+  // If manual pagination (pageCount provided), assume candidates are already the correct page
+  // If not manual (legacy), slice locally
+  const currentCandidates = pageCount !== undefined 
+    ? candidates 
+    : candidates.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
 
   // Stub action handlers
   const handleAddToOutreach = useCallback(() => {
     console.log("[Candidates] Add to outreach - not implemented yet");
   }, []);
 
-  const handleShowCandidate = useCallback((candidate: Candidate) => {
+  const handleShowCandidate = useCallback((candidate: SearchCandidate) => {
     setSelectedCandidate(candidate);
   }, []);
 
@@ -143,7 +158,7 @@ export function CandidateCardListPaginated({
     <div className="w-full">
       {/* Candidates list */}
       <div className="space-y-3 mb-4">
-        {candidates.map((searchCandidate, index) => {
+        {currentCandidates.map((searchCandidate, index) => {
           const candidateId = searchCandidate.id;
           const isSelected = selectedIds.has(candidateId);
           const isNewCandidate = newCandidateIds.has(candidateId);
@@ -197,7 +212,13 @@ export function CandidateCardListPaginated({
       {selectedIds.size > 0 && (
         <CandidateCardActionBar
           selectedIds={Array.from(selectedIds)}
-          selectedCandidates={selectedCandidates}
+          selectedCandidates={selectedCandidates.map(c => ({
+            id: c.id,
+            fullName: c.candidate.fullName,
+            headline: c.candidate.headline,
+            location: c.candidate.location,
+            linkedinUrl: c.candidate.linkedinUrl,
+          }))}
           onClearSelection={handleClearSelection}
         />
       )}

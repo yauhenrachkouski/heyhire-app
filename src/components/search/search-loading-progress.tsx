@@ -1,71 +1,74 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Progress } from "@/components/ui/progress";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
-const LOADING_STEPS = [
-  "Analyzing your search criteria...",
-  "Optimizing parameters...",
-  "Searching for potential candidates...",
-  "Matching results to your requirements...",
-  "Finalizing candidate list...",
-];
+type SearchStatus = "idle" | "generating" | "executing" | "polling" | "completed" | "error";
 
-const STEP_DURATION = 1200; // Slightly faster per step
+interface SearchLoadingProgressProps {
+  status?: SearchStatus;
+  value?: number; // Optional exact progress value (0-100)
+}
 
-export function SearchLoadingProgress() {
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+export function SearchLoadingProgress({ status = "generating", value }: SearchLoadingProgressProps) {
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    // Reset to first step when component mounts
-    setCurrentStepIndex(0);
-    setProgress(0);
+    // If exact value is provided, use it
+    if (value !== undefined) {
+      setProgress(value);
+      return;
+    }
 
-    const totalDuration = LOADING_STEPS.length * STEP_DURATION;
-    const startTime = Date.now();
+    let targetProgress = 0;
+    
+    switch (status) {
+      case "idle":
+        targetProgress = 0;
+        break;
+      case "generating": // Analyzing requirements
+        targetProgress = 20;
+        break;
+      case "executing": // Searching candidates (Longest phase)
+        targetProgress = 70; // Go up to 70%
+        break;
+      case "polling": // Finalizing
+        targetProgress = 90; // Almost done
+        break;
+      case "completed":
+        targetProgress = 100;
+        break;
+      case "error":
+        // Keep current progress
+        break;
+    }
 
-    // Update progress bar smoothly
-    const progressInterval = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const newProgress = Math.min((elapsed / totalDuration) * 100, 100);
-      setProgress(newProgress);
-      
-      // Update step index based on progress
-      const stepIndex = Math.min(
-        Math.floor((newProgress / 100) * LOADING_STEPS.length),
-        LOADING_STEPS.length - 1
-      );
-      setCurrentStepIndex(stepIndex);
+    // Animate to target
+    setProgress(targetProgress);
+    
+  }, [status, value]);
 
-      if (newProgress >= 100) {
-        clearInterval(progressInterval);
-      }
-    }, 50);
-
-    return () => clearInterval(progressInterval);
-  }, []);
+  // Dynamic transition duration based on the state
+  const transitionDuration = status === "completed" ? 0.5 : 
+                             status === "executing" ? 8 : 
+                             status === "polling" ? 3 : 1.5;
 
   return (
-    <div className="w-full max-w-md mx-auto space-y-4">
-      <div className="h-6 relative overflow-hidden">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={currentStepIndex}
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -20, opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="absolute inset-0 flex items-center justify-center"
-          >
-            <p className="text-sm font-medium text-muted-foreground text-center">
-              {LOADING_STEPS[currentStepIndex]}
-            </p>
-          </motion.div>
-        </AnimatePresence>
+    <div className="w-full max-w-xs mx-auto mt-4">
+      <div className="h-1.5 w-full bg-secondary/50 rounded-full overflow-hidden relative backdrop-blur-sm">
+        <motion.div 
+          className="absolute top-0 left-0 h-full bg-primary rounded-full shadow-[0_0_10px_rgba(var(--primary),0.5)]"
+          initial={{ width: "0%" }}
+          animate={{ width: `${progress}%` }}
+          transition={{ 
+            duration: transitionDuration, 
+            ease: status === "executing" ? "linear" : "easeInOut" 
+          }}
+        >
+          {/* Shimmer effect */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent w-full -translate-x-full animate-[shimmer_1.5s_infinite]" />
+        </motion.div>
       </div>
-      <Progress value={progress} className="h-1" />
     </div>
   );
 }

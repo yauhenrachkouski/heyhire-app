@@ -131,6 +131,7 @@ export const candidateExperienceSchema = z.object({
   endDate: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   isCurrent: z.boolean().nullable().optional(),
+  skills: z.array(z.string()).nullable().optional(),
 });
 
 export type CandidateExperience = z.infer<typeof candidateExperienceSchema>;
@@ -142,6 +143,7 @@ export const candidateEducationSchema = z.object({
   fieldOfStudy: z.string().nullable().optional(),
   startDate: z.string().nullable().optional(),
   endDate: z.string().nullable().optional(),
+  skills: z.array(z.string()).nullable().optional(),
 });
 
 export type CandidateEducation = z.infer<typeof candidateEducationSchema>;
@@ -190,7 +192,7 @@ export const scoreResultSchema = z.object({
   candidate_id: z.string(),
   match_score: z.number(),
   verdict: z.string(),
-  primary_issue: z.string().optional(),
+  primary_issue: z.string().nullable().optional(),
   total_penalty: z.number(),
   high_importance_missing: z.array(z.string()),
   reasoning: z.object({

@@ -41,7 +41,6 @@ interface SearchCandidate {
     experiences: string | null;
     skills: string | null;
     educations: string | null;
-    scrapeStatus: string;
   };
   matchScore: number | null;
   notes: string | null;
@@ -73,7 +72,7 @@ export function CandidateCard({
 
   const { candidate, matchScore, notes } = searchCandidate;
   
-  console.log("[CandidateCard] Rendering candidate:", candidate.fullName, "Score:", matchScore, "Has notes:", !!notes);
+  // console.log("[CandidateCard] Rendering candidate:", candidate.fullName, "Score:", matchScore, "Has notes:", !!notes);
   
   // Parse JSON fields
   const experiences = candidate.experiences ? JSON.parse(candidate.experiences) : [];
@@ -94,15 +93,19 @@ export function CandidateCard({
   // Generate initials for fallback avatar
   const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 
-  // Parse notes if available (contains pros/cons from scoring)
-  let prosAndCons = null;
+  // Parse notes if available (contains full scoring response)
+  let scoringData = null;
   if (notes) {
     try {
-      prosAndCons = JSON.parse(notes);
+      scoringData = JSON.parse(notes);
     } catch (e) {
       // If notes is plain text, ignore
     }
   }
+  
+  // Extract verdict and reasoning from new scoring format
+  const verdict = scoringData?.verdict;
+  const reasoning = scoringData?.reasoning;
 
   const handleOpenLinkedIn = () => {
     if (candidate.linkedinUrl) {
@@ -119,14 +122,11 @@ export function CandidateCard({
     }
   };
 
-  // Show skeleton if still scraping
-  const isLoading = candidate.scrapeStatus === 'pending' || candidate.scrapeStatus === 'scraping';
-
   return (
     <div
       className={`group relative rounded-lg border bg-card p-4 transition-all ${
         isSelected ? "ring-2 ring-primary" : ""
-      } ${isLoading ? "opacity-60" : ""}`}
+      }`}
     >
 
       <div className="flex gap-4">
@@ -185,25 +185,38 @@ export function CandidateCard({
             </div>
           )}
 
-          {/* Pros and Cons - Collapsible */}
-          {prosAndCons && (prosAndCons.pros?.length > 0 || prosAndCons.cons?.length > 0) && (
-            <div>
-              <div className="flex items-center gap-2">
-                <IconSparkles className="h-4 w-4 text-purple-500" />
-                <span className="text-sm font-medium text-muted-foreground">AI Scoring:</span>
-                {matchScore !== null && (
-                  <div className={`
-                    px-2 py-1 rounded-md text-sm font-semibold
-                    ${matchScore >= 70 
-                      ? 'bg-green-100 text-green-700' 
-                      : matchScore >= 50 
-                      ? 'bg-yellow-100 text-yellow-700' 
-                      : 'bg-red-100 text-red-700'
-                    }
-                  `}>
-                    {matchScore}
-                  </div>
-                )}
+          {/* AI Scoring - Collapsible */}
+          <div>
+            <div className="flex items-center gap-2">
+              <IconSparkles className="h-4 w-4 text-purple-500" />
+              <span className="text-sm font-medium text-muted-foreground">AI Scoring:</span>
+              
+              {matchScore !== null ? (
+                <div className={`
+                  px-2 py-1 rounded-md text-sm font-semibold
+                  ${matchScore >= 80 
+                    ? 'bg-green-100 text-green-700' 
+                    : matchScore >= 60 
+                    ? 'bg-yellow-100 text-yellow-700' 
+                    : 'bg-red-100 text-red-700'
+                  }
+                `}>
+                  {matchScore}
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted text-muted-foreground text-sm">
+                  <IconLoader2 className="h-3 w-3 animate-spin" />
+                  <span>Calculating...</span>
+                </div>
+              )}
+              
+              {verdict && (
+                <Badge variant="outline" className="text-xs">
+                  {verdict}
+                </Badge>
+              )}
+              
+              {matchScore !== null && (
                 <button
                   onClick={() => setExpandedProsCons(!expandedProsCons)}
                   className="text-muted-foreground hover:text-foreground transition-colors p-1"
@@ -215,48 +228,39 @@ export function CandidateCard({
                     <IconChevronDown className="h-4 w-4" />
                   )}
                 </button>
-              </div>
-              
-              {expandedProsCons && (
-                <div className="mt-3 space-y-3 text-sm">
-                  {prosAndCons.pros && prosAndCons.pros.length > 0 && (
-                    <div>
-                      <p className="font-semibold text-green-600 mb-1">Pros:</p>
-                      <ul className="space-y-1 text-muted-foreground">
-                        {prosAndCons.pros.map((pro: string, i: number) => (
-                          <li key={i} className="flex items-start gap-2">
-                            <span className="text-green-600 mt-0.5">✓</span>
-                            <span>{pro}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {prosAndCons.cons && prosAndCons.cons.length > 0 && (
-                    <div>
-                      <p className="font-semibold text-red-600 mb-1">Cons:</p>
-                      <ul className="space-y-1 text-muted-foreground">
-                        {prosAndCons.cons.map((con: string, i: number) => (
-                          <li key={i} className="flex items-start gap-2">
-                            <span className="text-red-600 mt-0.5">✗</span>
-                            <span>{con}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
               )}
             </div>
-          )}
+            
+            {expandedProsCons && reasoning && (
+              <div className="mt-3 space-y-2 text-sm">
+                {reasoning.overall_assessment && (
+                  <div>
+                    <p className="font-semibold mb-1">Overall Assessment:</p>
+                    <p className="text-muted-foreground">{reasoning.overall_assessment}</p>
+                  </div>
+                )}
+                {reasoning.title_analysis && (
+                  <div>
+                    <p className="font-semibold mb-1">Title Match:</p>
+                    <p className="text-muted-foreground">{reasoning.title_analysis}</p>
+                  </div>
+                )}
+                {reasoning.skills_analysis && (
+                  <div>
+                    <p className="font-semibold mb-1">Skills Match:</p>
+                    <p className="text-muted-foreground">{reasoning.skills_analysis}</p>
+                  </div>
+                )}
+                {reasoning.location_analysis && (
+                  <div>
+                    <p className="font-semibold mb-1">Location:</p>
+                    <p className="text-muted-foreground">{reasoning.location_analysis}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
-          {/* Loading indicator */}
-          {isLoading && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-              <IconLoader2 className="h-3 w-3 animate-spin" />
-              <span>Analyzing profile...</span>
-            </div>
-          )}
         </div>
 
         {/* Right column: Action buttons */}
@@ -322,4 +326,3 @@ export function CandidateCard({
     </div>
   );
 }
-

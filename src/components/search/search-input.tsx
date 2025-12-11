@@ -21,10 +21,19 @@ import {
   IconBuildingBank,
   IconHome,
   IconCalendar,
-  IconInfoCircle
+  IconInfoCircle,
+  IconLanguage,
+  IconClock,
+  IconMessage,
+  IconBadge,
+  IconHierarchy,
+  IconCode,
+  IconCertificate,
+  IconTargetArrow,
+  IconBan
 } from "@tabler/icons-react";
-import { parseQueryWithClaude } from "@/actions/search";
-import type { ParsedQuery } from "@/types/search";
+import { parseJob } from "@/actions/jobs";
+import type { ParsedQuery, SourcingCriteria } from "@/types/search";
 import { useToast } from "@/hooks/use-toast";
 import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
 import { cn } from "@/lib/utils";
@@ -41,7 +50,7 @@ import {
 import { SearchInterpretation } from "@/components/search/search-interpretation";
 
 interface SearchInputProps {
-  onQueryParsed: (query: ParsedQuery) => void;
+  onQueryParsed: (query: ParsedQuery, queryText?: string, criteria?: SourcingCriteria) => void;
   onParsingChange?: (isParsing: boolean) => void;
   onSearch?: () => Promise<void>;
   isLoading?: boolean;
@@ -152,7 +161,85 @@ interface Scenario {
   category: string;
   value: string;
   importance: "low" | "medium" | "high";
+  group: string; // Group name for UI display
 }
+
+// User-friendly display names for categories
+const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
+  job_title: "Job Titles",
+  location: "Locations",
+  years_of_experience: "Experience",
+  industry: "Industries",
+  skills: "Skills",
+  company: "Target Companies",
+  education: "Education",
+  hard_skills: "Hard Skills",
+  tools: "Tools & Technologies",
+  soft_skills: "Soft Skills",
+  seniority: "Seniority Level",
+  job_family: "Job Family",
+  employment_type: "Employment Type",
+  language: "Languages",
+  education_level: "Education Level",
+  education_field: "Education Field",
+  university: "Target Universities",
+  excluded_company: "Excluded Companies",
+  company_size: "Company Size",
+  revenue_range: "Revenue Range",
+  remote_preference: "Work Mode",
+  funding_types: "Funding Stage",
+  founded_year_range: "Founded Year",
+  web_technologies: "Web Technologies",
+};
+
+// Group categories into logical sections
+const CATEGORY_GROUPS: Record<string, string> = {
+  job_title: "Role",
+  seniority: "Role",
+  job_family: "Role",
+  employment_type: "Role",
+  
+  location: "Location",
+  
+  hard_skills: "Skills",
+  tools: "Skills",
+  soft_skills: "Skills",
+  skills: "Skills",
+  
+  years_of_experience: "Experience",
+  
+  industry: "Industry",
+  
+  company: "Companies",
+  excluded_company: "Companies",
+  
+  education: "Education",
+  education_level: "Education",
+  education_field: "Education",
+  university: "Education",
+  
+  language: "Languages",
+  
+  company_size: "Company Profile",
+  revenue_range: "Company Profile",
+  funding_types: "Company Profile",
+  founded_year_range: "Company Profile",
+  remote_preference: "Company Profile",
+  web_technologies: "Company Profile",
+};
+
+// Group display order
+const GROUP_ORDER = [
+  "Role",
+  "Location", 
+  "Skills",
+  "Experience",
+  "Industry",
+  "Companies",
+  "Education",
+  "Languages",
+  "Company Profile",
+];
 
 export function SearchInput({ 
   onQueryParsed, 
@@ -229,37 +316,58 @@ export function SearchInput({
   const generateScenariosFromQuery = (parsed: ParsedQuery) => {
     const newScenarios: Scenario[] = [];
     
+    // Use tags directly as they are now fully populated by the backend mapper
+    if (parsed.tags && parsed.tags.length > 0) {
+      parsed.tags.forEach((tag, index) => {
+        // Create unique ID for each tag
+        const id = `${tag.category}_${tag.value}_${index}`;
+        const displayName = CATEGORY_DISPLAY_NAMES[tag.category] || tag.category.replace(/_/g, ' ');
+        const group = CATEGORY_GROUPS[tag.category] || "Other";
+        
+        newScenarios.push({
+          id,
+          label: `${displayName}: ${tag.value}`,
+          category: tag.category,
+          value: tag.value,
+          importance: tag.importance || 'medium',
+          group,
+        });
+      });
+      return newScenarios;
+    }
+
+    // Fallback to legacy field checking if tags are empty (for backward compatibility)
     if (parsed.job_title) {
       const val = formatFieldForDisplay(parsed.job_title).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'job_title', label: `Job Title: ${val}`, category: 'job_title', value: val, importance: 'medium' });
+      if (val) newScenarios.push({ id: 'job_title', label: `Job Titles: ${val}`, category: 'job_title', value: val, importance: 'medium', group: 'Role' });
     }
     if (parsed.location) {
       const val = formatFieldForDisplay(parsed.location).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'location', label: `Location: ${val}`, category: 'location', value: val, importance: 'medium' });
+      if (val) newScenarios.push({ id: 'location', label: `Location: ${val}`, category: 'location', value: val, importance: 'medium', group: 'Location' });
     }
     if (parsed.skills) {
       const val = formatFieldForDisplay(parsed.skills).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'skills', label: `Skills: ${val}`, category: 'skills', value: val, importance: 'medium' });
+      if (val) newScenarios.push({ id: 'skills', label: `Skills: ${val}`, category: 'skills', value: val, importance: 'medium', group: 'Skills' });
     }
     if (parsed.company) {
       const val = formatFieldForDisplay(parsed.company).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'company', label: `Company: ${val}`, category: 'company', value: val, importance: 'medium' });
+      if (val) newScenarios.push({ id: 'company', label: `Company: ${val}`, category: 'company', value: val, importance: 'medium', group: 'Companies' });
     }
     if (parsed.industry) {
       const val = formatFieldForDisplay(parsed.industry).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'industry', label: `Industry: ${val}`, category: 'industry', value: val, importance: 'medium' });
+      if (val) newScenarios.push({ id: 'industry', label: `Industry: ${val}`, category: 'industry', value: val, importance: 'medium', group: 'Industry' });
     }
     if (parsed.education) {
       const val = formatFieldForDisplay(parsed.education).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'education', label: `Education: ${val}`, category: 'education', value: val, importance: 'medium' });
+      if (val) newScenarios.push({ id: 'education', label: `Education: ${val}`, category: 'education', value: val, importance: 'medium', group: 'Education' });
     }
     if (parsed.years_of_experience) {
       const val = formatFieldForDisplay(parsed.years_of_experience).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'years_of_experience', label: `Experience: ${val}`, category: 'years_of_experience', value: val, importance: 'medium' });
+      if (val) newScenarios.push({ id: 'years_of_experience', label: `Experience: ${val}`, category: 'years_of_experience', value: val, importance: 'medium', group: 'Experience' });
     }
     if (parsed.funding_types) {
       const val = formatFieldForDisplay(parsed.funding_types).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'funding_types', label: `Funding: ${val}`, category: 'funding_types', value: val, importance: 'medium' });
+      if (val) newScenarios.push({ id: 'funding_types', label: `Funding: ${val}`, category: 'funding_types', value: val, importance: 'medium', group: 'Company Profile' });
     }
     
     return newScenarios;
@@ -277,9 +385,10 @@ export function SearchInput({
     setShowScenarios(false);
     
     try {
-      const result = await parseQueryWithClaude(searchQuery);
+      const result = await parseJob(searchQuery);
       if (result.success && result.data) {
-        onQueryParsed(result.data);
+        // Pass criteria to parent for search flow
+        onQueryParsed(result.data, searchQuery, result.criteria);
         setParsedQuery(result.data);
         setOriginalParsedQuery(result.data);
         
@@ -296,6 +405,9 @@ export function SearchInput({
         // Generate boolean search string
         const booleanSearchString = generateBooleanSearch(result.data);
         setBooleanSearch(booleanSearchString);
+        
+        console.log("[SearchInput] Parsed query:", result.data);
+        console.log("[SearchInput] Criteria:", result.criteria);
       } else {
         setBooleanSearch("");
         setParsedQuery(null);
@@ -436,9 +548,16 @@ export function SearchInput({
       case 'job_title': return <IconBriefcase className="size-3.5" />;
       case 'location': return <IconMapPin className="size-3.5" />;
       case 'skills': return <IconTool className="size-3.5" />;
-      case 'company': return <IconBuildingSkyscraper className="size-3.5" />;
+      case 'hard_skills': return <IconCode className="size-3.5" />;
+      case 'tools': return <IconTool className="size-3.5" />;
+      case 'soft_skills': return <IconMessage className="size-3.5" />;
+      case 'company': return <IconTargetArrow className="size-3.5" />;
+      case 'excluded_company': return <IconBan className="size-3.5" />;
       case 'industry': return <IconBuildingBank className="size-3.5" />;
       case 'education': return <IconSchool className="size-3.5" />;
+      case 'education_level': return <IconCertificate className="size-3.5" />;
+      case 'education_field': return <IconSchool className="size-3.5" />;
+      case 'university': return <IconSchool className="size-3.5" />;
       case 'years_of_experience': return <IconCalendarStats className="size-3.5" />;
       case 'funding_types': return <IconCoin className="size-3.5" />;
       case 'web_technologies': return <IconWorld className="size-3.5" />;
@@ -446,9 +565,38 @@ export function SearchInput({
       case 'remote_preference': return <IconHome className="size-3.5" />;
       case 'founded_year_range': return <IconCalendar className="size-3.5" />;
       case 'revenue_range': return <IconCoin className="size-3.5" />;
+      case 'job_family': return <IconHierarchy className="size-3.5" />;
+      case 'seniority': return <IconBadge className="size-3.5" />;
+      case 'employment_type': return <IconClock className="size-3.5" />;
+      case 'language': return <IconLanguage className="size-3.5" />;
       default: return <IconSparkles className="size-3.5" />;
     }
   };
+  
+  // Get display name for a category
+  const getCategoryDisplayName = (category: string): string => {
+    return CATEGORY_DISPLAY_NAMES[category] || category.replace(/_/g, ' ');
+  };
+
+  // Group scenarios by their group property
+  const groupedScenarios = scenarios.reduce((acc, scenario) => {
+    const group = scenario.group;
+    if (!acc[group]) {
+      acc[group] = [];
+    }
+    acc[group].push(scenario);
+    return acc;
+  }, {} as Record<string, Scenario[]>);
+
+  // Sort groups by predefined order
+  const sortedGroups = Object.keys(groupedScenarios).sort((a, b) => {
+    const indexA = GROUP_ORDER.indexOf(a);
+    const indexB = GROUP_ORDER.indexOf(b);
+    if (indexA === -1 && indexB === -1) return 0;
+    if (indexA === -1) return 1;
+    if (indexB === -1) return -1;
+    return indexA - indexB;
+  });
 
   return (
     <div className={cn("relative group", className)}>
@@ -544,7 +692,7 @@ export function SearchInput({
                   )}
                 >
                   {isParsing ? <IconLoader2 className="h-4 w-4 animate-spin" /> : <IconSparkles className="h-4 w-4" />}
-                  <span className="font-mono text-sm">Search criteria</span>
+                  <span className="font-mono text-sm">Matching criteria</span>
                 </Button>
               </div>
 
@@ -557,67 +705,108 @@ export function SearchInput({
             </div>
           </div>
 
-          {/* Scenarios List */}
+          {/* Scenarios List - Grouped */}
           {showScenarios && scenarios.length > 0 && (
-            <div className="px-4 pb-4 pt-4 space-y-4 bg-muted/10 border-t border-border/50">
-              {scenarios.map((scenario) => (
-                <div key={scenario.id} className="space-y-2 group/item">
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground/70">
-                      {getCategoryIcon(scenario.category)}
-                    </span>
-                    <span className="text-xs font-semibold text-muted-foreground capitalize">
-                      {scenario.category.replace('_', ' ')}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4 bg-background border border-border/50 p-2 rounded-md  transition-colors group-hover/item:border-border">
-                    <span className="text-sm font-medium truncate flex-1 px-1">
-                      {scenario.value}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <TooltipProvider>
-                        <Tooltip delayDuration={0}>
-                          <TooltipTrigger asChild>
-                            <IconInfoCircle className="size-4 text-muted-foreground/40 hover:text-muted-foreground cursor-help transition-colors" />
-                          </TooltipTrigger>
-                          <TooltipContent side="top" align="end">
-                            <div className="flex flex-col gap-1">
-                              <p className="font-medium border-b border-background/20 pb-1 mb-1">Match Importance</p>
-                              <div className="grid grid-cols-[32px_1fr] gap-2">
-                                <span className="font-medium opacity-70">Low</span>
-                                <span>Nice to have</span>
-                              </div>
-                              <div className="grid grid-cols-[32px_1fr] gap-2">
-                                <span className="font-medium opacity-70">Med</span>
-                                <span>Important</span>
-                              </div>
-                              <div className="grid grid-cols-[32px_1fr] gap-2">
-                                <span className="font-medium opacity-70">High</span>
-                                <span>Mandatory</span>
-                              </div>
-                            </div>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                      <ToggleGroup 
-                        type="single" 
-                        value={scenario.importance} 
-                        variant="outline"
-                        onValueChange={(val) => val && handleImportanceChange(scenario.id, val as any)}
-                        className="shrink-0"
-                      >
-                        <ToggleGroupItem value="low" size="sm">
-                          Low
-                        </ToggleGroupItem>
-                        <ToggleGroupItem value="medium" size="sm">
-                          Med
-                        </ToggleGroupItem>
-                        <ToggleGroupItem value="high" size="sm">
-                          High
-                        </ToggleGroupItem>
-                      </ToggleGroup>
-                      
-                    </div>
+            <div className="px-4 pb-4 pt-4 space-y-6 bg-muted/10 border-t border-border/50 max-h-[400px] overflow-y-auto">
+              {sortedGroups.map((groupName) => (
+                <div key={groupName} className="space-y-3">
+                  {/* Group Header */}
+                  <h4 className="text-xs font-bold text-foreground uppercase tracking-wider border-b border-border/30 pb-2">
+                    {groupName}
+                  </h4>
+                  
+                  {/* Group Items */}
+                  <div className="space-y-2">
+                    {groupedScenarios[groupName].map((scenario) => (
+                      <div key={scenario.id} className="flex items-center justify-between gap-3 bg-background border border-border/50 p-2.5 rounded-lg transition-colors hover:border-border group/item">
+                        {/* Left: Icon + Category + Value */}
+                        <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                          <span className="text-muted-foreground/70 shrink-0">
+                            {getCategoryIcon(scenario.category)}
+                          </span>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                              {getCategoryDisplayName(scenario.category)}
+                            </span>
+                            <span className="text-sm font-medium truncate">
+                              {scenario.value}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {/* Right: Importance Toggle */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <TooltipProvider>
+                            <Tooltip delayDuration={0}>
+                              <TooltipTrigger asChild>
+                                <IconInfoCircle className="size-3.5 text-muted-foreground/40 hover:text-muted-foreground cursor-help transition-colors" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" align="end">
+                                <div className="flex flex-col gap-1">
+                                  <p className="font-medium border-b border-background/20 pb-1 mb-1">Match Importance</p>
+                                  <div className="grid grid-cols-[32px_1fr] gap-2">
+                                    <span className="font-medium opacity-70">Low</span>
+                                    <span>Nice to have</span>
+                                  </div>
+                                  <div className="grid grid-cols-[32px_1fr] gap-2">
+                                    <span className="font-medium opacity-70">Med</span>
+                                    <span>Important</span>
+                                  </div>
+                                  <div className="grid grid-cols-[32px_1fr] gap-2">
+                                    <span className="font-medium opacity-70">High</span>
+                                    <span>Mandatory</span>
+                                  </div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <ToggleGroup 
+                            type="single" 
+                            value={scenario.importance} 
+                            variant="outline"
+                            onValueChange={(val) => val && handleImportanceChange(scenario.id, val as any)}
+                            className="shrink-0 gap-0 border border-border rounded-md overflow-hidden"
+                          >
+                            <ToggleGroupItem 
+                              value="low" 
+                              size="sm"
+                              className={cn(
+                                "text-xs px-3 transition-all rounded-none border-0 border-r border-border",
+                                scenario.importance === "low" 
+                                  ? "bg-foreground text-background font-semibold" 
+                                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                              )}
+                            >
+                              Low
+                            </ToggleGroupItem>
+                            <ToggleGroupItem 
+                              value="medium" 
+                              size="sm"
+                              className={cn(
+                                "text-xs px-3 transition-all rounded-none border-0 border-r border-border",
+                                scenario.importance === "medium" 
+                                  ? "bg-foreground text-background font-semibold" 
+                                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                              )}
+                            >
+                              Med
+                            </ToggleGroupItem>
+                            <ToggleGroupItem 
+                              value="high" 
+                              size="sm"
+                              className={cn(
+                                "text-xs px-3 transition-all rounded-none border-0",
+                                scenario.importance === "high" 
+                                  ? "bg-foreground text-background font-semibold" 
+                                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                              )}
+                            >
+                              High
+                            </ToggleGroupItem>
+                          </ToggleGroup>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}

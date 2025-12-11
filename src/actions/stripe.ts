@@ -162,7 +162,7 @@ export async function getCustomerPortalSession() {
     
     const portalSession = await stripeClient.billingPortal.sessions.create({
       customer: orgSubscription.stripeCustomerId,
-      return_url: `${process.env.NEXT_PUBLIC_SITE_URL}/billing`,
+      return_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing`,
     });
 
     return {

@@ -1,19 +1,19 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import type { ParsedQuery } from "@/types/search";
 import { CandidateCardListPaginated } from "@/components/search/candidate-card-list-paginated";
 import { AppliedFilters } from "@/components/search/applied-filters";
-import { ForagerQueryDebug } from "@/components/search/forager-query-debug";
 import { InlineFilters } from "@/components/search/inline-filters";
-import { ScoringCriteriaDialog } from "@/components/search/scoring-criteria-dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input"; // Import Input
-import { Plus, Pencil } from "lucide-react"; // Import Pencil icon
-import { updateSearchName } from "@/actions/search"; // Import updateSearchName
-import { useToast } from "@/hooks/use-toast"; // Import useToast
+import { Plus, Pencil } from "lucide-react";
+import SourcingLoader from "@/components/SourcingLoader";
+import { updateSearchName } from "@/actions/search";
+import { scoreBatchCandidates } from "@/actions/candidates";
+import { useToast } from "@/hooks/use-toast";
+import { useSearchRealtime } from "@/hooks/use-search-realtime";
 
 interface SearchResultsClientProps {
   search: {
@@ -21,8 +21,9 @@ interface SearchResultsClientProps {
     name: string;
     query: string;
     params: ParsedQuery;
-    scoringPrompt?: string | null;
     createdAt: Date;
+    status: string;
+    progress: number | null;
   };
 }
 
@@ -30,12 +31,14 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
   console.log("[SearchResultsClient] Rendering for search:", search.id);
   
   const router = useRouter();
-  const { toast } = useToast(); // Initialize toast
+  const { toast } = useToast();
 
   const [currentParsedQuery, setCurrentParsedQuery] = useState<ParsedQuery>(search.params);
-  const [isEditingName, setIsEditingName] = useState(false); // New state for editing name
-  const [searchName, setSearchName] = useState(search.name); // State to hold editable search name
-  const titleRef = useRef<HTMLHeadingElement>(null); // Ref for the h1 element
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [searchName, setSearchName] = useState(search.name);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const scoringQueue = useRef<Set<string>>(new Set());
+  const isBatchScoringTriggered = useRef<boolean>(false);
 
   useEffect(() => {
     setSearchName(search.name);
@@ -50,17 +53,24 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
   // Score filter state - default to All candidates (0+)
   const [scoreRange, setScoreRange] = useState<[number, number]>([0, 100]);
   
-  // Sort state - default to highest score first
-  const [sortBy, setSortBy] = useState<string>("score-desc");
+  // Pagination state
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+  
+  // Sort state - default to newest first
+  const [sortBy, setSortBy] = useState<string>("date-desc");
 
   // Poll for candidates with server-side filtering
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['search-candidates', search.id, scoreRange[0], scoreRange[1]],
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: ['search-candidates', search.id, scoreRange[0], scoreRange[1], pageIndex, pageSize, sortBy],
     queryFn: async () => {
-      console.log("[SearchResultsClient] Polling candidates for search:", search.id, "with score range:", scoreRange);
+      console.log("[SearchResultsClient] Fetching candidates for search:", search.id, "with score range:", scoreRange);
       const url = new URL(`/api/search/${search.id}/candidates`, window.location.origin);
       url.searchParams.set('scoreMin', scoreRange[0].toString());
       url.searchParams.set('scoreMax', scoreRange[1].toString());
+      url.searchParams.set('page', (pageIndex + 1).toString());
+      url.searchParams.set('limit', pageSize.toString());
+      url.searchParams.set('sortBy', sortBy);
       
       const response = await fetch(url.toString());
       if (!response.ok) {
@@ -70,50 +80,162 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
       console.log("[SearchResultsClient] Received data:", data);
       return data;
     },
-    refetchInterval: (query) => {
-      // Stop polling when both scraping AND scoring are complete
-      const isScoringComplete = query.state.data?.progress?.isScoringComplete;
-      return isScoringComplete ? false : 3000; // Poll every 3 seconds
-    },
+    // Disable polling, rely on realtime or manual refetch
+    refetchInterval: false,
     enabled: !!search.id,
+    // Keep previous data during refetch to prevent blank screen during HMR
+    placeholderData: (previousData) => previousData,
+    // Cache data for 30 seconds to prevent unnecessary refetches
+    staleTime: 30 * 1000,
+    // Keep cache for 5 minutes
+    gcTime: 5 * 60 * 1000,
   });
 
+  // Real-time updates via Upstash Realtime
+  const handleSearchCompleted = useCallback((candidatesCount: number) => {
+    console.log("[SearchResultsClient] Search completed with", candidatesCount, "candidates");
+    refetch();
+  }, [refetch]);
+
+  const handleSearchFailed = useCallback((errorMsg: string) => {
+    console.error("[SearchResultsClient] Search failed:", errorMsg);
+  }, []);
+
+  const {
+    status: realtimeStatus,
+    progress: realtimeProgress,
+    message: realtimeMessage,
+    connectionStatus,
+    isActive: realtimeIsActive,
+    hasReceivedEvents,
+  } = useSearchRealtime({
+    searchId: search.id,
+    initialStatus: search.status,
+    initialProgress: search.progress || 0,
+    onCompleted: handleSearchCompleted,
+    onFailed: handleSearchFailed,
+  });
+
+  // Debug logging for realtime state
+  console.log("[SearchResultsClient] Realtime state:", {
+    realtimeStatus,
+    realtimeProgress,
+    connectionStatus,
+    realtimeIsActive,
+    hasReceivedEvents,
+    initialStatus: search.status,
+    initialProgress: search.progress,
+  });
+
+
   const candidates = data?.candidates || [];
+  const pagination = data?.pagination;
   const progress = data?.progress;
   const isScoringComplete = data?.progress?.isScoringComplete;
   
-  // Split candidates into completed and pending
-  const completedCandidates = candidates.filter((c: typeof candidates[0]) => 
-    c.candidate.scrapeStatus === 'completed'
-  );
+  // Get status from API response for fallback
+  const apiStatus = progress?.status;
+  const apiProgress = progress?.jobProgress || 0;
+
+  // Determine effective status and progress for UI
+  // Priority: realtime events > API response > initial props
+  // Use whichever source has the most "advanced" progress
+  const effectiveStatus = (() => {
+    // If we've received realtime events, trust them
+    if (hasReceivedEvents) return realtimeStatus;
+    // Otherwise use API status if available
+    if (apiStatus) return apiStatus;
+    // Fall back to realtime status (which is initialized from props)
+    return realtimeStatus;
+  })();
   
-  // Sort completed candidates based on selected sort option
-  const sortedCandidates = [...completedCandidates].sort((a, b) => {
-    const scoreA = a.matchScore ?? 0;
-    const scoreB = b.matchScore ?? 0;
-    
-    if (sortBy === "score-desc") {
-      return scoreB - scoreA; // Highest first
-    } else {
-      return scoreA - scoreB; // Lowest first
+  const effectiveProgress = (() => {
+    // Use the highest progress value from any source
+    const values = [realtimeProgress, apiProgress].filter(v => v > 0);
+    return values.length > 0 ? Math.max(...values) : realtimeProgress;
+  })();
+  
+  // Calculate if search is in an active/running state - used for both UI and fallback polling
+  const isActiveSearch = ['created', 'processing', 'pending', 'generating', 'generated', 'executing', 'polling'].includes(effectiveStatus);
+  
+  // ALWAYS enable polling when search is active - this is the most reliable way to get updates
+  // Don't depend on realtime connection which may have issues
+  useEffect(() => {
+    if (isActiveSearch) {
+      console.log("[SearchResultsClient] Search is active, enabling polling for updates");
+      const pollInterval = setInterval(() => {
+        console.log("[SearchResultsClient] Polling for updates - refetching candidates");
+        refetch();
+      }, 5000); // Poll every 5 seconds
+      
+      return () => clearInterval(pollInterval);
     }
-  });
+  }, [isActiveSearch, refetch]);
+  
+  // Trigger batch scoring for unscored candidates
+  useEffect(() => {
+    if (candidates.length > 0) {
+      const unscored = candidates.filter((c: any) => c.matchScore === null);
+      const unscoredIds = unscored.map((c: any) => c.id);
+      
+      // Filter out candidates that are already being scored
+      const idsToScore = unscoredIds.filter((id: string) => !scoringQueue.current.has(id));
+      
+      if (idsToScore.length > 0) {
+        // Mark these IDs as being processed
+        idsToScore.forEach((id: string) => scoringQueue.current.add(id));
+        
+        console.log(`[SearchResultsClient] Triggering batch scoring for ${idsToScore.length} candidates`);
+        
+        // Trigger server-side batch processing
+        // We don't await this because we want the polling to pick up updates as they happen
+        scoreBatchCandidates(idsToScore)
+          .then((result) => {
+            if (result.success) {
+              console.log(`[SearchResultsClient] Batch scoring complete. Scored: ${result.scored}, Errors: ${result.errors}`);
+              // Refetch to get scores
+              refetch(); 
+            } else {
+              console.error(`[SearchResultsClient] Batch scoring failed:`, result.error);
+              // In case of error, remove IDs from queue so they can be retried (maybe add retry logic)
+              idsToScore.forEach((id: string) => scoringQueue.current.delete(id));
+            }
+          })
+          .catch((err) => {
+            console.error(`[SearchResultsClient] Error triggering batch score:`, err);
+            idsToScore.forEach((id: string) => scoringQueue.current.delete(id));
+          });
+      }
+    }
+  }, [candidates, refetch]);
+  
+  // All candidates are now complete (no scraping needed with new API)
+  const completedCandidates = candidates;
+  
+  // Candidates are already sorted from the server
+  const sortedCandidates = completedCandidates;
   
   // Calculate skeleton count for pending candidates
-  const skeletonCount = Math.max(0, (progress?.total || 0) - completedCandidates.length);
+  // Only show skeletons if we are actively loading data AND not showing the progress bar
+  
+  // Show progress bar if:
+  // 1. Search is in an active status AND no candidates yet, OR
+  // 2. Initial loading (no data yet) and search is active
+  const isInitialLoading = isLoading && !data;
+  const shouldShowProgressBar = (isActiveSearch && candidates.length === 0) || (isInitialLoading && isActiveSearch);
+  
+  const skeletonCount = (isLoading && !shouldShowProgressBar) ? pageSize : 0;
   
   // Check if filter is active (not showing all candidates)
   // Note: Default is 70+, so we consider it filtered unless it's set to show "All" (0+)
   const isFiltered = scoreRange[0] !== 0;
-  const filteredCount = candidates.length;
+  const filteredCount = pagination?.total || candidates.length;
   const totalCount = progress?.total || 0;
 
-  console.log("[SearchResultsClient] Progress:", progress);
+  console.log("[SearchResultsClient] Realtime Status:", effectiveStatus);
+  console.log("[SearchResultsClient] Realtime Progress:", effectiveProgress);
   console.log("[SearchResultsClient] Candidates count:", candidates.length);
-  console.log("[SearchResultsClient] Completed candidates:", completedCandidates.length);
-  console.log("[SearchResultsClient] Skeleton count:", skeletonCount);
-  console.log("[SearchResultsClient] Score range:", scoreRange);
-  console.log("[SearchResultsClient] Is filtered:", isFiltered);
+  console.log("[SearchResultsClient] isFetching:", isFetching);
 
   const handleRemoveFilter = (category: keyof ParsedQuery) => {
     setCurrentParsedQuery(prevParams => ({
@@ -166,6 +288,25 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
 
   return (
     <div className="space-y-4">
+      {/* Debug panel - only in development */}
+      
+        <div className="fixed bottom-4 right-4 z-50 p-3 bg-black/80 text-white text-xs rounded-lg max-w-xs font-mono space-y-0.5">
+          <div className="font-bold mb-1">🔍 Debug Panel</div>
+          <div>Effective Status: <span className={effectiveStatus === 'completed' ? 'text-green-400' : effectiveStatus === 'error' ? 'text-red-400' : 'text-yellow-400'}>{effectiveStatus}</span></div>
+          <div>Effective Progress: {effectiveProgress}%</div>
+          <div>API Status: {apiStatus || 'N/A'}</div>
+          <div>API Progress: {apiProgress}%</div>
+          <div>Realtime Status: {realtimeStatus}</div>
+          <div>Realtime Progress: {realtimeProgress}%</div>
+          <div>Realtime Conn: <span className={connectionStatus === 'connected' ? 'text-green-400' : 'text-red-400'}>{connectionStatus}</span></div>
+          <div>Events received: {hasReceivedEvents ? '✓' : '✗'}</div>
+          <div>Candidates: {candidates.length}</div>
+          <div>Is fetching: {isFetching ? '✓' : '✗'}</div>
+          <div>Active search: {isActiveSearch ? '✓' : '✗'}</div>
+          <div>Show progress bar: {shouldShowProgressBar ? '✓' : '✗'}</div>
+        </div>
+      
+      
       {/* Shared Header */}
       <div className="space-y-4">
         <div className="flex items-start justify-between gap-4">
@@ -221,21 +362,13 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
           initialQueryText={search.query} 
           onRemoveFilter={handleRemoveFilter}
         />
-
-        {/* Debug: Show Forager Query */}
-        <ForagerQueryDebug parsedQuery={currentParsedQuery} />
         
         <div className="space-y-3">
-          {/* Inline Filters and Scoring Info */}
+          {/* Inline Filters */}
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <InlineFilters 
               onScoreRangeChange={(min, max) => setScoreRange([min, max])}
               onSortChange={(sort) => setSortBy(sort)}
-            />
-            <ScoringCriteriaDialog 
-              parsedQuery={currentParsedQuery} 
-              searchId={search.id}
-              currentPrompt={search.scoringPrompt}
             />
           </div>
           
@@ -260,15 +393,15 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
 
       {/* Results */}
       <div className="space-y-4">
-        {/* Error State */}
-        {error && (
+        {/* Error State - also handle 'failed' status */}
+        {(effectiveStatus === "error" || effectiveStatus === "failed") && (
           <div className="text-center py-12 text-destructive">
-            Error loading candidates: {(error as Error).message}
+            Error loading candidates: {realtimeMessage || (error as Error)?.message || "Unknown error"}
           </div>
         )}
 
         {/* Results with skeletons */}
-        {!error && (
+        {effectiveStatus !== "error" && effectiveStatus !== "failed" && (
           <>
             {sortedCandidates.length > 0 || skeletonCount > 0 ? (
               <CandidateCardListPaginated
@@ -276,14 +409,64 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
                 searchId={search.id}
                 viewMode="cards"
                 skeletonCount={skeletonCount}
+                pageIndex={pageIndex}
+                pageSize={pageSize}
+                pageCount={pagination?.totalPages || 0}
+                onPaginationChange={({ pageIndex, pageSize }) => {
+                  setPageIndex(pageIndex);
+                  setPageSize(pageSize);
+                }}
               />
             ) : (
-              // Only show "No profiles found" if search is complete (isScoringComplete) and total is 0
-              isScoringComplete && progress?.total === 0 ? (
+              // Show processing state if no candidates yet but search is running
+              shouldShowProgressBar ? (
+                 <div className="flex flex-col items-center justify-center py-12 w-full min-h-[400px]">
+                   <div className="w-full max-w-[400px] h-[200px] mb-8">
+                     <SourcingLoader />
+                   </div>
+                   <div className="text-center space-y-2">
+                     <h3 className="text-lg font-medium text-foreground">
+                        {realtimeMessage || "Searching for candidates..."}
+                     </h3>
+                     <p className="text-sm text-muted-foreground max-w-sm">This process runs in the background. You can leave and come back later.</p>
+                     {effectiveProgress > 0 && (
+                       <p className="text-xs text-muted-foreground/70 font-mono">
+                         {effectiveProgress}%
+                       </p>
+                     )}
+                   </div>
+                 </div>
+              ) :
+              // Show loading state when completed but still fetching candidates
+              (effectiveStatus === 'completed' && candidates.length === 0 && isFetching) ? (
+                <div className="flex flex-col items-center justify-center py-12 w-full min-h-[300px]">
+                  <div className="text-center space-y-2">
+                    <h3 className="text-lg font-medium text-foreground">Loading results...</h3>
+                    <p className="text-sm text-muted-foreground">Fetching your candidates</p>
+                  </div>
+                </div>
+              ) :
+              // Show "No profiles found" if search is complete, not fetching, and total is 0
+              (effectiveStatus === 'completed' && candidates.length === 0 && !isFetching) ? (
                 <div className="text-center py-12 text-muted-foreground">
                   No profiles found. Try adjusting your search criteria.
                 </div>
-              ) : null
+              ) :
+              // Fallback for any other status (e.g., cancelled, unknown) - show loading
+              (candidates.length === 0 && isFetching) ? (
+                <div className="flex flex-col items-center justify-center py-12 w-full min-h-[300px]">
+                  <div className="text-center space-y-2">
+                    <h3 className="text-lg font-medium text-foreground">Loading results...</h3>
+                    <p className="text-sm text-muted-foreground">Fetching your candidates</p>
+                  </div>
+                </div>
+              ) :
+              // Ultimate fallback - show empty state instead of blank page
+              (
+                <div className="text-center py-12 text-muted-foreground">
+                  No profiles found. Try adjusting your search criteria.
+                </div>
+              )
             )}
           </>
         )}
@@ -291,5 +474,3 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
     </div>
   );
 }
-
-

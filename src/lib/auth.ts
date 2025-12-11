@@ -54,19 +54,19 @@ export const auth = betterAuth({
       enabled: false,
    },
    trustedOrigins: [
-      process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
+      process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
    ],
    socialProviders: {
       google: {
          clientId: process.env.GOOGLE_CLIENT_ID as string,
          clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-         redirectUri: process.env.NEXT_PUBLIC_SITE_URL as string,
+         redirectUri: process.env.NEXT_PUBLIC_APP_URL as string,
       },
    },
    plugins: [
       organization({
          async sendInvitationEmail(data) {
-            const inviteLink = `${process.env.NEXT_PUBLIC_SITE_URL}/accept-invitation/${data.id}`;
+            const inviteLink = `${process.env.NEXT_PUBLIC_APP_URL}/accept-invitation/${data.id}`;
             await resend.emails.send({
                from: process.env.EMAIL_FROM as string,
                to: data.email,

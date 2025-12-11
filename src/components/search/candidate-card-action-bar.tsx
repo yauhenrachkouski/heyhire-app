@@ -5,7 +5,7 @@ import {
   DataTableActionBar,
   DataTableActionBarAction,
 } from "@/components/data-table/data-table-action-bar";
-import { Download, Mail, Plus, ThumbsDown } from "lucide-react";
+import { Download, Plus, ThumbsDown } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,17 +16,24 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import type { PeopleSearchResult } from "@/types/search";
 import { useToast } from "@/hooks/use-toast";
 import type { Table } from "@tanstack/react-table";
 
+interface SelectedCandidate {
+  id: string;
+  fullName: string | null;
+  headline: string | null;
+  location: string | null;
+  linkedinUrl?: string;
+}
+
 interface CandidateCardActionBarProps {
-  selectedIds: number[];
-  selectedCandidates: PeopleSearchResult[];
+  selectedIds: string[];
+  selectedCandidates: SelectedCandidate[];
   onClearSelection: () => void;
-  onAddToSequence?: (ids: number[]) => Promise<void>;
-  onDecline?: (ids: number[]) => Promise<void>;
-  onEmail?: (ids: number[]) => Promise<void>;
+  onAddToSequence?: (ids: string[]) => Promise<void>;
+  onDecline?: (ids: string[]) => Promise<void>;
+  onEmail?: (ids: string[]) => Promise<void>;
 }
 
 export function CandidateCardActionBar({
@@ -35,15 +42,12 @@ export function CandidateCardActionBar({
   onClearSelection,
   onAddToSequence,
   onDecline,
-  onEmail,
 }: CandidateCardActionBarProps) {
   const [isAddingToSequence, setIsAddingToSequence] = React.useState(false);
   const [isDeclining, setIsDeclining] = React.useState(false);
-  const [isSendingEmail, setIsSendingEmail] = React.useState(false);
   const [showDeclineDialog, setShowDeclineDialog] = React.useState(false);
   const { toast } = useToast();
 
-  // Listen for Escape key
   React.useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -56,14 +60,12 @@ export function CandidateCardActionBar({
   }, [onClearSelection]);
 
   const handleExport = React.useCallback(() => {
-    // Create a simple CSV export for selected candidates
-    const headers = ["Name", "Headline", "Company", "Current Role", "Location"];
+    const headers = ["Name", "Headline", "Location", "LinkedIn URL"];
     const rows = selectedCandidates.map((candidate) => [
-      candidate.person?.full_name || "Unknown",
-      candidate.person?.headline || "-",
-      candidate.organization?.name || "-",
-      candidate.role_title || "-",
-      candidate.person?.location?.name || "-",
+      candidate.fullName || "Unknown",
+      candidate.headline || "-",
+      candidate.location || "-",
+      candidate.linkedinUrl || "-",
     ]);
 
     const csvContent = [
@@ -89,7 +91,6 @@ export function CandidateCardActionBar({
 
   const handleAddToSequenceClick = React.useCallback(async () => {
     if (!onAddToSequence) {
-      console.log("[Candidates] Add to sequence not implemented");
       toast({
         title: "Info",
         description: "Add to sequence functionality not yet implemented",
@@ -123,7 +124,6 @@ export function CandidateCardActionBar({
 
   const handleDeclineConfirm = React.useCallback(async () => {
     if (!onDecline) {
-      console.log("[Candidates] Decline not implemented");
       toast({
         title: "Info",
         description: "Decline functionality not yet implemented",
@@ -153,36 +153,6 @@ export function CandidateCardActionBar({
     }
   }, [selectedIds, onDecline, onClearSelection, toast]);
 
-  const handleEmailClick = React.useCallback(async () => {
-    if (!onEmail) {
-      console.log("[Candidates] Email not implemented");
-      toast({
-        title: "Info",
-        description: "Email functionality not yet implemented",
-      });
-      return;
-    }
-
-    setIsSendingEmail(true);
-    try {
-      await onEmail(selectedIds);
-      toast({
-        title: "Success",
-        description: `Email sent to ${selectedIds.length} candidates`,
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to send emails",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSendingEmail(false);
-    }
-  }, [selectedIds, onEmail, toast]);
-
-  // Create a mock table object that satisfies DataTableActionBar's requirements
   const mockTable = {
     getFilteredSelectedRowModel: () => ({
       rows: selectedIds.map((id, index) => ({
@@ -193,7 +163,6 @@ export function CandidateCardActionBar({
     toggleAllRowsSelected: onClearSelection,
   } as unknown as Table<unknown>;
 
-  // Create a custom selection display matching DataTableActionBarSelection style
   const CustomSelection = () => (
     <div className="flex h-7 items-center rounded-md pr-1 pl-2.5">
       <span className="whitespace-nowrap text-xs">
@@ -223,7 +192,6 @@ export function CandidateCardActionBar({
           <Plus />
           Add to Outreach
         </DataTableActionBarAction>
-
 
         <DataTableActionBarAction
           tooltip="Reject selected"

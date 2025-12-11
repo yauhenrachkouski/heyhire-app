@@ -1,138 +1,316 @@
 "use server";
 
 import { db } from "@/db/drizzle";
-import { candidates, searchCandidates, contacts } from "@/db/schema";
-import { eq, and, gte, lte, or, isNull } from "drizzle-orm";
+import { candidates, searchCandidates, search } from "@/db/schema";
+import { eq, and, gte, lte, or, isNull, inArray, count, desc, asc } from "drizzle-orm";
 import { generateId } from "@/lib/id";
-import type { PeopleSearchResult } from "@/types/search";
+import type { CandidateProfile, ParsedQuery } from "@/types/search";
+import { scoreCandidateMatch, prepareCandidateForScoring } from "@/actions/scoring";
 
 /**
- * Create or update a candidate in the database
- * @param data - Candidate data
- * @returns The candidate ID
+ * Transform API CandidateProfile to database candidate format
  */
-export async function createOrUpdateCandidate(data: {
-  linkedinUrl: string;
-  linkedinUsername?: string;
-  source?: 'rapidapi';
-}) {
-  console.log("[Candidates] Creating or updating candidate:", data.linkedinUrl);
-
-  try {
-    // Check if candidate already exists
-    const existing = await db.query.candidates.findFirst({
-      where: eq(candidates.linkedinUrl, data.linkedinUrl),
-    });
-
-    if (existing) {
-      console.log("[Candidates] Candidate already exists:", existing.id);
-      return { success: true, candidateId: existing.id };
-    }
-
-    // Create new candidate
-    const candidateId = generateId();
-    await db.insert(candidates).values({
-      id: candidateId,
-      linkedinUrl: data.linkedinUrl,
-      linkedinUsername: data.linkedinUsername,
-      source: data.source || 'rapidapi',
-      scrapeStatus: 'pending',
-    });
-
-    console.log("[Candidates] Created new candidate:", candidateId);
-    return { success: true, candidateId };
-  } catch (error) {
-    console.error("[Candidates] Error creating candidate:", error);
-    throw error;
-  }
-}
-
-/**
- * Transform RapidAPI response to candidate data format
- * (Helper function, not exported as Server Action)
- */
-function transformRapidApiToCandidate(rapidApiData: any, rapidApiResult: PeopleSearchResult) {
-  const person = rapidApiResult.person;
+function transformCandidateToDb(candidate: CandidateProfile) {
+  const rawData = candidate.raw_data;
   
   return {
-    linkedinUrn: rapidApiData.urn || null,
-    fullName: person.full_name || null,
-    firstName: person.first_name || null,
-    lastName: person.last_name || null,
-    headline: person.headline || null,
-    summary: person.description || null,
-    photoUrl: person.photo || null,
-    coverUrl: null, // RapidAPI doesn't provide cover photo
-    location: person.location ? JSON.stringify({ 
-      name: person.location.name,
-      id: person.location.id 
-    }) : null,
-    isPremium: false, // TODO: Extract from raw data if available
-    isInfluencer: false, // TODO: Extract from raw data if available
-    followerCount: rapidApiData.followers || null,
-    connectionCount: rapidApiData.connections || null,
-    experiences: person.roles ? JSON.stringify(person.roles) : null,
-    educations: person.educations ? JSON.stringify(person.educations) : null,
-    skills: person.skills ? JSON.stringify(person.skills) : null,
-    certifications: person.certifications ? JSON.stringify(person.certifications) : null,
-    languages: person.languages ? JSON.stringify(person.languages) : null,
-    publications: null, // TODO: Extract if available
-    rawData: JSON.stringify(rapidApiData),
+    linkedinUrl: candidate.linkedinUrl || "",
+    linkedinUsername: candidate.publicIdentifier || null,
+    linkedinUrn: candidate.id || null,
+    fullName: candidate.fullName || null,
+    firstName: candidate.firstName || null,
+    lastName: candidate.lastName || null,
+    headline: candidate.headline || null,
+    position: candidate.position || rawData?.experience?.find((e: any) => !e.endDate || e.endDate.text === 'Present' || e.endDate?.text?.toLowerCase() === 'present')?.position || null,
+    summary: candidate.summary || null,
+    photoUrl: rawData?.profilePicture?.url || rawData?.photo || null,
+    registeredAt: rawData?.registeredAt ? new Date(rawData.registeredAt) : null,
+    topSkills: rawData?.topSkills || null,
+    openToWork: rawData?.openToWork || false,
+    hiring: rawData?.hiring || false,
+    location: candidate.location ? JSON.stringify(candidate.location) : null,
+    locationText: candidate.location_text || candidate.location?.linkedinText || null,
+    email: candidate.email || null,
+    isPremium: rawData?.premium || false,
+    followerCount: rawData?.followerCount || null,
+    connectionCount: rawData?.connectionsCount || null,
+    currentPositions: rawData?.currentPosition ? JSON.stringify(rawData.currentPosition) : null,
+    experiences: rawData?.experience ? JSON.stringify(rawData.experience) : 
+                 (candidate.experiences ? JSON.stringify(candidate.experiences) : null),
+    educations: candidate.educations ? JSON.stringify(candidate.educations) : null,
+    certifications: rawData?.certifications ? JSON.stringify(rawData.certifications) : null,
+    recommendations: rawData?.receivedRecommendations ? JSON.stringify(rawData.receivedRecommendations) : null,
+    skills: candidate.skills ? JSON.stringify(candidate.skills) : null,
+    languages: rawData?.languages ? JSON.stringify(rawData.languages) : null,
+    projects: rawData?.projects ? JSON.stringify(rawData.projects) : null,
+    publications: rawData?.publications ? JSON.stringify(rawData.publications) : null,
+    featured: rawData?.featured ? JSON.stringify(rawData.featured) : null,
+    verified: rawData?.verified || false,
+    sourceData: rawData ? JSON.stringify(rawData) : null,
   };
 }
 
 /**
- * Save scraped profile data to the database
- * @param candidateId - The candidate ID
- * @param rapidApiResponse - The raw RapidAPI response
- * @param transformedData - The transformed PeopleSearchResult
+ * Save candidates from search API to database
+ * Creates or updates candidates, links them to the search
+ * NOTE: Scoring is now triggered from the client side for better UX
  */
-export async function saveCandidateProfile(
-  candidateId: string,
-  rapidApiResponse: any,
-  transformedData: PeopleSearchResult
-) {
-  console.log("[Candidates] Saving profile data for candidate:", candidateId);
+export async function saveCandidatesFromSearch(
+  searchId: string,
+  candidateProfiles: CandidateProfile[],
+  rawText: string,
+  parsedQuery: ParsedQuery
+): Promise<{ success: boolean; saved: number; linked: number; scored: number }> {
+  console.log("[Candidates] Saving", candidateProfiles.length, "candidates for search:", searchId);
+  
+  let saved = 0;
+  let linked = 0;
+
+  // Step 1: Save all candidates to database first (fast)
+  const candidateMap: Map<string, { candidateId: string; searchCandidateId: string; data: any }> = new Map();
+
+  for (const profile of candidateProfiles) {
+    try {
+      if (!profile.linkedinUrl) {
+        console.log("[Candidates] Skipping candidate without LinkedIn URL");
+        continue;
+      }
+
+      // Check if candidate already exists
+      const existing = await db.query.candidates.findFirst({
+        where: eq(candidates.linkedinUrl, profile.linkedinUrl),
+      });
+
+      let candidateId: string;
+      const candidateData = transformCandidateToDb(profile);
+
+      if (existing) {
+        candidateId = existing.id;
+        // Update existing candidate with fresh data
+        await db
+          .update(candidates)
+          .set({
+            ...candidateData,
+            updatedAt: new Date(),
+          })
+          .where(eq(candidates.id, candidateId));
+        console.log("[Candidates] Updated existing candidate:", candidateId);
+      } else {
+        // Create new candidate
+        candidateId = generateId();
+        await db.insert(candidates).values({
+          id: candidateId,
+          ...candidateData,
+        });
+        saved++;
+        console.log("[Candidates] Created new candidate:", candidateId);
+      }
+
+      // Link candidate to search (if not already linked)
+      const existingLink = await db.query.searchCandidates.findFirst({
+        where: and(
+          eq(searchCandidates.searchId, searchId),
+          eq(searchCandidates.candidateId, candidateId)
+        ),
+      });
+
+      let searchCandidateId: string;
+
+      if (!existingLink) {
+        searchCandidateId = generateId();
+        await db.insert(searchCandidates).values({
+          id: searchCandidateId,
+          searchId,
+          candidateId,
+          sourceProvider: "api",
+          status: "new",
+        });
+        linked++;
+        console.log("[Candidates] Linked candidate to search:", searchCandidateId);
+      } else {
+        searchCandidateId = existingLink.id;
+        console.log("[Candidates] Candidate already linked to search");
+      }
+
+      // Store for parallel scoring
+      candidateMap.set(profile.linkedinUrl, {
+        candidateId,
+        searchCandidateId,
+        data: candidateData,
+      });
+    } catch (error) {
+      console.error("[Candidates] Error processing candidate:", profile.linkedinUrl, error);
+    }
+  }
+
+  // Trigger batch scoring for newly linked candidates
+  const searchCandidateIdsToScore = Array.from(candidateMap.values())
+    .map(c => c.searchCandidateId);
+    
+  if (searchCandidateIdsToScore.length > 0) {
+    console.log("[Candidates] Triggering batch scoring for", searchCandidateIdsToScore.length, "candidates");
+    // We don't await this to keep response fast, or we could if reliability is more important than speed
+    // Given the user wants "server triggered", we should ideally await it or ensure it runs.
+    // Since this function is called from a polled endpoint, awaiting is safer to ensure it completes.
+    await scoreBatchCandidates(searchCandidateIdsToScore);
+  }
+
+  console.log("[Candidates] All candidates saved and scored.");
+  
+  return { success: true, saved, linked, scored: searchCandidateIdsToScore.length };
+}
+
+/**
+ * Score a single candidate and update the database
+ */
+export async function scoreSingleCandidate(searchCandidateId: string) {
+  console.log("[Candidates] Scoring single candidate:", searchCandidateId);
 
   try {
-    const profileData = transformRapidApiToCandidate(rapidApiResponse, transformedData);
+    // 1. Fetch search candidate with candidate and search details
+    const searchCandidate = await db.query.searchCandidates.findFirst({
+      where: eq(searchCandidates.id, searchCandidateId),
+      with: {
+        candidate: true,
+        search: true,
+      },
+    });
 
-    await db
-      .update(candidates)
-      .set({
-        ...profileData,
-        scrapeStatus: 'completed',
-        scrapeError: null,
-        updatedAt: new Date(),
-      })
-      .where(eq(candidates.id, candidateId));
+    if (!searchCandidate) {
+      throw new Error("Search candidate not found");
+    }
 
-    console.log("[Candidates] Profile data saved successfully");
-    return { success: true };
+    if (!searchCandidate.candidate) {
+      throw new Error("Candidate profile not found");
+    }
+
+    if (!searchCandidate.search) {
+      throw new Error("Search details not found");
+    }
+
+    // 2. Prepare data for scoring
+    const candidateData = searchCandidate.candidate;
+    const searchData = searchCandidate.search;
+    
+    // Parse search params (parsedQuery)
+    let parsedQuery: ParsedQuery;
+    try {
+      parsedQuery = JSON.parse(searchData.params);
+    } catch (e) {
+      console.error("Failed to parse search params", e);
+      throw new Error("Invalid search params");
+    }
+
+    // Prepare candidate object (expanding JSON fields)
+    const candidateForScoring = prepareCandidateForScoring(candidateData);
+
+    // 3. Call scoring API
+    const scoreResult = await scoreCandidateMatch(
+      candidateForScoring,
+      parsedQuery,
+      searchData.query,
+      candidateData.id
+    );
+
+    // 4. Update database with score
+    if (scoreResult.success && scoreResult.data) {
+      const notesJson = JSON.stringify(scoreResult.data);
+      await updateMatchScore(
+        searchCandidateId,
+        scoreResult.data.match_score,
+        notesJson
+      );
+      console.log("[Candidates] Successfully scored:", searchCandidateId, "Score:", scoreResult.data.match_score);
+      return { success: true, score: scoreResult.data.match_score };
+    } else {
+      console.error("[Candidates] Failed to score:", searchCandidateId, scoreResult.error);
+      return { success: false, error: scoreResult.error };
+    }
   } catch (error) {
-    console.error("[Candidates] Error saving profile:", error);
-    throw error;
+    console.error("[Candidates] Error in scoreSingleCandidate:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
   }
 }
 
 /**
- * Update candidate scrape status
+ * Score a batch of candidates in parallel with concurrency limit
+ * This updates the database as each candidate is scored, allowing for progressive UI updates
  */
-export async function updateScrapeStatus(
-  candidateId: string,
-  status: 'pending' | 'scraping' | 'completed' | 'failed',
-  error?: string
-) {
-  console.log("[Candidates] Updating scrape status:", candidateId, status);
+export async function scoreBatchCandidates(searchCandidateIds: string[]) {
+  console.log("[Candidates] Scoring batch of candidates:", searchCandidateIds.length);
+  
+  if (searchCandidateIds.length === 0) {
+    return { success: true, scored: 0, errors: 0 };
+  }
 
-  await db
-    .update(candidates)
-    .set({
-      scrapeStatus: status,
-      scrapeError: error || null,
-      updatedAt: new Date(),
-    })
-    .where(eq(candidates.id, candidateId));
+  // 1. Fetch all search candidates at once
+  const searchCandidatesList = await db.query.searchCandidates.findMany({
+    where: inArray(searchCandidates.id, searchCandidateIds),
+    with: {
+      candidate: true,
+      search: true,
+    },
+  });
+
+  if (searchCandidatesList.length === 0) {
+    return { success: false, error: "No candidates found" };
+  }
+
+  // Use a simple concurrency limit
+  const BATCH_SIZE = 5;
+  let scoredCount = 0;
+  let errorCount = 0;
+
+  for (let i = 0; i < searchCandidatesList.length; i += BATCH_SIZE) {
+    const batch = searchCandidatesList.slice(i, i + BATCH_SIZE);
+    
+    const results = await Promise.all(batch.map(async (searchCandidate) => {
+      try {
+        if (!searchCandidate.candidate || !searchCandidate.search) {
+          return false;
+        }
+
+        const candidateData = searchCandidate.candidate;
+        const searchData = searchCandidate.search;
+        
+        let parsedQuery: ParsedQuery;
+        try {
+          parsedQuery = JSON.parse(searchData.params);
+        } catch (e) {
+          return false;
+        }
+
+        const candidateForScoring = prepareCandidateForScoring(candidateData);
+
+        const scoreResult = await scoreCandidateMatch(
+          candidateForScoring,
+          parsedQuery,
+          searchData.query,
+          candidateData.id
+        );
+
+        if (scoreResult.success && scoreResult.data) {
+          const notesJson = JSON.stringify(scoreResult.data);
+          await updateMatchScore(
+            searchCandidate.id,
+            scoreResult.data.match_score,
+            notesJson
+          );
+          console.log("[Candidates] Batch: Scored:", searchCandidate.id, "Score:", scoreResult.data.match_score);
+          return true;
+        }
+        return false;
+      } catch (error) {
+        console.error("[Candidates] Batch: Error scoring:", searchCandidate.id, error);
+        return false;
+      }
+    }));
+    
+    scoredCount += results.filter(Boolean).length;
+    errorCount += results.filter(r => !r).length;
+  }
+
+  return { success: true, scored: scoredCount, errors: errorCount };
 }
 
 /**
@@ -150,9 +328,6 @@ export async function getCandidateByLinkedinUrl(linkedinUrl: string) {
 export async function getCandidateById(candidateId: string) {
   return await db.query.candidates.findFirst({
     where: eq(candidates.id, candidateId),
-    with: {
-      contacts: true,
-    },
   });
 }
 
@@ -164,19 +339,19 @@ export async function getCandidatesForSearch(
   options?: {
     scoreMin?: number;
     scoreMax?: number;
+    page?: number;
+    limit?: number;
+    sortBy?: string;
   }
 ) {
   console.log("[Candidates] Fetching candidates for search:", searchId, "with options:", options);
 
-  // Build where conditions
   const conditions = [eq(searchCandidates.searchId, searchId)];
   
-  // Add score filtering if provided
   if (options?.scoreMin !== undefined || options?.scoreMax !== undefined) {
     const scoreConditions = [];
     
     if (options.scoreMin !== undefined && options.scoreMax !== undefined) {
-      // Include candidates within range OR candidates without scores
       scoreConditions.push(
         and(
           gte(searchCandidates.matchScore, options.scoreMin),
@@ -189,25 +364,86 @@ export async function getCandidatesForSearch(
       scoreConditions.push(lte(searchCandidates.matchScore, options.scoreMax));
     }
     
-    // Always include candidates without scores (null)
     scoreConditions.push(isNull(searchCandidates.matchScore));
     
-    conditions.push(or(...scoreConditions));
+    if (scoreConditions.length > 0) {
+      const orCondition = or(...scoreConditions);
+      if (orCondition) {
+        conditions.push(orCondition);
+      }
+    }
+  }
+
+  // Get total count for pagination
+  const [totalResult] = await db
+    .select({ count: count() })
+    .from(searchCandidates)
+    .where(and(...conditions));
+    
+  const total = totalResult?.count || 0;
+  
+  // Pagination
+  const page = options?.page || 1;
+  const limit = options?.limit || 10;
+  const offset = (page - 1) * limit;
+
+  // Determine order
+  const sortBy = options?.sortBy || "date-desc";
+  let orderBy;
+
+  switch (sortBy) {
+    case "date-desc":
+      orderBy = [desc(searchCandidates.createdAt)];
+      break;
+    case "date-asc":
+      orderBy = [asc(searchCandidates.createdAt)];
+      break;
+    case "score-desc":
+      orderBy = [desc(searchCandidates.matchScore)]; // Postgres default puts NULLs first for DESC, but we want them last usually? 
+      // Actually Drizzle/Postgres default for DESC is NULLS FIRST. 
+      // We generally want scored candidates to appear first.
+      // So we should use nullsLast if supported, or sort by status/null check.
+      // But Drizzle desc() returns a standardized object.
+      // Let's use raw SQL or check if .nullsLast() is available in the version.
+      // Assuming standard Drizzle usage, let's try to be safe.
+      // Actually, simple desc() might be annoying if unscored candidates pop to top.
+      // Let's rely on the filter (isNull push) we added earlier?
+      // Wait, getCandidatesForSearch has:
+      // scoreConditions.push(isNull(searchCandidates.matchScore));
+      // if (orCondition) conditions.push(orCondition);
+      
+      // If we are showing "All" (0+), we include NULLs.
+      // If we sort by score desc, we want 100, 99... NULL.
+      // Postgres: ORDER BY score DESC NULLS LAST.
+      break;
+    case "score-asc":
+      orderBy = [asc(searchCandidates.matchScore)];
+      break;
+    default:
+      orderBy = [desc(searchCandidates.createdAt)];
   }
 
   const results = await db.query.searchCandidates.findMany({
     where: and(...conditions),
     with: {
-      candidate: {
-        with: {
-          contacts: true,
-        },
-      },
+      candidate: true,
     },
+    limit,
+    offset,
+    orderBy,
   });
 
-  console.log("[Candidates] Found", results.length, "candidates");
-  return results;
+  console.log("[Candidates] Found", results.length, "candidates (Total:", total, ")");
+  
+  return {
+    data: results,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    }
+  };
 }
 
 /**
@@ -227,7 +463,7 @@ export async function addCandidateToSearch(
     searchId,
     candidateId,
     sourceProvider,
-    status: 'new',
+    status: "new",
   });
 
   console.log("[Candidates] Created search_candidate:", searchCandidateId);
@@ -261,7 +497,7 @@ export async function updateMatchScore(
  */
 export async function updateCandidateStatus(
   searchCandidateId: string,
-  status: 'new' | 'reviewing' | 'contacted' | 'rejected' | 'hired',
+  status: "new" | "reviewing" | "contacted" | "rejected" | "hired",
   notes?: string
 ) {
   console.log("[Candidates] Updating candidate status:", searchCandidateId, status);
@@ -284,35 +520,16 @@ export async function updateCandidateStatus(
 export async function getSearchProgress(searchId: string) {
   const results = await db.query.searchCandidates.findMany({
     where: eq(searchCandidates.searchId, searchId),
-    with: {
-      candidate: {
-        columns: {
-          scrapeStatus: true,
-        },
-      },
-    },
   });
 
   const total = results.length;
-  const pending = results.filter(r => r.candidate.scrapeStatus === 'pending').length;
-  const scraping = results.filter(r => r.candidate.scrapeStatus === 'scraping').length;
-  const completed = results.filter(r => r.candidate.scrapeStatus === 'completed').length;
-  const failed = results.filter(r => r.candidate.scrapeStatus === 'failed').length;
-  
-  // Track scoring progress
   const scored = results.filter(r => r.matchScore !== null).length;
-  const unscored = results.filter(r => r.candidate.scrapeStatus === 'completed' && r.matchScore === null).length;
+  const unscored = total - scored;
 
   return {
     total,
-    pending,
-    scraping,
-    completed,
-    failed,
     scored,
     unscored,
-    isScrapingComplete: pending === 0 && scraping === 0,
-    isScoringComplete: pending === 0 && scraping === 0 && unscored === 0,
+    isScoringComplete: unscored === 0,
   };
 }
-

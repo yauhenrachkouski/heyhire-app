@@ -1,105 +1,111 @@
-"use server";
 
-import Anthropic from "@anthropic-ai/sdk";
-import { z } from "zod";
-import type { ParsedQuery } from "@/types/search";
-import { getDefaultScoringPrompt, buildScoringPrompt } from "@/lib/scoring-prompt";
+import { getErrorMessage } from "@/lib/handle-error";
+import { scoreResultSchema, type ScoreResult, type ParsedQuery } from "@/types/search";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-});
+const API_BASE_URL = "http://57.131.25.45";
 
-// Schema for Claude's scoring response
-const candidateScoringSchema = z.object({
-  score: z.number().min(0).max(100),
-  pros: z.array(z.string()).max(5),
-  cons: z.array(z.string()).max(5),
-});
+export function prepareCandidateForScoring(candidateData: any) {
+  const experiences = typeof candidateData.experiences === 'string' 
+    ? JSON.parse(candidateData.experiences) 
+    : candidateData.experiences;
+  
+  const educations = typeof candidateData.educations === 'string' 
+    ? JSON.parse(candidateData.educations) 
+    : candidateData.educations;
+    
+  const location = typeof candidateData.location === 'string' 
+    ? JSON.parse(candidateData.location) 
+    : candidateData.location;
 
-// Type for the scoring result (internal use only)
-type CandidateScoreResult = z.infer<typeof candidateScoringSchema>;
+  const filteredExperiences = Array.isArray(experiences) 
+    ? experiences.map((exp: any) => ({
+        position: exp.position || exp.title,
+        skills: exp.skills,
+        startDate: exp.startDate,
+        endDate: exp.endDate,
+        isCurrent: exp.isCurrent,
+        // meaningful description if needed, but user didn't explicitly ask for it in experience, 
+        // though "description" was in the top level list.
+        description: exp.description 
+      }))
+    : [];
+
+  const filteredEducations = Array.isArray(educations) 
+    ? educations.map((edu: any) => ({
+        schoolName: edu.school || edu.schoolName,
+        degree: edu.degree,
+        skills: edu.skills,
+        fieldOfStudy: edu.fieldOfStudy,
+        startDate: edu.startDate,
+        endDate: edu.endDate
+      }))
+    : [];
+
+  return {
+    headline: candidateData.headline,
+    about: candidateData.summary,
+    summary: candidateData.summary,
+    location: location,
+    location_text: candidateData.locationText || candidateData.location_text,
+    position: candidateData.position,
+    experiences: filteredExperiences,
+    educations: filteredEducations,
+    skills: typeof candidateData.skills === 'string' ? JSON.parse(candidateData.skills) : candidateData.skills
+  };
+}
 
 /**
- * Score a candidate against search criteria using Claude
+ * Score a candidate against search criteria using external API
  * @param candidate - The candidate data from the database
  * @param parsedQuery - The parsed search query
- * @param customPrompt - Optional custom scoring prompt
- * @returns Score result with pros, cons, and overall score
+ * @param rawText - The original search query text
+ * @param candidateId - The candidate's database ID
+ * @returns Score result with match score, verdict, and detailed reasoning
  */
 export async function scoreCandidateMatch(
   candidate: any,
   parsedQuery: ParsedQuery,
-  customPrompt?: string | null
-): Promise<{ success: boolean; data?: CandidateScoreResult; error?: string }> {
+  rawText: string,
+  candidateId: string
+): Promise<{ success: boolean; data?: ScoreResult; error?: string }> {
   try {
-    console.log("[Scoring] Scoring candidate:", candidate.id);
-    console.log("[Scoring] Against query:", parsedQuery);
+    console.log("[Scoring] Scoring candidate:", candidateId);
+    console.log("[Scoring] Raw text:", rawText);
 
-    // Parse JSON fields
-    const experiences = candidate.experiences ? JSON.parse(candidate.experiences) : [];
-    const skills = candidate.skills ? JSON.parse(candidate.skills) : [];
-    const educations = candidate.educations ? JSON.parse(candidate.educations) : [];
-    const location = candidate.location ? JSON.parse(candidate.location) : null;
+    const requestId = `score_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-    // Get current role
-    const currentExperience = experiences[0] || {};
-
-    // Use custom prompt or default
-    const customRules = customPrompt || getDefaultScoringPrompt();
-
-    // Build complete prompt with custom rules wrapped by format requirements
-    const prompt = buildScoringPrompt(
-      customRules,
-      parsedQuery.job_title || 'Not specified',
-      parsedQuery.location ? JSON.stringify(parsedQuery.location) : 'Not specified',
-      parsedQuery.skills ? JSON.stringify(parsedQuery.skills) : 'Not specified',
-      parsedQuery.years_of_experience ? `${parsedQuery.years_of_experience} years` : 'Not specified',
-      parsedQuery.industry || 'Not specified',
-      candidate.fullName || 'Unknown',
-      currentExperience.role_title || 'No current role',
-      currentExperience.organization_name || 'Unknown',
-      location?.name || 'Unknown',
-      skills.map((s: any) => s.name).join(', ') || 'None listed',
-      experiences.length.toString(),
-      `${educations[0]?.degree || 'Not specified'} from ${educations[0]?.school_name || 'Not specified'}`
-    );
-
-    console.log("[Scoring] Sending to Claude for evaluation...");
-
-    const message = await anthropic.messages.create({
-      model: "claude-haiku-4-5",
-      max_tokens: 1024,
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
+    // Call external scoring API
+    const response = await fetch(`${API_BASE_URL}/api/v2/candidates/score`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        raw_text: rawText,
+        parsed_with_criteria: parsedQuery,
+        candidate: candidate,
+        request_id: requestId,
+        candidate_id: candidateId,
+      }),
     });
 
-    // Extract the response text
-    const responseText = message.content[0].type === "text" 
-      ? message.content[0].text 
-      : "";
-
-    console.log("[Scoring] Claude raw response:", responseText);
-
-    // Clean up the response (remove markdown if present)
-    let cleanedResponse = responseText.trim();
-    if (cleanedResponse.startsWith("```json")) {
-      cleanedResponse = cleanedResponse.replace(/```json\n?/g, "").replace(/```\n?/g, "");
-    } else if (cleanedResponse.startsWith("```")) {
-      cleanedResponse = cleanedResponse.replace(/```\n?/g, "");
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[Scoring] API error:", response.status, errorText);
+      throw new Error(`Scoring API error: ${response.status} - ${errorText}`);
     }
 
-    // Parse and validate the JSON response
-    const parsed = JSON.parse(cleanedResponse);
-    const validated = candidateScoringSchema.parse(parsed);
+    const data = await response.json();
+    console.log("[Scoring] API response:", data);
 
-    console.log("[Scoring] Validated score:", {
-      score: validated.score,
-      prosCount: validated.pros.length,
-      consCount: validated.cons.length,
+    // Validate and parse response
+    const validated = scoreResultSchema.parse(data);
+
+    console.log("[Scoring] Score result:", {
+      candidateId: validated.candidate_id,
+      matchScore: validated.match_score,
+      verdict: validated.verdict,
+      totalPenalty: validated.total_penalty,
     });
 
     return {
@@ -107,7 +113,7 @@ export async function scoreCandidateMatch(
       data: validated,
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = getErrorMessage(error);
     console.error("[Scoring] Error scoring candidate:", errorMessage);
     return {
       success: false,
@@ -115,4 +121,3 @@ export async function scoreCandidateMatch(
     };
   }
 }
-

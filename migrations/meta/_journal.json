@@ -50,6 +50,41 @@
       "when": 1763233161161,
       "tag": "0006_spotty_dazzler",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1765376000000,
+      "tag": "0007_update_candidates_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1765394925638,
+      "tag": "0008_open_giant_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1765406231222,
+      "tag": "0009_yummy_xavin",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1765410208038,
+      "tag": "0010_acoustic_swordsman",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1765410623524,
+      "tag": "0011_nebulous_ikaris",
+      "breakpoints": true
     }
   ]
 }
