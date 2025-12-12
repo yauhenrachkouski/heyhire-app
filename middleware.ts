@@ -1,8 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
+import { logger } from "@/lib/axiom/server";
+import { transformMiddlewareRequest } from "@axiomhq/nextjs";
+import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import type { NextFetchEvent, NextRequest } from "next/server";
 
-export async function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest, event: NextFetchEvent) {
+	logger.info(...transformMiddlewareRequest(request));
+
+	event.waitUntil(logger.flush());
+
 	const session = await auth.api.getSession({
 		headers: await headers()
 	});

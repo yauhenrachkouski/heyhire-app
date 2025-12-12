@@ -9,7 +9,7 @@ import { AppliedFilters } from "@/components/search/applied-filters";
 import { InlineFilters } from "@/components/search/inline-filters";
 import { Button } from "@/components/ui/button";
 import { Plus, Pencil } from "lucide-react";
-import SourcingLoader from "@/components/SourcingLoader";
+import SourcingLoader from "@/components/search/sourcing-custom-loader";
 import { updateSearchName } from "@/actions/search";
 import { useToast } from "@/hooks/use-toast";
 import { useSearchRealtime } from "@/hooks/use-search-realtime";

@@ -7,3 +7,6 @@ export const maxDuration = 300;
 // Standard realtime handler
 // Clients connect with: GET /api/realtime?channel=search:123
 export const GET = handle({ realtime });
+
+
+

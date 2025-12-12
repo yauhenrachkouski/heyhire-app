@@ -1,6 +1,6 @@
 "use client"
 
-import { DevTools } from "@/components/devtools"
+import { DevTools } from "@/components/dev/devtools"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { RealtimeProvider } from "@upstash/realtime/client"
 import { useState } from "react"

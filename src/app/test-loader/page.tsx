@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
 import { IconSearch, IconCheck, IconAlertCircle } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import SourcingLoader from "@/components/SourcingLoader";
+import SourcingLoader from "@/components/search/sourcing-custom-loader";
 import { SearchLoadingProgress } from "@/components/search/search-loading-progress";
 
 type SearchStatus = "idle" | "generating" | "executing" | "polling" | "completed" | "error";
@@ -98,6 +98,9 @@ export default function TestLoaderPage() {
     </div>
   );
 }
+
+
+
 
 
 

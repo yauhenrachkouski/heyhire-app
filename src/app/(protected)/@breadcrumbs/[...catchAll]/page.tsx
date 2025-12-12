@@ -1,4 +1,4 @@
-import { Breadcrumbs } from "@/components/breadcrumbs"
+import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 
 export const dynamic = 'force-dynamic'
 
