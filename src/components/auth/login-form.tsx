@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { authClient } from '@/lib/auth-client'
 import { toast } from 'sonner'
 import googleIcon from '@/assets/google-icon.svg'
+import heyhireLogo from '@/assets/heyhire_logo.svg'
 
 async function signInWithGoogle() {
   try {
@@ -109,7 +110,7 @@ export function LoginForm({ initialError }: { initialError?: string }) {
       <CardHeader className="text-left space-y-6">
         <a href="/" className="flex items-center gap-2 font-medium">
           <Image
-            src="/heyhire_logo.svg"
+            src={heyhireLogo}
             alt="HeyHire"
             width={100}
             height={25}

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import Image from 'next/image'
 import { headers } from 'next/headers'
 import { OnboardingForm } from '@/components/auth/onboarding-form'
+import heyhireLogo from '@/assets/heyhire_logo.svg'
 
 export default async function OnboardingPage() {
   const session = await auth.api.getSession({
@@ -18,7 +19,7 @@ export default async function OnboardingPage() {
       <div className="flex justify-center gap-2 md:justify-start">
         <a href="/" className="flex items-center gap-2 font-medium">
           <Image
-            src="/heyhire_logo.svg"
+            src={heyhireLogo}
             alt="HeyHire"
             width={100}
             height={25}

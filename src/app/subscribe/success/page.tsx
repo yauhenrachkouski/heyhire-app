@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { IconCheck, IconArrowRight } from "@tabler/icons-react";
 import Image from "next/image";
 import { SupportModal } from "@/components/sidebar/support-modal";
+import heyhireLogo from "@/assets/heyhire_logo.svg";
 
 export default function SubscribeSuccessPage() {
   const router = useRouter();
@@ -54,7 +55,7 @@ export default function SubscribeSuccessPage() {
       <div className="flex justify-center gap-2 md:justify-start">
         <a href="/" className="flex items-center gap-2 font-medium">
           <Image
-            src="/heyhire_logo.svg"
+            src={heyhireLogo}
             alt="HeyHire"
             width={100}
             height={25}
