@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { 
   IconLoader2, 
@@ -30,7 +29,7 @@ import {
   IconCode,
   IconCertificate,
   IconTargetArrow,
-  IconBan
+  IconBan,
 } from "@tabler/icons-react";
 import { parseJob } from "@/actions/jobs";
 import type { ParsedQuery, SourcingCriteria } from "@/types/search";
@@ -48,6 +47,207 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { SearchInterpretation } from "@/components/search/search-interpretation";
+
+function RunSearchButton({
+  onClick,
+  disabled,
+}: {
+  onClick: () => void | Promise<void>;
+  disabled: boolean;
+}) {
+  return (
+    <div className="pt-3 border-t border-border/30 bg-background">
+      <Button type="button" onClick={onClick} disabled={disabled} className="w-full">
+        Run search
+      </Button>
+    </div>
+  );
+}
+
+function BottomToolbar({
+  queryLength,
+  maxQueryLength,
+  isTooLong,
+  isRecording,
+  isParsing,
+  showScenarios,
+  canToggleScenarios,
+  scenariosCount,
+  onMicClick,
+  onToggleScenarios,
+}: {
+  queryLength: number;
+  maxQueryLength: number;
+  isTooLong: boolean;
+  isRecording: boolean;
+  isParsing: boolean;
+  showScenarios: boolean;
+  canToggleScenarios: boolean;
+  scenariosCount: number;
+  onMicClick: () => void | Promise<void>;
+  onToggleScenarios: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between px-3 pb-3 pt-1 bg-background border-t border-border/10">
+      <div className="flex items-center gap-1">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={onMicClick}
+                className={cn(
+                  "rounded-md transition-colors",
+                  isRecording
+                    ? "bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+              >
+                <IconMicrophone className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Voice Message</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <div className="h-4 w-px bg-border/50 mx-2" />
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onToggleScenarios}
+          className={cn(
+            "flex items-center gap-2 px-2 py-1.5 h-auto text-sm rounded-md transition-colors",
+            "transition-[width,height,opacity] duration-200",
+            showScenarios
+              ? "bg-muted text-foreground font-medium"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted",
+            !canToggleScenarios && "opacity-0 pointer-events-none w-0 p-0 overflow-hidden"
+          )}
+        >
+          {isParsing ? (
+            <IconLoader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <IconSparkles className="h-4 w-4" />
+          )}
+          <span className="font-mono text-sm">Matching criteria</span>
+          <Badge className="rounded-full px-1.5 flex items-center justify-center text-[10px] bg-muted text-foreground border border-border">
+            {scenariosCount}
+          </Badge>
+        </Button>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-mono">
+          <span className={cn(isTooLong ? "text-destructive" : "text-muted-foreground")}>{queryLength}</span>
+          <span className="text-muted-foreground"> / {maxQueryLength.toLocaleString()}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ScenarioGroupList({
+  sortedGroups,
+  groupedScenarios,
+  selectedScenarios,
+  onScenarioToggle,
+  onImportanceChange,
+  getCategoryIcon,
+  getCategoryDisplayName,
+}: {
+  sortedGroups: string[];
+  groupedScenarios: Record<string, Scenario[]>;
+  selectedScenarios: string[];
+  onScenarioToggle: (id: string) => void;
+  onImportanceChange: (id: string, importance: "low" | "medium" | "high") => void;
+  getCategoryIcon: (category: string) => React.ReactNode;
+  getCategoryDisplayName: (category: string) => string;
+}) {
+  return (
+    <div className="space-y-6 overflow-y-auto flex-1 pb-4">
+      {sortedGroups.map((groupName) => (
+        <div key={groupName} className="space-y-3">
+          <h4 className="text-xs font-bold text-foreground uppercase tracking-wider border-b border-border/30 pb-2">
+            {groupName}
+          </h4>
+
+          <div className="space-y-2">
+            {groupedScenarios[groupName].map((scenario) => (
+              <div
+                key={scenario.id}
+                className={cn(
+                  "flex items-center justify-between gap-3 bg-background border border-border/50 p-2.5 rounded-lg transition-colors hover:border-border group/item",
+                  !selectedScenarios.includes(scenario.id) && "opacity-40"
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => onScenarioToggle(scenario.id)}
+                  className="flex items-center gap-2.5 flex-1 min-w-0 text-left"
+                >
+                  <span className="text-muted-foreground/70 shrink-0">{getCategoryIcon(scenario.category)}</span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                      {getCategoryDisplayName(scenario.category)}
+                    </span>
+                    <span className="text-sm font-medium truncate">{scenario.value}</span>
+                  </div>
+                </button>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <TooltipProvider>
+                    <Tooltip delayDuration={0}>
+                      <TooltipTrigger asChild>
+                        <IconInfoCircle className="size-3.5 text-muted-foreground/40 hover:text-muted-foreground cursor-help transition-colors" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" align="end">
+                        <div className="flex flex-col gap-1">
+                          <p className="font-medium border-b border-background/20 pb-1 mb-1">Match Importance</p>
+                          <div className="grid grid-cols-[32px_1fr] gap-2">
+                            <span className="font-medium opacity-70">Low</span>
+                            <span>Nice to have</span>
+                          </div>
+                          <div className="grid grid-cols-[32px_1fr] gap-2">
+                            <span className="font-medium opacity-70">Med</span>
+                            <span>Important</span>
+                          </div>
+                          <div className="grid grid-cols-[32px_1fr] gap-2">
+                            <span className="font-medium opacity-70">High</span>
+                            <span>Mandatory</span>
+                          </div>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <ToggleGroup
+                    type="single"
+                    value={scenario.importance}
+                    variant="outline"
+                    onValueChange={(val) => val && onImportanceChange(scenario.id, val as any)}
+                  >
+                    <ToggleGroupItem value="low" size="sm">
+                      Low
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="medium" size="sm">
+                      Med
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="high" size="sm">
+                      High
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 interface SearchInputProps {
   onQueryParsed: (query: ParsedQuery, queryText?: string, criteria?: SourcingCriteria) => void;
@@ -253,20 +453,48 @@ export function SearchInput({
   hideInterpretation = false,
   hideSearchButton = false
 }: SearchInputProps) {
+  const MAX_QUERY_LENGTH = 3000;
   const [query, setQuery] = useState("");
   const [isParsing, setIsParsing] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isTooLong, setIsTooLong] = useState(false);
   const [parsedQuery, setParsedQuery] = useState<ParsedQuery | null>(null);
   const [originalParsedQuery, setOriginalParsedQuery] = useState<ParsedQuery | null>(null);
   const [booleanSearch, setBooleanSearch] = useState("");
   const [showScenarios, setShowScenarios] = useState(false);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [selectedScenarios, setSelectedScenarios] = useState<string[]>([]);
+  const [isTextareaFocused, setIsTextareaFocused] = useState(false);
   const { toast } = useToast();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const animateTextareaHeight = (targetHeight: number) => {
+    const el = textareaRef.current;
+    if (!el) return;
+
+    const startHeight = el.getBoundingClientRect().height;
+    el.style.height = `${startHeight}px`;
+    // Force reflow so the browser acknowledges the start height before we change it
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    el.offsetHeight;
+
+    requestAnimationFrame(() => {
+      el.style.height = `${targetHeight}px`;
+    });
+
+  };
+
+  const isRunSearchDisabled =
+    isTooLong ||
+    isLoading ||
+    isSearching ||
+    isParsing ||
+    !query.trim() ||
+    scenarios.length === 0;
 
   // Update query when value prop changes
   useEffect(() => {
@@ -274,6 +502,13 @@ export function SearchInput({
       setQuery(value);
     }
   }, [value]);
+
+  useEffect(() => {
+    if (!isTextareaFocused) return;
+    if (!textareaRef.current) return;
+
+    animateTextareaHeight(textareaRef.current.scrollHeight);
+  }, [query]);
 
   // Update parsed query when scenarios are toggled
   useEffect(() => {
@@ -411,9 +646,26 @@ export function SearchInput({
       } else {
         setBooleanSearch("");
         setParsedQuery(null);
+
+        const rawError = result.error || "Failed to parse query";
+        console.error("[SearchInput] Parse failed:", rawError);
+
+        let userMessage = rawError;
+        if (/invalid json/i.test(rawError) || /output parsing/i.test(rawError)) {
+          userMessage = "The parsing service returned an invalid response. Please try again (or paste a shorter/cleaner job description).";
+        }
+        if (userMessage.startsWith("Parse API error:")) {
+          const dashIndex = userMessage.indexOf("-");
+          if (dashIndex !== -1) {
+            userMessage = userMessage.slice(dashIndex + 1).trim() || userMessage;
+          }
+        }
+        if (userMessage.length > 300) {
+          userMessage = `${userMessage.slice(0, 300)}…`;
+        }
         toast({
           title: "Error",
-          description: result.error || "Failed to parse query",
+          description: userMessage,
           variant: "destructive",
         });
       }
@@ -437,6 +689,19 @@ export function SearchInput({
     const value = e.target.value;
     setQuery(value);
     onQueryTextChange?.(value);
+
+    if (value.length > MAX_QUERY_LENGTH) {
+      setIsTooLong(true);
+      setBooleanSearch("");
+      setParsedQuery(null);
+      setOriginalParsedQuery(null);
+      setShowScenarios(false);
+      setScenarios([]);
+      setSelectedScenarios([]);
+      return;
+    }
+
+    setIsTooLong(false);
     debouncedParse(value);
   };
 
@@ -510,6 +775,18 @@ export function SearchInput({
       onQueryTextChange?.(newQuery);
 
       // Automatically parse the transcribed text
+      if (newQuery.length > MAX_QUERY_LENGTH) {
+        setIsTooLong(true);
+        setBooleanSearch("");
+        setParsedQuery(null);
+        setOriginalParsedQuery(null);
+        setShowScenarios(false);
+        setScenarios([]);
+        setSelectedScenarios([]);
+        return;
+      }
+
+      setIsTooLong(false);
       await handleParse(transcribedText);
     } catch (error) {
       console.error("Transcription error:", error);
@@ -526,6 +803,7 @@ export function SearchInput({
 
   const handleButtonClick = async () => {
     if (!onSearch) return;
+    if (isTooLong) return;
     setIsSearching(true);
     try {
       await onSearch();
@@ -537,7 +815,7 @@ export function SearchInput({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      if (!isParsing && !isLoading && !isSearching && query.trim() && !isRecording && !isTranscribing) {
+      if (!isTooLong && !isParsing && !isLoading && !isSearching && query.trim() && !isRecording && !isTranscribing) {
         handleButtonClick();
       }
     }
@@ -599,7 +877,10 @@ export function SearchInput({
   });
 
   return (
-    <div className={cn("relative group", className)}>
+    <div
+      className={cn("relative group", className)}
+      data-collapsible={showScenarios ? "open" : "icon"}
+    >
       {/* Gradient Tongue Element */}
       <div className="absolute -top-8 left-0 z-0 w-full h-9">
         <div 
@@ -618,228 +899,96 @@ export function SearchInput({
       <div className="relative rounded-2xl rounded-tl-none p-[2px] bg-gradient-to-r from-black to-black animate-gradient-x z-10">
         <div className="relative bg-background rounded-xl overflow-hidden flex flex-col">
           {/* Input Area Wrapper */}
-          <div className="relative">
-            <Textarea
+          <div className="flex flex-col">
+            <textarea
+              data-slot="textarea"
+              ref={textareaRef}
               placeholder={isParsing ? "Preparing search scenarios..." : "Software engineer with next.js skills living in Miami"}
               value={query}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
+              onFocus={() => {
+                setIsTextareaFocused(true);
+                if (textareaRef.current) {
+                  animateTextareaHeight(textareaRef.current.scrollHeight);
+                }
+              }}
+              onBlur={() => {
+                setIsTextareaFocused(false);
+                if (textareaRef.current) {
+                  animateTextareaHeight(110);
+                }
+              }}
               disabled={isLoading || isRecording || isTranscribing}
-              className="border-0 focus-visible:ring-0 resize-none min-h-[110px] shadow-none bg-transparent px-4 py-5 pb-16 pr-12 !text-base placeholder:text-muted-foreground/60"
+              className={cn(
+                "border-0 bg-transparent px-4 py-5 pr-12 shadow-none outline-none w-full",
+                "text-base placeholder:text-muted-foreground/60",
+                "focus-visible:ring-0",
+                "transition-[height] duration-200 ease-in-out",
+                "will-change-[height]",
+                "min-h-[110px] overflow-y-auto",
+                isTooLong && "bg-destructive/5",
+                "resize-none",
+                "max-h-[400px]"
+              )}
               rows={4}
             />
 
-            {/* Top Right Submit Button */}
-            <div className="absolute top-4 right-4 z-10">
-               <Button
-                   type="button"
-                   variant="ghost"
-                   size="icon"
-                   onClick={handleButtonClick}
-                   disabled={isLoading || isSearching || !query.trim()}
-                   className={cn(
-                     "h-9 w-9 rounded-md transition-all duration-200",
-                     (query.trim() || isParsing)
-                       ? "text-foreground hover:bg-muted" 
-                       : "text-muted-foreground cursor-not-allowed hover:bg-transparent"
-                   )}
-                 >
-                   {isSearching || isParsing ? <IconLoader2 className="h-6 w-6 animate-spin" /> : <IconSend className="size-4.5" />}
-                 </Button>
-            </div>
-
+            
             {/* Bottom Toolbar */}
-            <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-3 pb-3 pt-1 bg-muted/30 border-t border-border/10">
-              {/* Left Actions */}
-              <div className="flex items-center gap-1">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button 
-                        type="button" 
-                        variant="ghost"
-                        size="icon"
-                        onClick={handleMicClick}
-                        className={cn(
-                          "rounded-md transition-colors",
-                          isRecording ? "bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                        )}
-                      >
-                        <IconMicrophone className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Voice Message</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                
-                <div className="h-4 w-px bg-border/50 mx-2" />
-
-                <Button 
-                  type="button" 
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    if (query.trim().length > 0) {
-                      setShowScenarios(!showScenarios);
-                    }
-                  }}
-                  className={cn(
-                    "flex items-center gap-2 px-2 py-1.5 h-auto text-sm rounded-md transition-colors",
-                    showScenarios 
-                      ? "bg-muted text-foreground font-medium" 
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted",
-                    query.trim().length === 0 && "opacity-0 pointer-events-none w-0 p-0 overflow-hidden"
-                  )}
-                >
-                  {isParsing ? <IconLoader2 className="h-4 w-4 animate-spin" /> : <IconSparkles className="h-4 w-4" />}
-                  <span className="font-mono text-sm">Matching criteria</span>
-                </Button>
-              </div>
-
-              {/* Right Actions */}
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-muted-foreground font-mono">
-                  {query.length} / 3,000
-                </span>
-              </div>
-            </div>
+            <BottomToolbar
+              queryLength={query.length}
+              maxQueryLength={MAX_QUERY_LENGTH}
+              isTooLong={isTooLong}
+              isRecording={isRecording}
+              isParsing={isParsing}
+              showScenarios={showScenarios}
+              canToggleScenarios={query.trim().length > 0}
+              scenariosCount={scenarios.length}
+              onMicClick={handleMicClick}
+              onToggleScenarios={() => {
+                if (query.trim().length > 0) {
+                  setShowScenarios(!showScenarios);
+                }
+              }}
+            />
           </div>
 
           {/* Scenarios List - Grouped */}
-          {showScenarios && scenarios.length > 0 && (
-            <div className="px-4 pb-4 pt-4 space-y-6 bg-muted/10 border-t border-border/50 max-h-[400px] overflow-y-auto">
-              {sortedGroups.map((groupName) => (
-                <div key={groupName} className="space-y-3">
-                  {/* Group Header */}
-                  <h4 className="text-xs font-bold text-foreground uppercase tracking-wider border-b border-border/30 pb-2">
-                    {groupName}
-                  </h4>
-                  
-                  {/* Group Items */}
-                  <div className="space-y-2">
-                    {groupedScenarios[groupName].map((scenario) => (
-                      <div key={scenario.id} className="flex items-center justify-between gap-3 bg-background border border-border/50 p-2.5 rounded-lg transition-colors hover:border-border group/item">
-                        {/* Left: Icon + Category + Value */}
-                        <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                          <span className="text-muted-foreground/70 shrink-0">
-                            {getCategoryIcon(scenario.category)}
-                          </span>
-                          <div className="flex flex-col min-w-0">
-                            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                              {getCategoryDisplayName(scenario.category)}
-                            </span>
-                            <span className="text-sm font-medium truncate">
-                              {scenario.value}
-                            </span>
-                          </div>
-                        </div>
-                        
-                        {/* Right: Importance Toggle */}
-                        <div className="flex items-center gap-2 shrink-0">
-                          <TooltipProvider>
-                            <Tooltip delayDuration={0}>
-                              <TooltipTrigger asChild>
-                                <IconInfoCircle className="size-3.5 text-muted-foreground/40 hover:text-muted-foreground cursor-help transition-colors" />
-                              </TooltipTrigger>
-                              <TooltipContent side="top" align="end">
-                                <div className="flex flex-col gap-1">
-                                  <p className="font-medium border-b border-background/20 pb-1 mb-1">Match Importance</p>
-                                  <div className="grid grid-cols-[32px_1fr] gap-2">
-                                    <span className="font-medium opacity-70">Low</span>
-                                    <span>Nice to have</span>
-                                  </div>
-                                  <div className="grid grid-cols-[32px_1fr] gap-2">
-                                    <span className="font-medium opacity-70">Med</span>
-                                    <span>Important</span>
-                                  </div>
-                                  <div className="grid grid-cols-[32px_1fr] gap-2">
-                                    <span className="font-medium opacity-70">High</span>
-                                    <span>Mandatory</span>
-                                  </div>
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <ToggleGroup 
-                            type="single" 
-                            value={scenario.importance} 
-                            variant="outline"
-                            onValueChange={(val) => val && handleImportanceChange(scenario.id, val as any)}
-                            className="shrink-0 gap-0 border border-border rounded-md overflow-hidden"
-                          >
-                            <ToggleGroupItem 
-                              value="low" 
-                              size="sm"
-                              className={cn(
-                                "text-xs px-3 transition-all rounded-none border-0 border-r border-border",
-                                scenario.importance === "low" 
-                                  ? "bg-foreground text-background font-semibold" 
-                                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                              )}
-                            >
-                              Low
-                            </ToggleGroupItem>
-                            <ToggleGroupItem 
-                              value="medium" 
-                              size="sm"
-                              className={cn(
-                                "text-xs px-3 transition-all rounded-none border-0 border-r border-border",
-                                scenario.importance === "medium" 
-                                  ? "bg-foreground text-background font-semibold" 
-                                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                              )}
-                            >
-                              Med
-                            </ToggleGroupItem>
-                            <ToggleGroupItem 
-                              value="high" 
-                              size="sm"
-                              className={cn(
-                                "text-xs px-3 transition-all rounded-none border-0",
-                                scenario.importance === "high" 
-                                  ? "bg-foreground text-background font-semibold" 
-                                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                              )}
-                            >
-                              High
-                            </ToggleGroupItem>
-                          </ToggleGroup>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+          <div
+            className={cn(
+              "bg-muted/10 border-t border-border/50 overflow-hidden",
+              "transition-[max-height,opacity] duration-300 ease-in-out",
+              "max-h-0 opacity-0 pointer-events-none",
+              "group-data-[collapsible=open]:max-h-[400px] group-data-[collapsible=open]:opacity-100 group-data-[collapsible=open]:pointer-events-auto"
+            )}
+          >
+            <div className="px-4 pb-4 pt-4 flex flex-col max-h-[400px]">
+              {scenarios.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center py-8">
+                  <p className="text-sm text-muted-foreground">There are no job criteria</p>
                 </div>
-              ))}
+              ) : (
+                <ScenarioGroupList
+                  sortedGroups={sortedGroups}
+                  groupedScenarios={groupedScenarios}
+                  selectedScenarios={selectedScenarios}
+                  onScenarioToggle={handleScenarioToggle}
+                  onImportanceChange={handleImportanceChange}
+                  getCategoryIcon={getCategoryIcon}
+                  getCategoryDisplayName={getCategoryDisplayName}
+                />
+              )}
+
+              {!hideSearchButton && (
+                <RunSearchButton onClick={handleButtonClick} disabled={isRunSearchDisabled} />
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
       
-      {/* Helper Footer */}
-      {/* <div className="flex items-center justify-between mt-2 px-1">
-        <div className="text-sm text-muted-foreground h-5 flex items-center">
-          {(isParsing || isTranscribing) ? (
-            <span className="flex items-center gap-2 text-primary font-medium animate-pulse">
-              Analyzing requirements...
-            </span>
-          ) : (
-            "Type a job description, or paste requirements."
-          )}
-        </div>
-        <div className="hidden sm:flex items-center gap-2">
-          <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
-            <span className="text-sm">⌘</span>Enter
-          </kbd>
-          <span className="text-sm text-muted-foreground">to search</span>
-        </div>
-      </div> */}
-
-      {/* Parsed Fields Display */}
-      {/* {parsedQuery && (
-        <div className="mt-4 space-y-3">
-          {!hideInterpretation && <SearchInterpretation parsedQuery={parsedQuery} />}
-        </div>
-      )} */}
+      
     </div>
   );
 }

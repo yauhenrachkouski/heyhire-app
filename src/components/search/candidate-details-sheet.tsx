@@ -3,7 +3,7 @@
 import { X, MapPin, Calendar, ExternalLink, Plus, Star, ThumbsDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -57,9 +57,6 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
   // Extract name parts
   const fullName = candidate.fullName || "Unknown";
   const nameParts = fullName.split(" ");
-  const firstName = nameParts[0] || "";
-  const lastName = nameParts.slice(1).join(" ") || "";
-  const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
   const location = locationData?.linkedinText || locationData?.city || "";
 
   // Get current role from experiences
@@ -102,10 +99,11 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
               {/* Profile Header */}
               <div className="flex gap-4">
                 <div className="flex-shrink-0">
-                  <Avatar className="h-16 w-16">
-                    {candidate.photoUrl && <AvatarImage src={candidate.photoUrl} alt={fullName} />}
-                    <AvatarFallback className="font-bold text-sm">{initials}</AvatarFallback>
-                  </Avatar>
+                  <ProfileAvatar
+                    className="h-16 w-16"
+                    fullName={fullName}
+                    photoUrl={candidate.photoUrl}
+                  />
                 </div>
 
                 <div className="flex-1 min-w-0">

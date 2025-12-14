@@ -114,13 +114,13 @@ export default function SourcingLoader({ complete = false }: { complete?: boolea
   return (
     <div 
       ref={containerRef} 
-      className="flex size-full items-center justify-center p-4"
+      className="flex w-full items-center justify-center p-4"
       aria-label="Searching for candidates"
     >
       <svg
         viewBox="0 0 400 200"
         xmlns="http://www.w3.org/2000/svg"
-        className="h-full w-full max-w-[400px] overflow-visible"
+        className="h-[min(220px,35svh)] w-full max-w-[400px] overflow-visible"
       >
         {/* --- Candidates Group --- */}
         <g id="candidates-group">

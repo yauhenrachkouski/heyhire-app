@@ -2,13 +2,12 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import type { ParsedQuery } from "@/types/search";
 import { CandidateCardListPaginated } from "@/components/search/candidate-card-list-paginated";
 import { AppliedFilters } from "@/components/search/applied-filters";
 import { InlineFilters } from "@/components/search/inline-filters";
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil } from "lucide-react";
+import { IconPencil } from "@tabler/icons-react";
 import SourcingLoader from "@/components/search/sourcing-custom-loader";
 import { updateSearchName } from "@/actions/search";
 import { useToast } from "@/hooks/use-toast";
@@ -29,7 +28,6 @@ interface SearchResultsClientProps {
 export function SearchResultsClient({ search }: SearchResultsClientProps) {
   console.log("[SearchResultsClient] Rendering for search:", search.id);
   
-  const router = useRouter();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -320,17 +318,9 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
               onClick={() => setIsEditingName(true)}
               className="opacity-0 group-hover:opacity-100 transition-opacity" // Show on hover
             >
-              <Pencil className="h-4 w-4" />
+              <IconPencil className="h-4 w-4" />
             </Button>
           </div>
-          <Button
-            onClick={() => router.push('/search')}
-            size="sm"
-            className="shrink-0"
-          >
-            <Plus className="h-4 w-4" />
-            New search
-          </Button>
         </div>
         
         <AppliedFilters 
@@ -341,23 +331,29 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
         
       </div>
 
-      <div className="relative min-h-[500px]">
+      <div
+        className={
+          shouldShowProgressBar
+            ? "relative min-h-[min(420px,60svh)] max-h-[calc(100svh-200px)] overflow-hidden"
+            : "relative"
+        }
+      >
         {shouldShowProgressBar && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
-             <div className="w-full max-w-[400px] h-[200px] mb-8">
-               <SourcingLoader />
-             </div>
-             <div className="text-center space-y-2">
-               <h3 className="text-lg font-medium text-foreground">
-                  {realtimeMessage || "Searching for candidates..."}
-               </h3>
-               <p className="text-sm text-muted-foreground max-w-sm">This process runs in the background. You can leave and come back later.</p>
-               {realtimeProgress > 0 && (
-                 <p className="text-xs text-muted-foreground/70 font-mono">
-                   {realtimeProgress}%
-                 </p>
-               )}
-             </div>
+            <div className="w-full max-w-[400px] h-[200px] mb-8">
+              <SourcingLoader />
+            </div>
+            <div className="text-center space-y-2">
+              <h3 className="text-lg font-medium text-foreground">
+                {realtimeMessage || "Searching for candidates..."}
+              </h3>
+              <p className="text-sm text-muted-foreground max-w-sm">This process runs in the background. You can leave and come back later.</p>
+              {realtimeProgress > 0 && (
+                <p className="text-xs text-muted-foreground/70 font-mono">
+                  {realtimeProgress}%
+                </p>
+              )}
+            </div>
           </div>
         )}
 

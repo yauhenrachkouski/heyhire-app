@@ -188,6 +188,7 @@ export function CandidateCardListPaginated({
                 onSelect={(selected) => handleSelectCandidate(candidateId, selected)}
                 onAddToOutreach={handleAddToOutreach}
                 onShowCandidate={() => handleShowCandidate(searchCandidate)}
+                onCardClick={() => handleShowCandidate(searchCandidate)}
                 onEmail={handleEmail}
                 onPhone={handlePhone}
               />

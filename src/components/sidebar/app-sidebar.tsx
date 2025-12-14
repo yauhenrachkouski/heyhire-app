@@ -36,7 +36,6 @@ import { Icon, IconName } from "@/components/ui/icon"
 import { NavUser } from "@/components/sidebar/nav-user"
 import { SupportModal } from "@/components/sidebar/support-modal"
 import { CreditBalance } from "@/components/sidebar/credit-balance"
-import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import type { subscription } from "@/db/schema"
@@ -181,17 +180,21 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
                 const active = !navItem.disabled && isPathActive(pathname, navItem.url)
                 
                 return (
-                  <Button
-                    key={navItem.title}
-                    asChild
-                    variant="default"
-                    className="w-full"
-                  >
-                    <Link href={navItem.url} aria-current={active ? "page" : undefined} prefetch>
-                      {navItem.icon && <Icon name={navItem.icon} />}
-                      <span>{navItem.title}</span>
-                    </Link>
-                  </Button>
+                  <SidebarMenu key={navItem.title}>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        tooltip={navItem.title}
+                        isActive={active}
+                        className="!bg-black !text-white shadow-md transition-all active:scale-95 hover:!bg-black/90 data-[active=true]:!bg-black data-[active=true]:!text-white"
+                      >
+                        <Link href={navItem.url} aria-current={active ? "page" : undefined} prefetch>
+                          <Icon name="plus" />
+                          <span className="group-data-[collapsible=icon]:sr-only">{navItem.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </SidebarMenu>
                 )
               })}
             </SidebarGroupContent>

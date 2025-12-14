@@ -235,12 +235,33 @@ export async function parseJob(message: string): Promise<ParseQueryResponse & { 
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[Search] Parse API error:", response.status, errorText);
-      throw new Error(`Parse API error: ${response.status}`);
+      const rawBody = await response.text();
+      let detail = rawBody;
+      try {
+        const parsed = JSON.parse(rawBody) as unknown;
+        if (
+          parsed &&
+          typeof parsed === "object" &&
+          "detail" in parsed &&
+          typeof (parsed as { detail?: unknown }).detail === "string"
+        ) {
+          detail = (parsed as { detail: string }).detail;
+        }
+      } catch {
+        
+      }
+      console.error("[Search] Parse API error:", response.status, rawBody);
+      throw new Error(`Parse API error: ${response.status} ${detail ? `- ${detail}` : ""}`.trim());
     }
 
-    const data = await response.json();
+    const responseText = await response.text();
+    let data: unknown;
+    try {
+      data = JSON.parse(responseText) as unknown;
+    } catch (e) {
+      console.error("[Search] Parse response JSON error:", responseText);
+      throw new Error(`Parse API error: invalid JSON response`);
+    }
     console.log("[Search] Parse response:", JSON.stringify(data, null, 2));
 
     const validated = jobParsingResponseSchema.parse(data);

@@ -163,8 +163,5 @@
     @apply bg-border/50 hover:bg-muted-foreground/30 rounded-full transition-colors;
   }
 
-  /* Selection */
-  ::selection {
-    @apply bg-brand/20 text-foreground;
-  }
+ 
 }

@@ -1,15 +1,9 @@
 "use client";
 
 import { 
-  IconMail, 
-  IconPhone, 
-  IconPlus, 
   IconEye, 
   IconLoader2, 
-  IconCopy, 
   IconExternalLink, 
-  IconStar, 
-  IconThumbDown, 
   IconChevronDown, 
   IconChevronUp, 
   IconSparkles 
@@ -17,7 +11,7 @@ import {
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Tooltip,
@@ -25,8 +19,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { BRANDFETCH_LINKEDIN_LOGO_URL } from "@/lib/constants";
-import { toast } from "sonner";
+import { useOpenLinkedInWithCredits } from "@/hooks/use-open-linkedin-with-credits";
+
 
 interface SearchCandidate {
   id: string;
@@ -57,20 +51,20 @@ interface CandidateCardProps {
   onEmail?: () => void;
   onPhone?: () => void;
   onAddToShortlist?: () => void;
+  onCardClick?: () => void;
 }
 
 export function CandidateCard({
   searchCandidate,
   isSelected = false,
   onSelect = () => {},
-  onAddToOutreach = () => {},
   onShowCandidate = () => {},
-  onEmail = () => {},
-  onPhone = () => {},
-  onAddToShortlist = () => {},
+  onCardClick,
 }: CandidateCardProps) {
   const [expandedSkills, setExpandedSkills] = useState(false);
   const [expandedProsCons, setExpandedProsCons] = useState(false);
+
+  const { openLinkedIn, isLoading: isOpeningLinkedIn } = useOpenLinkedInWithCredits();
 
   const { candidate, matchScore, notes } = searchCandidate;
   
@@ -84,17 +78,13 @@ export function CandidateCard({
   // Extract first and last name
   const fullName = candidate.fullName || "Unknown";
   const nameParts = fullName.split(" ");
-  const firstName = nameParts[0] || "";
-  const lastName = nameParts.slice(1).join(" ") || "";
+  
   
   // Current role from first experience
   const currentExperience = experiences[0] || {};
   const currentRole = currentExperience.role_title || currentExperience.position || candidate.headline || "----";
   const organizationName = currentExperience.organization_name || currentExperience.companyName || "";
   
-  // Generate initials for fallback avatar
-  const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
-
   // Parse notes if available (contains full scoring response)
   let scoringData = null;
   if (notes) {
@@ -109,27 +99,31 @@ export function CandidateCard({
   const verdict = scoringData?.verdict;
   const reasoning = scoringData?.reasoning;
 
-  const handleOpenLinkedIn = () => {
-    if (candidate.linkedinUrl) {
-      window.open(candidate.linkedinUrl, "_blank", "noopener,noreferrer");
-    }
-  };
-
-  const handleCopyLinkedIn = async () => {
-    try {
-      await navigator.clipboard.writeText(candidate.linkedinUrl);
-      toast.success("LinkedIn URL copied to clipboard");
-    } catch (error) {
-      toast.error("Failed to copy to clipboard");
-    }
-  };
-
   return (
     <div
-      className={`group relative rounded-lg border bg-card p-4 transition-all ${
+      role={onCardClick ? "button" : undefined}
+      tabIndex={onCardClick ? 0 : undefined}
+      onClick={onCardClick}
+      onKeyDown={(e) => {
+        if (!onCardClick) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onCardClick();
+        }
+      }}
+      className={`group relative rounded-lg border bg-card p-4 transition-all outline-none ${
         isSelected ? "ring-2 ring-primary" : ""
+      } ${
+        onCardClick
+          ? "cursor-pointer hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          : ""
       }`}
     >
+
+      {/* Light hover effect */}
+      <div className="pointer-events-none absolute inset-0 rounded-lg opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+        <div className="absolute -top-16 left-1/2 h-48 w-48 -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
+      </div>
 
       <div className="flex gap-4">
         {/* Left column: Checkbox */}
@@ -137,6 +131,7 @@ export function CandidateCard({
           <Checkbox
             checked={isSelected}
             onCheckedChange={onSelect}
+            onClick={(e) => e.stopPropagation()}
             aria-label="Select candidate"
           />
         </div>
@@ -146,10 +141,11 @@ export function CandidateCard({
           <div className="flex gap-4 mb-4">
             {/* Avatar */}
             <div className="shrink-0">
-              <Avatar className="h-16 w-16">
-                {candidate.photoUrl && <AvatarImage src={candidate.photoUrl} alt={fullName} />}
-                <AvatarFallback className="text-lg">{initials}</AvatarFallback>
-              </Avatar>
+              <ProfileAvatar
+                className="h-16 w-16"
+                fullName={fullName}
+                photoUrl={candidate.photoUrl}
+              />
             </div>
 
             {/* Name and role */}
@@ -157,7 +153,7 @@ export function CandidateCard({
               <h3 className="font-semibold text-lg leading-tight">{fullName}</h3>
               
               <p className="text-sm mt-0.5">
-                {currentRole} {organizationName && `at ${organizationName}`}
+                {currentRole} {organizationName && `@ ${organizationName}`}
                 {(location?.name || location?.linkedinText || location?.city) && (
                   <span className="text-muted-foreground"> · {location.name || location.linkedinText || location.city}</span>
                 )}
@@ -270,32 +266,20 @@ export function CandidateCard({
         {/* Right column: Action buttons */}
         <div className="flex flex-col gap-2 items-end">
           <div className="flex flex-row gap-2">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button size="icon" variant="outline" onClick={onAddToShortlist}>
-                    <IconStar className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Add to shortlist</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            
 
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button size="icon" variant="outline">
-                    <IconThumbDown className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Reject candidate</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button size="icon" variant="outline" onClick={handleOpenLinkedIn}>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openLinkedIn({ candidateId: candidate.id, linkedinUrl: candidate.linkedinUrl });
+                    }}
+                    disabled={isOpeningLinkedIn}
+                  >
                     <IconExternalLink className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
@@ -306,7 +290,14 @@ export function CandidateCard({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button size="icon" variant="outline" onClick={onShowCandidate}>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onShowCandidate();
+                    }}
+                  >
                     <IconEye className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
@@ -314,16 +305,7 @@ export function CandidateCard({
               </Tooltip>
             </TooltipProvider>
 
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button size="icon" onClick={onAddToOutreach}>
-                    <IconPlus className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Add to outreach</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            
           </div>
         </div>
       </div>

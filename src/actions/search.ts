@@ -12,6 +12,8 @@ import { eq, desc, ilike, and } from "drizzle-orm";
 import { generateId } from "@/lib/id";
 import { auth } from "@/lib/auth";
 
+const MAX_SEARCH_NAME_LENGTH = 50;
+
 /**
  * Helper to format a field for search name (handles both single and multi-value)
  */
@@ -43,32 +45,16 @@ function formatFieldForName(field: string | { values: string[]; operator: string
  * Generate a human-readable name from a parsed query
  */
 function generateSearchName(query: ParsedQuery): string {
-  const parts: string[] = [];
-  
-  const jobTitle = formatFieldForName(query.job_title);
-  if (jobTitle) parts.push(jobTitle);
-  
-  const location = formatFieldForName(query.location);
-  if (location) {
-    parts.push(`in ${location}`);
+  const jobTitle = formatFieldForName(query.job_title).trim();
+  if (!jobTitle) return "Untitled Search";
+
+  // Enforce max length for breadcrumbs/headlines and DB safety.
+  // If truncating, keep the string length <= MAX_SEARCH_NAME_LENGTH.
+  if (jobTitle.length > MAX_SEARCH_NAME_LENGTH) {
+    return `${jobTitle.slice(0, MAX_SEARCH_NAME_LENGTH - 1)}…`;
   }
-  
-  const skills = formatFieldForName(query.skills);
-  if (skills) {
-    parts.push(`with ${skills}`);
-  }
-  
-  const experience = formatFieldForName(query.years_of_experience);
-  if (experience) {
-    parts.push(`(${experience})`);
-  }
-  
-  const industry = formatFieldForName(query.industry);
-  if (industry) {
-    parts.push(`- ${industry}`);
-  }
-  
-  return parts.length > 0 ? parts.join(" ") : "Untitled Search";
+
+  return jobTitle;
 }
 
 /**
@@ -79,12 +65,17 @@ export async function updateSearchName(
   newName: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    if (!newName.trim()) {
+    const trimmed = newName.trim();
+    if (!trimmed) {
       return { success: false, error: "Search name cannot be empty" };
     }
 
+    const safeName = trimmed.length > MAX_SEARCH_NAME_LENGTH
+      ? `${trimmed.slice(0, MAX_SEARCH_NAME_LENGTH - 1)}…`
+      : trimmed;
+
     await db.update(search)
-      .set({ name: newName })
+      .set({ name: safeName })
       .where(eq(search.id, searchId));
 
     revalidatePath("/search");
