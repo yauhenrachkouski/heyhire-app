@@ -76,8 +76,10 @@ export async function POST(request: Request) {
       total: unscoredCandidates.length,
     });
 
-    // Build scoring endpoint URL (ensure no double slashes)
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || '';
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+      "http://localhost:3000";
     const scoreEndpointUrl = `${baseUrl}/api/scoring/candidate`;
     const total = unscoredCandidates.filter(sc => sc.candidate).length;
 

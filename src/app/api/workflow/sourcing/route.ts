@@ -492,7 +492,11 @@ export const { POST } = serve<SourcingWorkflowPayload>(
         console.log("[Workflow] Triggering scoring for", candidatesData.length, "candidates");
         
         try {
-          const scoringUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/workflow/scoring`;
+          const baseUrl =
+            process.env.NEXT_PUBLIC_APP_URL ||
+            (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+            "http://localhost:3000";
+          const scoringUrl = `${baseUrl}/api/workflow/scoring`;
           
           await qstashClient.publishJSON({
             url: scoringUrl,
@@ -520,7 +524,10 @@ export const { POST } = serve<SourcingWorkflowPayload>(
     };
   },
   {
-    baseUrl: process.env.NEXT_PUBLIC_APP_URL,
+    baseUrl:
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+      "http://localhost:3000",
     retries: 3,
     failureFunction: async (failureData: {
       context: { requestPayload: SourcingWorkflowPayload };

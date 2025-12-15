@@ -159,10 +159,15 @@ export async function getCustomerPortalSession() {
 
     // Dynamic import to access stripeClient
     const { stripeClient } = await import("@/lib/auth");
+
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+      "http://localhost:3000";
     
     const portalSession = await stripeClient.billingPortal.sessions.create({
       customer: orgSubscription.stripeCustomerId,
-      return_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing`,
+      return_url: `${baseUrl}/billing`,
     });
 
     return {

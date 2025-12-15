@@ -43,7 +43,7 @@ const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, {
    apiVersion: "2025-08-27.basil",
 });
 
-
+const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 export const auth = betterAuth({
    database: drizzleAdapter(db, {
@@ -54,19 +54,19 @@ export const auth = betterAuth({
       enabled: false,
    },
    trustedOrigins: [
-      process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+      appUrl,
    ],
    socialProviders: {
       google: {
          clientId: process.env.GOOGLE_CLIENT_ID as string,
          clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-         redirectUri: process.env.NEXT_PUBLIC_APP_URL as string,
+         redirectURI: `${appUrl}/api/auth/callback/google`,
       },
    },
    plugins: [
       organization({
          async sendInvitationEmail(data) {
-            const inviteLink = `${process.env.NEXT_PUBLIC_APP_URL}/accept-invitation/${data.id}`;
+            const inviteLink = `${appUrl}/auth/accept-invitation/${data.id}`;
             await resend.emails.send({
                from: process.env.EMAIL_FROM as string,
                to: data.email,

@@ -169,7 +169,10 @@ export const { POST } = serve<StrategyWorkflowPayload>(
     };
   },
   {
-    baseUrl: process.env.NEXT_PUBLIC_APP_URL,
+    baseUrl:
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+      "http://localhost:3000",
     retries: 2,
     failureFunction: async (failureData: {
       context: { requestPayload: StrategyWorkflowPayload };
