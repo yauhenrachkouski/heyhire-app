@@ -18,7 +18,7 @@ import type { Member } from "@/actions/members"
 import { InviteMemberDialog } from "../../members/invite-member-dialog"
 import { cancelInvitation } from "@/actions/invitations"
 import { removeMember } from "@/actions/members"
-import { toast } from "@/components/ui/sonner"
+import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 
 interface SimpleMembersTableProps {

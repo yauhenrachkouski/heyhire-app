@@ -10,7 +10,7 @@ import { Icon } from '@/components/ui/icon'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { authClient } from '@/lib/auth-client'
-import { toast } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 import googleIcon from '@/assets/google-icon.svg'
 import heyhireLogo from '@/assets/heyhire_logo.svg'
 

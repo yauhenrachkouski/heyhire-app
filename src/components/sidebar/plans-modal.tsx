@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Check } from "lucide-react";
 import { getCustomerPortalSession } from "@/actions/stripe";
-import { toast } from "@/components/ui/sonner";
+import { toast } from "sonner";
 
 interface PricingPlan {
   name: string;

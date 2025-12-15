@@ -15,7 +15,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { cancelSubscription, resumeSubscription, getCustomerPortalSession } from "@/actions/stripe"
-import { toast } from "@/components/ui/sonner"
+import { toast } from "sonner"
 import { subscription as subscriptionSchema } from "@/db/schema"
 import { Check } from "lucide-react"
 

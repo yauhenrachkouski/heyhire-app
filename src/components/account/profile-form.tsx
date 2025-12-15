@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Icon } from '@/components/ui/icon'
-import { toast } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 import { updateUserProfile, uploadAvatar, removeAvatar } from '@/actions/account'
 
 interface ProfileFormProps {

@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useSession } from '@/lib/auth-client'
-import { toast } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 import { createDefaultOrganization, createOrganizationWithSetup } from '@/actions/account'
 
 const ORGANIZATION_SIZES = [
