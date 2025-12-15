@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { IconPencil } from "@tabler/icons-react";
 import SourcingLoader from "@/components/search/sourcing-custom-loader";
 import { updateSearchName } from "@/actions/search";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useSearchRealtime } from "@/hooks/use-search-realtime";
 import posthog from 'posthog-js';
 import { useActiveOrganization } from "@/lib/auth-client";
@@ -30,7 +30,6 @@ interface SearchResultsClientProps {
 export function SearchResultsClient({ search }: SearchResultsClientProps) {
   console.log("[SearchResultsClient] Rendering for search:", search.id);
   
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const { data: activeOrg } = useActiveOrganization();
@@ -238,10 +237,8 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
     }
 
     if (!newName) {
-      toast({
-        title: "Search name cannot be empty",
+      toast.error("Search name cannot be empty", {
         description: "Please enter a name for your search.",
-        variant: "destructive",
       });
       if (titleRef.current) {
         titleRef.current.innerText = search.name; // Revert content if empty
@@ -258,17 +255,14 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
         from_name: prevName,
         to_name: newName,
       });
-      toast({
-        title: "Search name updated",
+      toast("Search name updated", {
         description: `Name changed to "${newName}"`,
       });
       setSearchName(newName); // Update local state with new name
       // No need to revalidate path here, as the name change will be reflected via search prop update
     } else {
-      toast({
-        title: "Failed to update search name",
+      toast.error("Failed to update search name", {
         description: result.error || "An unexpected error occurred",
-        variant: "destructive",
       });
       if (titleRef.current) {
         titleRef.current.innerText = search.name; // Revert to old name on error

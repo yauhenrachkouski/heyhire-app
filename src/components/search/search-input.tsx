@@ -34,7 +34,6 @@ import {
 } from "@tabler/icons-react";
 import { parseJob } from "@/actions/jobs";
 import type { ParsedQuery, SourcingCriteria } from "@/types/search";
-import { useToast } from "@/hooks/use-toast";
 import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -48,6 +47,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { SearchInterpretation } from "@/components/search/search-interpretation";
+import { toast } from "sonner";
 
 function RunSearchButton({
   onClick,
@@ -470,7 +470,6 @@ export function SearchInput({
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [selectedScenarios, setSelectedScenarios] = useState<string[]>([]);
   const [isTextareaFocused, setIsTextareaFocused] = useState(false);
-  const { toast } = useToast();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -681,19 +680,15 @@ export function SearchInput({
         if (userMessage.length > 300) {
           userMessage = `${userMessage.slice(0, 300)}…`;
         }
-        toast({
-          title: "Error",
+        toast.error("Error", {
           description: userMessage,
-          variant: "destructive",
         });
       }
     } catch (error) {
       console.error("Search error:", error);
       setBooleanSearch("");
-      toast({
-        title: "Error",
+      toast.error("Error", {
         description: "An unexpected error occurred",
-        variant: "destructive",
       });
     } finally {
       setIsParsing(false);
@@ -749,10 +744,8 @@ export function SearchInput({
         setIsRecording(true);
       } catch (error) {
         console.error("Microphone error:", error);
-        toast({
-          title: "Error",
+        toast.error("Error", {
           description: "Failed to access microphone",
-          variant: "destructive",
         });
       }
     } else {
@@ -808,10 +801,8 @@ export function SearchInput({
       await handleParse(transcribedText);
     } catch (error) {
       console.error("Transcription error:", error);
-      toast({
-        title: "Error",
+      toast.error("Error", {
         description: "Failed to transcribe audio",
-        variant: "destructive",
       });
     } finally {
       setIsTranscribing(false);

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import posthog from 'posthog-js';
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { SearchInput } from "@/components/search/search-input";
 import { saveSearch } from "@/actions/search";
 import { triggerSourcingWorkflow } from "@/actions/jobs";
@@ -23,7 +23,6 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
   const [isParsing, setIsParsing] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [sourcingCriteria, setSourcingCriteria] = useState<SourcingCriteria | null>(null);
-  const { toast } = useToast();
   
   const { data: session } = useSession();
   const { data: activeOrg } = useActiveOrganization();
@@ -53,19 +52,15 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
 
   const handleStartSearch = async (source: "manual" | "autorun" = "manual") => {
     if (!parsedQuery || !sourcingCriteria) {
-      toast({
-        title: "Error",
+      toast.error("Error", {
         description: "Please parse a job description first",
-        variant: "destructive",
       });
       return;
     }
 
     if (!session?.user || !activeOrg) {
-      toast({
-        title: "Error",
+      toast.error("Error", {
         description: "Please sign in to search",
-        variant: "destructive",
       });
       return;
     }
@@ -120,8 +115,7 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
         query_text_length: queryText.length,
       });
 
-      toast({
-        title: "Search Started",
+      toast("Search Started", {
         description: "Redirecting to results...",
       });
 
@@ -140,10 +134,8 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
         query_text_length: queryText.length,
       });
 
-      toast({
-        title: "Search Error",
+      toast.error("Search Error", {
         description: errorMessage,
-        variant: "destructive",
       });
       setIsSearching(false);
     }

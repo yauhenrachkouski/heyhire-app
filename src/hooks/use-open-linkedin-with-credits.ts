@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { consumeCreditsForLinkedInOpen } from "@/actions/consumption";
 import { useQueryClient } from "@tanstack/react-query";
 import { useActiveOrganization } from "@/lib/auth-client";
@@ -9,7 +9,6 @@ import { creditsKeys } from "@/lib/credits";
 import { useRouter } from "next/navigation";
 
 export function useOpenLinkedInWithCredits() {
-  const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const queryClient = useQueryClient();
   const { data: activeOrg } = useActiveOrganization();
@@ -27,10 +26,8 @@ export function useOpenLinkedInWithCredits() {
         });
 
         if (!result.success) {
-          toast({
-            title: "Not enough credits",
+          toast.error("Not enough credits", {
             description: result.error || "Please upgrade your plan",
-            variant: "destructive",
           });
           return;
         }

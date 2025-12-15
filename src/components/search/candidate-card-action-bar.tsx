@@ -6,7 +6,7 @@ import {
   DataTableActionBarAction,
 } from "@/components/data-table/data-table-action-bar";
 import { Download } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import type { Table } from "@tanstack/react-table";
 
 interface SelectedCandidate {
@@ -29,8 +29,6 @@ export function CandidateCardActionBar({
   selectedCandidates,
   onClearSelection,
 }: CandidateCardActionBarProps) {
-  const { toast } = useToast();
-
   React.useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -66,11 +64,10 @@ export function CandidateCardActionBar({
     link.click();
     document.body.removeChild(link);
 
-    toast({
-      title: "Success",
+    toast("Success", {
       description: `Exported ${selectedIds.length} candidates`,
     });
-  }, [selectedIds, selectedCandidates, toast]);
+  }, [selectedIds, selectedCandidates]);
 
   const mockTable = {
     getFilteredSelectedRowModel: () => ({

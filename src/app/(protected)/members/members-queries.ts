@@ -13,7 +13,7 @@ import {
   updateMembers,
   type GetMembersResult,
 } from "@/actions/members";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { getErrorMessage } from "@/lib/handle-error";
 import { membersKeys } from "./members-query-keys";
 

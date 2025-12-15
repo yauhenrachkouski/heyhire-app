@@ -2,9 +2,10 @@ import type { Metadata } from 'next'
 import './globals.css'
 import { Sora } from 'next/font/google'
 import { NuqsAdapter } from 'nuqs/adapters/next/app'
-import { QueryProvider, ToasterProvider } from '@/providers/query-provider'
+import { QueryProvider } from '@/providers/query-provider'
 import { WebVitals } from '@/lib/axiom/client'
 import { PostHogIdentityProvider } from '@/providers/posthog-identity-provider'
+import { Toaster } from '@/components/ui/sonner'
 const sora = Sora({
   variable: "--font-sora",
   subsets: ["latin", "latin-ext"],
@@ -32,7 +33,7 @@ export default async function RootLayout({
           <QueryProvider>
             <PostHogIdentityProvider>
               {children}
-              <ToasterProvider />
+              <Toaster position="top-center" />
             </PostHogIdentityProvider>
           </QueryProvider>
         </NuqsAdapter>

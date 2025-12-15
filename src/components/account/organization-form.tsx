@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { toast } from 'sonner'
+import { toast } from '@/components/ui/sonner'
 import { updateOrganization } from '@/actions/account'
 import { useListOrganizations, useActiveOrganization } from '@/lib/auth-client'
 
