@@ -1,6 +1,5 @@
 import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
-import { Separator } from '@/components/ui/separator'
 import { OrganizationForm } from '@/components/account/organization-form'
 import { redirect } from 'next/navigation'
 import { SimpleMembersTable } from './simple-members-table'
@@ -58,16 +57,7 @@ export default async function OrganizationSettingsPage() {
   })
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold">Organization Settings</h1>
-        <p className="text-muted-foreground mt-1">
-          Manage your organization settings and members
-        </p>
-      </div>
-
-      <Separator />
-
+    <>
       {/* Organization Name Section */}
       {organizationData && (
         <OrganizationForm organization={organizationData} />
@@ -81,7 +71,7 @@ export default async function OrganizationSettingsPage() {
           currentUserId={session.user.id}
         />
       )}
-    </div>
+    </>
   )
 }
 

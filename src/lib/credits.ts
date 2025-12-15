@@ -166,6 +166,12 @@ export function isLowOnCredits(balance: number, threshold: number = 10): boolean
   return balance < threshold;
 }
 
+export const creditsKeys = {
+  all: ["credits"] as const,
+  organization: (organizationId: string) =>
+    [...creditsKeys.all, "organization", organizationId] as const,
+};
+
 
 
 

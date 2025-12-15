@@ -165,3 +165,59 @@
 
  
 }
+
+@layer utilities {
+  @property --hh-border-angle {
+    syntax: "<angle>";
+    inherits: false;
+    initial-value: 0deg;
+  }
+
+  .hh-new-talent-search-border {
+    position: relative;
+    isolation: isolate;
+    overflow: visible !important;
+  }
+
+  .hh-new-talent-search-border > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .hh-new-talent-search-border::before {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: calc(var(--radius) + 2px);
+    padding: 2px;
+    --hh-border-angle: 90deg;
+    background: conic-gradient(
+      from var(--hh-border-angle),
+      #ff006e,
+      #8338ec,
+      #3a86ff,
+      #06d6a0,
+      #ffbe0b,
+      #ff006e
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 200ms ease;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .hh-new-talent-search-border:hover::before {
+    opacity: 1;
+    animation: hh-new-talent-search-border-run 1.25s linear infinite;
+  }
+
+  @keyframes hh-new-talent-search-border-run {
+    to {
+      --hh-border-angle: 450deg;
+    }
+  }
+}

@@ -90,11 +90,6 @@ export function CandidateCardListPaginated({
     ? candidates 
     : candidates.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
 
-  // Stub action handlers
-  const handleAddToOutreach = useCallback(() => {
-    console.log("[Candidates] Add to outreach - not implemented yet");
-  }, []);
-
   const handleShowCandidate = useCallback((candidate: SearchCandidate) => {
     setSelectedCandidate(candidate);
   }, []);
@@ -108,10 +103,11 @@ export function CandidateCardListPaginated({
   }, []);
 
   // Handle candidate selection
-  const handleSelectCandidate = useCallback((candidateId: string, selected: boolean) => {
+  const handleSelectCandidate = useCallback((candidateId: string, selected: boolean | "indeterminate") => {
+    const isSelected = selected === true;
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (selected) {
+      if (isSelected) {
         next.add(candidateId);
       } else {
         next.delete(candidateId);
@@ -186,7 +182,6 @@ export function CandidateCardListPaginated({
                 searchCandidate={searchCandidate}
                 isSelected={isSelected}
                 onSelect={(selected) => handleSelectCandidate(candidateId, selected)}
-                onAddToOutreach={handleAddToOutreach}
                 onShowCandidate={() => handleShowCandidate(searchCandidate)}
                 onCardClick={() => handleShowCandidate(searchCandidate)}
                 onEmail={handleEmail}

@@ -1,6 +1,5 @@
 import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
-import { Separator } from '@/components/ui/separator'
 import { ProfileForm } from '@/components/account/profile-form'
 import { ConnectedAccountsSection } from '@/components/account/connected-accounts-section'
 import { DeleteAccountDialog } from '@/components/account/delete-account-dialog'
@@ -38,16 +37,7 @@ export default async function AccountPage() {
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold">Account</h1>
-        <p className="text-muted-foreground mt-1">
-          Manage your personal account settings
-        </p>
-      </div>
-
-      <Separator />
-
+    <>
       {/* Profile Section */}
       <ProfileForm user={userData} />
 
@@ -56,7 +46,7 @@ export default async function AccountPage() {
 
       {/* Danger Zone */}
       <DeleteAccountDialog userEmail={session.user.email} />
-    </div>
+    </>
   )
 }
 

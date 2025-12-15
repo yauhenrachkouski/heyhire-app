@@ -1,14 +1,13 @@
 "use client";
 
-import { 
-  IconEye, 
-  IconLoader2, 
-  IconExternalLink, 
-  IconChevronDown, 
-  IconChevronUp, 
-  IconSparkles 
+import {
+  IconEye,
+  IconLoader2,
+  IconExternalLink,
+  IconSparkles,
+  IconMapPin,
 } from "@tabler/icons-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
@@ -20,6 +19,94 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useOpenLinkedInWithCredits } from "@/hooks/use-open-linkedin-with-credits";
+
+type Skill = string | { name?: string | null };
+type LocationData = { name?: string | null; linkedinText?: string | null; city?: string | null } | null;
+type ScoringReasoning = {
+  overall_assessment?: string | null;
+  title_analysis?: string | null;
+  skills_analysis?: string | null;
+  location_analysis?: string | null;
+} | null;
+type ScoringData = { verdict?: string | null; reasoning?: ScoringReasoning } | null;
+
+function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function getMatchScoreClasses(matchScore: number) {
+  if (matchScore >= 80) return "bg-green-100 text-green-700";
+  if (matchScore >= 60) return "bg-yellow-100 text-yellow-700";
+  return "bg-red-100 text-red-700";
+}
+
+function SkillsBadges(props: { skills: Skill[] }) {
+  const { skills } = props;
+  const [expanded, setExpanded] = useState(false);
+
+  if (skills.length === 0) return null;
+
+  const visibleSkills = expanded ? skills : skills.slice(0, 5);
+  return (
+    <div className="flex flex-wrap gap-1.5 mb-4">
+      {visibleSkills.map((skill, index) => (
+        <Badge key={index} variant="secondary" className="text-xs">
+          {typeof skill === "string" ? skill : skill.name}
+        </Badge>
+      ))}
+      {skills.length > 5 && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="text-xs text-primary hover:underline"
+        >
+          {expanded ? "Show less" : `+${skills.length - 5} more`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function CandidateAIScoring(props: { matchScore: number | null; scoringData: ScoringData }) {
+  const { matchScore, scoringData } = props;
+
+  const verdict = scoringData?.verdict;
+
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <IconSparkles className="h-4 w-4 text-purple-500" />
+        <span className="text-sm font-medium text-muted-foreground">AI Score:</span>
+
+        {matchScore !== null ? (
+          <div
+            className={`
+              px-2 py-1 rounded-md text-sm font-semibold
+              ${getMatchScoreClasses(matchScore)}
+            `}
+          >
+            {matchScore}
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted text-muted-foreground text-sm">
+            <IconLoader2 className="h-3 w-3 animate-spin" />
+            <span>Calculating...</span>
+          </div>
+        )}
+
+        {verdict && (
+          <Badge variant="outline" className="text-xs">
+            {verdict}
+          </Badge>
+        )}
+      </div>
+    </div>
+  );
+}
 
 
 interface SearchCandidate {
@@ -45,39 +132,35 @@ interface SearchCandidate {
 interface CandidateCardProps {
   searchCandidate: SearchCandidate;
   isSelected?: boolean;
-  onSelect?: (selected: boolean) => void;
-  onAddToOutreach?: () => void;
+  onSelect?: (checked: boolean | "indeterminate") => void;
   onShowCandidate?: () => void;
   onEmail?: () => void;
   onPhone?: () => void;
-  onAddToShortlist?: () => void;
   onCardClick?: () => void;
 }
 
 export function CandidateCard({
   searchCandidate,
   isSelected = false,
-  onSelect = () => {},
-  onShowCandidate = () => {},
+  onSelect,
+  onShowCandidate,
   onCardClick,
 }: CandidateCardProps) {
-  const [expandedSkills, setExpandedSkills] = useState(false);
-  const [expandedProsCons, setExpandedProsCons] = useState(false);
-
   const { openLinkedIn, isLoading: isOpeningLinkedIn } = useOpenLinkedInWithCredits();
 
   const { candidate, matchScore, notes } = searchCandidate;
   
   // console.log("[CandidateCard] Rendering candidate:", candidate.fullName, "Score:", matchScore, "Has notes:", !!notes);
   
-  // Parse JSON fields
-  const experiences = candidate.experiences ? JSON.parse(candidate.experiences) : [];
-  const skills = candidate.skills ? JSON.parse(candidate.skills) : [];
-  const location = candidate.location ? JSON.parse(candidate.location) : null;
-  
-  // Extract first and last name
+  const experiences = useMemo(() => safeJsonParse<any[]>(candidate.experiences, []), [candidate.experiences]);
+  const skills = useMemo(() => safeJsonParse<Skill[]>(candidate.skills, []), [candidate.skills]);
+  const location = useMemo(() => safeJsonParse<LocationData>(candidate.location, null), [candidate.location]);
+  const scoringData = useMemo<ScoringData>(() => {
+    void notes;
+    return null;
+  }, [notes]);
+
   const fullName = candidate.fullName || "Unknown";
-  const nameParts = fullName.split(" ");
   
   
   // Current role from first experience
@@ -85,19 +168,7 @@ export function CandidateCard({
   const currentRole = currentExperience.role_title || currentExperience.position || candidate.headline || "----";
   const organizationName = currentExperience.organization_name || currentExperience.companyName || "";
   
-  // Parse notes if available (contains full scoring response)
-  let scoringData = null;
-  if (notes) {
-    try {
-      scoringData = JSON.parse(notes);
-    } catch (e) {
-      // If notes is plain text, ignore
-    }
-  }
-  
-  // Extract verdict and reasoning from new scoring format
-  const verdict = scoringData?.verdict;
-  const reasoning = scoringData?.reasoning;
+  const locationText = location?.name || location?.linkedinText || location?.city;
 
   return (
     <div
@@ -149,116 +220,24 @@ export function CandidateCard({
             </div>
 
             {/* Name and role */}
-            <div className="flex-1 min-w-0 space-y-1">
-              <h3 className="font-semibold text-lg leading-tight">{fullName}</h3>
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <h3 className="text-base font-semibold leading-tight">{fullName}</h3>
               
-              <p className="text-sm mt-0.5">
+              <p className="text-sm font-medium leading-snug text-foreground/90">
                 {currentRole} {organizationName && `@ ${organizationName}`}
-                {(location?.name || location?.linkedinText || location?.city) && (
-                  <span className="text-muted-foreground"> · {location.name || location.linkedinText || location.city}</span>
-                )}
               </p>
-              
-              {candidate.summary && (
-                <p className="text-sm mt-3 line-clamp-2">{candidate.summary}</p>
+
+              {locationText && (
+                <p className="text-xs text-muted-foreground inline-flex items-center gap-1 leading-snug">
+                  <IconMapPin className="h-3.5 w-3.5 opacity-80" />
+                  <span>{locationText}</span>
+                </p>
               )}
-              
             </div>
           </div>
 
-          {/* Skills */}
-          {skills.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-4">
-              {(expandedSkills ? skills : skills.slice(0, 5)).map((skill: any, index: number) => (
-                <Badge key={index} variant="secondary" className="text-xs">
-                  {typeof skill === "string" ? skill : skill.name}
-                </Badge>
-              ))}
-              {skills.length > 5 && (
-                <button
-                  onClick={() => setExpandedSkills(!expandedSkills)}
-                  className="text-xs text-primary hover:underline"
-                >
-                  {expandedSkills ? "Show less" : `+${skills.length - 5} more`}
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* AI Scoring - Collapsible */}
-          <div>
-            <div className="flex items-center gap-2">
-              <IconSparkles className="h-4 w-4 text-purple-500" />
-              <span className="text-sm font-medium text-muted-foreground">AI Scoring:</span>
-              
-              {matchScore !== null ? (
-                <div className={`
-                  px-2 py-1 rounded-md text-sm font-semibold
-                  ${matchScore >= 80 
-                    ? 'bg-green-100 text-green-700' 
-                    : matchScore >= 60 
-                    ? 'bg-yellow-100 text-yellow-700' 
-                    : 'bg-red-100 text-red-700'
-                  }
-                `}>
-                  {matchScore}
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted text-muted-foreground text-sm">
-                  <IconLoader2 className="h-3 w-3 animate-spin" />
-                  <span>Calculating...</span>
-                </div>
-              )}
-              
-              {verdict && (
-                <Badge variant="outline" className="text-xs">
-                  {verdict}
-                </Badge>
-              )}
-              
-              {matchScore !== null && (
-                <button
-                  onClick={() => setExpandedProsCons(!expandedProsCons)}
-                  className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                  aria-label={expandedProsCons ? 'Hide details' : 'Show details'}
-                >
-                  {expandedProsCons ? (
-                    <IconChevronUp className="h-4 w-4" />
-                  ) : (
-                    <IconChevronDown className="h-4 w-4" />
-                  )}
-                </button>
-              )}
-            </div>
-            
-            {expandedProsCons && reasoning && (
-              <div className="mt-3 space-y-2 text-sm">
-                {reasoning.overall_assessment && (
-                  <div>
-                    <p className="font-semibold mb-1">Overall Assessment:</p>
-                    <p className="text-muted-foreground">{reasoning.overall_assessment}</p>
-                  </div>
-                )}
-                {reasoning.title_analysis && (
-                  <div>
-                    <p className="font-semibold mb-1">Title Match:</p>
-                    <p className="text-muted-foreground">{reasoning.title_analysis}</p>
-                  </div>
-                )}
-                {reasoning.skills_analysis && (
-                  <div>
-                    <p className="font-semibold mb-1">Skills Match:</p>
-                    <p className="text-muted-foreground">{reasoning.skills_analysis}</p>
-                  </div>
-                )}
-                {reasoning.location_analysis && (
-                  <div>
-                    <p className="font-semibold mb-1">Location:</p>
-                    <p className="text-muted-foreground">{reasoning.location_analysis}</p>
-                  </div>
-                )}
-              </div>
-            )}
+          <div className="mt-2">
+            <CandidateAIScoring matchScore={matchScore} scoringData={scoringData} />
           </div>
 
         </div>
@@ -280,10 +259,16 @@ export function CandidateCard({
                     }}
                     disabled={isOpeningLinkedIn}
                   >
-                    <IconExternalLink className="h-4 w-4" />
+                    {isOpeningLinkedIn ? (
+                      <IconLoader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <IconExternalLink className="h-4 w-4" />
+                    )}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Open LinkedIn profile</TooltipContent>
+                <TooltipContent>
+                  {isOpeningLinkedIn ? "Opening LinkedIn..." : "Open LinkedIn (uses credits)"}
+                </TooltipContent>
               </Tooltip>
             </TooltipProvider>
 
@@ -295,7 +280,7 @@ export function CandidateCard({
                     variant="outline"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onShowCandidate();
+                      onShowCandidate?.();
                     }}
                   >
                     <IconEye className="h-4 w-4" />

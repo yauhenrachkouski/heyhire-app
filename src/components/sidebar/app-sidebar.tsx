@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useQuery } from "@tanstack/react-query"
 import { OrganizationSwitcher } from "@/components/sidebar/organization-switcher"
 import { RecentSearches } from "@/components/sidebar/recent-searches"
 import { SearchSearches } from "@/components/sidebar/search-searches"
@@ -36,6 +37,8 @@ import { Icon, IconName } from "@/components/ui/icon"
 import { NavUser } from "@/components/sidebar/nav-user"
 import { SupportModal } from "@/components/sidebar/support-modal"
 import { CreditBalance } from "@/components/sidebar/credit-balance"
+import { getOrganizationCredits } from "@/actions/credits"
+import { creditsKeys } from "@/lib/credits"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import type { subscription } from "@/db/schema"
@@ -154,6 +157,14 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
   const pathname = usePathname()
   const [supportModalOpen, setSupportModalOpen] = React.useState(false)
 
+  const organizationId = activeOrganization?.id
+  const { data: credits } = useQuery({
+    queryKey: organizationId ? creditsKeys.organization(organizationId) : creditsKeys.all,
+    queryFn: () => getOrganizationCredits(organizationId!),
+    enabled: !!organizationId,
+    initialData: activeOrganization?.credits,
+  })
+
   // Generate dynamic navigation data with recent job
 
   return (
@@ -178,6 +189,7 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
             <SidebarGroupContent>
               {data.navMain[0].items.map((navItem) => {
                 const active = !navItem.disabled && isPathActive(pathname, navItem.url)
+                const isNewTalentSearch = navItem.title === "New Talent Search"
                 
                 return (
                   <SidebarMenu key={navItem.title}>
@@ -186,7 +198,10 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
                         asChild
                         tooltip={navItem.title}
                         isActive={active}
-                        className="!bg-black !text-white shadow-md transition-all active:scale-95 hover:!bg-black/90 data-[active=true]:!bg-black data-[active=true]:!text-white"
+                        className={
+                          "h-9 !bg-black !text-white shadow-md transition-all active:scale-95 hover:!bg-black/90 data-[active=true]:!bg-black data-[active=true]:!text-white" +
+                          (isNewTalentSearch ? " hh-new-talent-search-border !rounded-lg" : "")
+                        }
                       >
                         <Link href={navItem.url} aria-current={active ? "page" : undefined} prefetch>
                           <Icon name="plus" />
@@ -323,8 +338,8 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
         ))}
       </SidebarContent>
       <SidebarFooter>
-        {activeOrganization && activeOrganization.credits !== undefined && (
-          <CreditBalance credits={activeOrganization.credits} currentPlan={subscription?.plan as "starter" | "pro" | "enterprise" | null | undefined} />
+        {activeOrganization && credits !== undefined && (
+          <CreditBalance credits={credits} currentPlan={subscription?.plan as "starter" | "pro" | "enterprise" | null | undefined} />
         )}
         <SidebarMenu>
           <SidebarMenuItem>

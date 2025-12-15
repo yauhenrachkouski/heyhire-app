@@ -1,6 +1,13 @@
 "use client";
 
-import { X, MapPin, Calendar, ExternalLink, Plus, Star, ThumbsDown } from "lucide-react";
+import {
+  IconX,
+  IconMapPin,
+  IconCalendar,
+  IconExternalLink,
+  IconLoader2,
+  IconSparkles,
+} from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
@@ -13,7 +20,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useState } from "react";
-import { capitalizeLocationParts, formatDate, calculateDuration } from "@/lib/utils";
+import { formatDate, calculateDuration } from "@/lib/utils";
+import { useOpenLinkedInWithCredits } from "@/hooks/use-open-linkedin-with-credits";
 
 interface SearchCandidate {
   id: string;
@@ -40,8 +48,60 @@ interface CandidateDetailsSheetProps {
   onClose: () => void;
 }
 
+type ScoringReasoning = {
+  overall_assessment?: string | null;
+  title_analysis?: string | null;
+  skills_analysis?: string | null;
+  location_analysis?: string | null;
+} | null;
+type ScoringData = { verdict?: string | null; reasoning?: ScoringReasoning } | null;
+
+function getMatchScoreClasses(matchScore: number) {
+  if (matchScore >= 80) return "bg-green-100 text-green-700";
+  if (matchScore >= 60) return "bg-yellow-100 text-yellow-700";
+  return "bg-red-100 text-red-700";
+}
+
+function CandidateAIScoring(props: { matchScore: number | null; scoringData: ScoringData }) {
+  const { matchScore, scoringData } = props;
+
+  const verdict = scoringData?.verdict;
+
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <IconSparkles className="h-4 w-4 text-purple-500" />
+        <span className="text-sm font-medium text-muted-foreground">AI Score:</span>
+
+        {matchScore !== null ? (
+          <div
+            className={`
+              px-2 py-1 rounded-md text-sm font-semibold
+              ${getMatchScoreClasses(matchScore)}
+            `}
+          >
+            {matchScore}
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted text-muted-foreground text-sm">
+            <IconLoader2 className="h-3 w-3 animate-spin" />
+            <span>Calculating...</span>
+          </div>
+        )}
+
+        {verdict && (
+          <Badge variant="outline" className="text-xs">
+            {verdict}
+          </Badge>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDetailsSheetProps) {
   const [expandedSkills, setExpandedSkills] = useState(false);
+  const { openLinkedIn, isLoading: isOpeningLinkedIn } = useOpenLinkedInWithCredits();
 
   if (!searchCandidate) return null;
 
@@ -56,11 +116,21 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
 
   // Extract name parts
   const fullName = candidate.fullName || "Unknown";
-  const nameParts = fullName.split(" ");
-  const location = locationData?.linkedinText || locationData?.city || "";
+  const locationText = locationData?.name || locationData?.linkedinText || locationData?.city;
 
   // Get current role from experiences
   const currentExperience = experiences[0] || {};
+  const currentRole =
+    currentExperience.role_title ||
+    currentExperience.position ||
+    currentExperience.title ||
+    candidate.headline ||
+    "----";
+  const organizationName =
+    currentExperience.organization_name ||
+    currentExperience.company ||
+    currentExperience.companyName ||
+    "";
 
   // Parse scoring data (new format with full reasoning)
   let scoringData: any = null;
@@ -71,8 +141,7 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
   } catch {
     // Notes is plain text
   }
-  
-  const verdict = scoringData?.verdict;
+
   const reasoning = scoringData?.reasoning;
   const criteriaScores = scoringData?.criteria_scores || [];
 
@@ -88,7 +157,7 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
             onClick={onClose}
             className="h-8 w-8"
           >
-            <X className="h-4 w-4" />
+            <IconX className="h-4 w-4" />
           </Button>
         </div>
 
@@ -97,89 +166,57 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
           <div className="p-4">
             <div className="space-y-6">
               {/* Profile Header */}
-              <div className="flex gap-4">
-                <div className="flex-shrink-0">
-                  <ProfileAvatar
-                    className="h-16 w-16"
-                    fullName={fullName}
-                    photoUrl={candidate.photoUrl}
-                  />
-                </div>
+              <div>
+                <div className="flex gap-4 mb-4">
+                  <div className="shrink-0">
+                    <ProfileAvatar
+                      className="h-16 w-16"
+                      fullName={fullName}
+                      photoUrl={candidate.photoUrl}
+                    />
+                  </div>
 
-                <div className="flex-1 min-w-0">
-                  <h1 className="text-xl font-bold text-foreground">{fullName}</h1>
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <h3 className="text-base font-semibold leading-tight">{fullName}</h3>
 
-                  {candidate.headline && (
-                    <p className="text-sm font-medium text-foreground truncate">
-                      {candidate.headline}
+                    <p className="text-sm font-medium leading-snug text-foreground/90">
+                      {currentRole} {organizationName && `@ ${organizationName}`}
                     </p>
-                  )}
 
-                  {(currentExperience.company || currentExperience.companyName) && (
-                    <p className="text-sm text-muted-foreground truncate">
-                      {currentExperience.company || currentExperience.companyName}
-                    </p>
-                  )}
-
-                  {location && (
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                      <MapPin className="h-3 w-3" />
-                      {capitalizeLocationParts(location)}
-                    </div>
-                  )}
-
-                  <div className="mt-2 flex gap-2">
-                    {matchScore !== null && (
-                      <Badge variant={matchScore >= 80 ? "default" : matchScore >= 60 ? "secondary" : "outline"}>
-                        {matchScore}% Match
-                      </Badge>
-                    )}
-                    {verdict && (
-                      <Badge variant="outline">
-                        {verdict}
-                      </Badge>
+                    {locationText && (
+                      <p className="text-xs text-muted-foreground inline-flex items-center gap-1 leading-snug">
+                        <IconMapPin className="h-3.5 w-3.5 opacity-80" />
+                        <span>{locationText}</span>
+                      </p>
                     )}
                   </div>
+                </div>
+
+                <div className="mt-2">
+                  <CandidateAIScoring matchScore={matchScore} scoringData={scoringData} />
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-2 flex-wrap pt-4 pb-2">
-                <Button variant="default" size="sm" className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Add to Outreach
-                </Button>
-                
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button size="sm" variant="outline">
-                      <Star className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Add to shortlist</TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button size="sm" variant="outline">
-                      <ThumbsDown className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Reject candidate</TooltipContent>
-                </Tooltip>
-
+              <div className="flex gap-2 flex-wrap">
                 {candidate.linkedinUrl && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         variant="outline"
-                        onClick={() => window.open(candidate.linkedinUrl, "_blank", "noopener,noreferrer")}
+                        onClick={() =>
+                          openLinkedIn({ candidateId: candidate.id, linkedinUrl: candidate.linkedinUrl })
+                        }
+                        disabled={isOpeningLinkedIn}
                       >
-                        <ExternalLink className="h-4 w-4" />
+                        <IconExternalLink className="h-4 w-4" />
+                        {isOpeningLinkedIn ? "Opening..." : "Open LinkedIn"}
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Open LinkedIn profile</TooltipContent>
+                    <TooltipContent>
+                      {isOpeningLinkedIn ? "Opening LinkedIn..." : "Open LinkedIn (uses credits)"}
+                    </TooltipContent>
                   </Tooltip>
                 )}
               </div>
@@ -300,21 +337,23 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
                     </h2>
                     <div className="space-y-3">
                       {certifications.map((cert: any, idx: number) => (
-                        <div key={idx} className="border-l-2 border-muted-foreground/30 pl-3 pb-2">
-                          <p className="text-sm font-semibold text-foreground">
+                        <div key={idx} className="rounded-lg border bg-muted/20 p-3">
+                          <p className="text-sm font-semibold text-foreground leading-snug break-words">
                             {cert.title}
                           </p>
-                          
+
                           {cert.issuedBy && (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-sm text-muted-foreground leading-snug break-words mt-0.5">
                               {cert.issuedBy}
                             </p>
                           )}
-                          
+
                           {cert.issuedAt && (
-                            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                              <Calendar className="h-3 w-3" />
-                              <span>{cert.issuedAt}</span>
+                            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                              <span className="inline-flex items-center gap-1">
+                                <IconCalendar className="h-3 w-3" />
+                                <span>{cert.issuedAt}</span>
+                              </span>
                             </div>
                           )}
                         </div>
@@ -360,44 +399,63 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
                     <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
                       Experience
                     </h2>
-                    <div className="space-y-4">
-                      {experiences.map((exp: any, idx: number) => (
-                        <div key={idx} className="border-l-2 border-muted-foreground/30 pl-3 pb-2">
-                          <div className="flex items-start justify-between gap-2 mb-1">
-                            <p className="text-sm font-semibold text-foreground">
-                              {exp.title || exp.role_title || exp.position}
-                            </p>
-                            {exp.isCurrent && (
-                              <Badge variant="default" className="text-xs">Current</Badge>
-                            )}
-                          </div>
-                          
-                          {(exp.company || exp.companyName) && (
-                            <p className="text-sm text-muted-foreground">{exp.company || exp.companyName}</p>
-                          )}
-                          
-                          {(exp.startDate || exp.start_date) && (
-                            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                              <Calendar className="h-3 w-3" />
-                              <span>
-                                {formatDate(exp.startDate || exp.start_date)}
-                                {(exp.endDate || exp.end_date) ? ` - ${formatDate(exp.endDate || exp.end_date)}` : exp.isCurrent ? " - Present" : ""}
-                              </span>
-                              {(exp.startDate || exp.start_date) && (
-                                <span className="ml-1">
-                                  ({calculateDuration(exp.startDate || exp.start_date, exp.endDate || exp.end_date)})
-                                </span>
+                    <div className="space-y-3">
+                      {experiences.map((exp: any, idx: number) => {
+                        const title = exp.title || exp.role_title || exp.position || "—";
+                        const company = exp.company || exp.companyName || exp.organization_name;
+                        const startDate = exp.startDate || exp.start_date;
+                        const endDate = exp.endDate || exp.end_date;
+                        const dateRange = startDate
+                          ? `${formatDate(startDate)}${endDate ? ` - ${formatDate(endDate)}` : exp.isCurrent ? " - Present" : ""}`
+                          : null;
+                        const duration = startDate ? calculateDuration(startDate, endDate) : null;
+
+                        return (
+                          <div key={idx} className="rounded-lg border bg-muted/20 p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 space-y-0.5">
+                                <p className="text-sm font-semibold text-foreground leading-snug break-words">
+                                  {title}
+                                </p>
+
+                                {company && (
+                                  <p className="text-sm text-muted-foreground leading-snug break-words">
+                                    {company}
+                                  </p>
+                                )}
+                              </div>
+
+                              {exp.isCurrent && (
+                                <Badge variant="default" className="text-xs shrink-0">
+                                  Current
+                                </Badge>
                               )}
                             </div>
-                          )}
-                          
-                          {exp.description && (
-                            <p className="text-xs text-foreground mt-2 leading-relaxed">
-                              {exp.description}
-                            </p>
-                          )}
-                        </div>
-                      ))}
+
+                            {dateRange && (
+                              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                                <span className="inline-flex items-center gap-1">
+                                  <IconCalendar className="h-3 w-3" />
+                                  <span>{dateRange}</span>
+                                </span>
+
+                                {duration && (
+                                  <span className="inline-flex items-center gap-2">
+                                    <span className="text-muted-foreground/60">•</span>
+                                    <span className="font-medium">{duration}</span>
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {exp.description && (
+                              <div className="mt-2 text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                                {exp.description}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                   <Separator />
@@ -412,24 +470,26 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
                   </h2>
                   <div className="space-y-3">
                     {educations.map((edu: any, idx: number) => (
-                      <div key={idx} className="border-l-2 border-muted-foreground/30 pl-3 pb-2">
-                        <p className="text-sm font-semibold text-foreground">
+                      <div key={idx} className="rounded-lg border bg-muted/20 p-3">
+                        <p className="text-sm font-semibold text-foreground leading-snug break-words">
                           {edu.school || edu.school_name || edu.title}
                         </p>
-                        
+
                         {edu.degree && (
-                          <p className="text-sm text-foreground">
+                          <p className="text-sm text-foreground/90 leading-snug break-words mt-0.5">
                             {edu.degree}
                             {edu.fieldOfStudy && ` in ${edu.fieldOfStudy}`}
                           </p>
                         )}
-                        
+
                         {(edu.startDate || edu.endDate) && (
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                            <Calendar className="h-3 w-3" />
-                            <span>
-                              {formatDate(edu.startDate)}
-                              {edu.endDate ? ` - ${formatDate(edu.endDate)}` : ""}
+                          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                            <span className="inline-flex items-center gap-1">
+                              <IconCalendar className="h-3 w-3" />
+                              <span>
+                                {formatDate(edu.startDate)}
+                                {edu.endDate ? ` - ${formatDate(edu.endDate)}` : ""}
+                              </span>
                             </span>
                           </div>
                         )}
