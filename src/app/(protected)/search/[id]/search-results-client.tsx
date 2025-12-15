@@ -12,6 +12,8 @@ import SourcingLoader from "@/components/search/sourcing-custom-loader";
 import { updateSearchName } from "@/actions/search";
 import { useToast } from "@/hooks/use-toast";
 import { useSearchRealtime } from "@/hooks/use-search-realtime";
+import posthog from 'posthog-js';
+import { useActiveOrganization } from "@/lib/auth-client";
 
 interface SearchResultsClientProps {
   search: {
@@ -30,6 +32,8 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const { data: activeOrg } = useActiveOrganization();
 
   const [currentParsedQuery, setCurrentParsedQuery] = useState<ParsedQuery>(search.params);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -226,6 +230,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
 
   const handleSaveName = async () => {
     const newName = titleRef.current?.innerText.trim() || search.name;
+    const prevName = searchName;
 
     if (newName === search.name) {
       setIsEditingName(false);
@@ -247,6 +252,12 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
 
     const result = await updateSearchName(search.id, newName);
     if (result.success) {
+      posthog.capture('search_name_updated', {
+        search_id: search.id,
+        organization_id: activeOrg?.id,
+        from_name: prevName,
+        to_name: newName,
+      });
       toast({
         title: "Search name updated",
         description: `Name changed to "${newName}"`,
@@ -363,8 +374,28 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
               {/* Inline Filters */}
               <div className="flex items-center justify-between gap-4 flex-wrap">
                 <InlineFilters 
-                  onScoreRangeChange={(min, max) => setScoreRange([min, max])}
-                  onSortChange={(sort) => setSortBy(sort)}
+                  onScoreRangeChange={(min, max) => {
+                    posthog.capture('search_filter_applied', {
+                      search_id: search.id,
+                      organization_id: activeOrg?.id,
+                      filter_type: 'score_range',
+                      from_score_min: scoreRange[0],
+                      from_score_max: scoreRange[1],
+                      score_min: min,
+                      score_max: max,
+                    });
+                    setScoreRange([min, max]);
+                  }}
+                  onSortChange={(sort) => {
+                    posthog.capture('search_filter_applied', {
+                      search_id: search.id,
+                      organization_id: activeOrg?.id,
+                      filter_type: 'sort_by',
+                      from_sort_by: sortBy,
+                      sort_by: sort,
+                    });
+                    setSortBy(sort);
+                  }}
                 />
               </div>
               

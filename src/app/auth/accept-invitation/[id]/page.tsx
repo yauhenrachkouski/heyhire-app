@@ -20,7 +20,7 @@ export default async function AcceptInvitationPage({
 
   if (!session?.user) {
     // Redirect to sign in with return URL
-    redirect(`/auth/signin?callbackUrl=/accept-invitation/${id}`);
+    redirect(`/auth/signin?callbackUrl=/auth/accept-invitation/${id}`);
   }
 
   try {

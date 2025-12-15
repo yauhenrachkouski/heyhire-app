@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import posthog from "posthog-js";
 import { Button } from "@/components/ui/button";
 import { 
   IconLoader2, 
@@ -260,6 +261,7 @@ interface SearchInputProps {
   className?: string;
   hideInterpretation?: boolean;
   hideSearchButton?: boolean;
+  organizationId?: string;
 }
 
 /**
@@ -451,7 +453,8 @@ export function SearchInput({
   onQueryTextChange,
   className,
   hideInterpretation = false,
-  hideSearchButton = false
+  hideSearchButton = false,
+  organizationId,
 }: SearchInputProps) {
   const MAX_QUERY_LENGTH = 3000;
   const [query, setQuery] = useState("");
@@ -545,7 +548,22 @@ export function SearchInput({
   };
 
   const handleImportanceChange = (id: string, importance: "low" | "medium" | "high") => {
-    setScenarios(prev => prev.map(s => s.id === id ? { ...s, importance } : s));
+    setScenarios(prev =>
+      prev.map(s => {
+        if (s.id !== id) return s;
+        if (s.importance !== importance) {
+          posthog.capture("search_criteria_importance_changed", {
+            organization_id: organizationId,
+            criterion_id: s.id,
+            category: s.category,
+            value: s.value,
+            from_importance: s.importance,
+            to_importance: importance,
+          });
+        }
+        return { ...s, importance };
+      })
+    );
   };
 
   const generateScenariosFromQuery = (parsed: ParsedQuery) => {

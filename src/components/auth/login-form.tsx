@@ -14,11 +14,20 @@ import { toast } from 'sonner'
 import googleIcon from '@/assets/google-icon.svg'
 import heyhireLogo from '@/assets/heyhire_logo.svg'
 
-async function signInWithGoogle() {
+function getCallbackUrlFromLocation(): string {
+  if (typeof window === 'undefined') {
+    return '/auth/callback'
+  }
+  const url = new URL(window.location.href)
+  const callbackUrl = url.searchParams.get('callbackUrl')
+  return callbackUrl || '/auth/callback'
+}
+
+async function signInWithGoogle(callbackURL: string) {
   try {
     await authClient.signIn.social({
       provider: 'google',
-      callbackURL: '/auth/callback',
+      callbackURL,
     })
   } catch (err) {
     console.error('Google sign in error:', err)
@@ -31,6 +40,8 @@ export function LoginForm({ initialError }: { initialError?: string }) {
   const [emailSent, setEmailSent] = useState(false)
   const [error, setError] = useState(initialError || '')
   const [lastMethod, setLastMethod] = useState<string | null>(null)
+  const [callbackURL, setCallbackURL] = useState('/auth/callback')
+  const isInviteCallback = callbackURL.startsWith('/auth/accept-invitation/')
 
   useEffect(() => {
     if (initialError) {
@@ -39,6 +50,7 @@ export function LoginForm({ initialError }: { initialError?: string }) {
     // Get the last used login method
     const method = authClient.getLastUsedLoginMethod()
     setLastMethod(method)
+    setCallbackURL(getCallbackUrlFromLocation())
   }, [initialError])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -55,7 +67,7 @@ export function LoginForm({ initialError }: { initialError?: string }) {
     try {
       const result = await authClient.signIn.magicLink({
         email,
-        callbackURL: '/auth/callback',
+        callbackURL,
       })
       
       // Check if there's an error in the result
@@ -83,12 +95,12 @@ export function LoginForm({ initialError }: { initialError?: string }) {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <Alert>
-              
-              <AlertDescription>
-                We've sent a magic link to <b className="font-bold">{email}</b> Click the link in the email to sign in.
-              </AlertDescription>
-            </Alert>
+            <div className="rounded-lg border bg-muted/40 p-4">
+              <div className="text-sm font-medium">Magic link sent</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                We've sent a magic link to <b className="font-medium text-foreground">{email}</b>. Click the link in the email to sign in.
+              </div>
+            </div>
             
             <p className="text-sm text-muted-foreground">
               Didn't receive the email? Check your spam folder or{' '}
@@ -120,6 +132,15 @@ export function LoginForm({ initialError }: { initialError?: string }) {
           <CardTitle className="text-2xl font-bold">Welcome to HeyHire</CardTitle>
           <p className="text-gray-600">Enter your email to continue</p>
         </div>
+
+        {isInviteCallback && (
+          <div className="rounded-lg border bg-muted/40 p-4">
+            <div className="text-sm font-medium">You’ve been invited to join an organization</div>
+            <div className="mt-1 text-sm text-muted-foreground">
+              Sign up to accept your invitation.
+            </div>
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
@@ -134,7 +155,7 @@ export function LoginForm({ initialError }: { initialError?: string }) {
             variant={lastMethod === 'google' ? 'default' : 'outline'}
             className={lastMethod === 'google' ? 'w-full' : 'w-full bg-black text-white hover:bg-black/80 hover:text-white'}
             size="lg"
-            onClick={signInWithGoogle}
+            onClick={() => signInWithGoogle(callbackURL)}
           >
             <Image 
               src={googleIcon} 

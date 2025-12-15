@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import posthog from "posthog-js";
 import { keepPreviousData } from "@tanstack/react-query";
 import { DataTable } from "@/components/data-table/data-table";
 import { DataTableFilterList } from "@/components/data-table/data-table-filter-list";
@@ -10,12 +11,14 @@ import { useMembersQuery } from "./members-queries";
 import { MembersTableActionBar } from "./members-table-action-bar";
 import { DataTableSkeleton } from "@/components/data-table/data-table-skeleton";
 import type { GetMembersResult } from "@/actions/members";
+import { useActiveOrganization } from "@/lib/auth-client";
 
 interface MembersTableClientProps {
   initialData: GetMembersResult;
 }
 
 export function MembersTableClient({ initialData }: MembersTableClientProps) {
+  const { data: activeOrg } = useActiveOrganization();
   const columns = React.useMemo(() => getMembersTableColumns(), []);
 
   // Calculate pageCount from total (default 10 items per page)
@@ -51,6 +54,39 @@ export function MembersTableClient({ initialData }: MembersTableClientProps) {
     advancedFilters.completeFilters,
   ]);
 
+  const prevQueryParamsRef = React.useRef(queryParams);
+
+  React.useEffect(() => {
+    const prevParams = prevQueryParamsRef.current;
+    const currentParams = queryParams;
+
+    if (prevParams === currentParams) {
+      return;
+    }
+
+    if (prevParams.filters !== currentParams.filters) {
+      posthog.capture("members_table_filtered", {
+        organization_id: activeOrg?.id,
+        from_filters: prevParams.filters,
+        to_filters: currentParams.filters,
+        from_filter_count: prevParams.filters ? JSON.parse(prevParams.filters).length : 0,
+        filters: advancedFilters.completeFilters,
+        filter_count: advancedFilters.completeFilters.length,
+      });
+    }
+
+    if (prevParams.sort !== currentParams.sort) {
+      posthog.capture("members_table_sorted", {
+        organization_id: activeOrg?.id,
+        from_sort: prevParams.sort,
+        to_sort: currentParams.sort,
+        sort: tableState.sorting,
+      });
+    }
+
+    prevQueryParamsRef.current = currentParams;
+  }, [queryParams, advancedFilters.completeFilters, tableState.sorting, activeOrg?.id]);
+
   const { data, isLoading, isFetching } = useMembersQuery(queryParams, {
     initialData:
       queryParams.filters === "" && queryParams.sort === ""
@@ -79,4 +115,3 @@ export function MembersTableClient({ initialData }: MembersTableClientProps) {
     </DataTable>
   );
 }
-

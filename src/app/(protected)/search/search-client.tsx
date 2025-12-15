@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import posthog from 'posthog-js';
 import { useToast } from "@/hooks/use-toast";
 import { SearchInput } from "@/components/search/search-input";
 import { saveSearch } from "@/actions/search";
@@ -31,7 +32,7 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
   // Auto-trigger search when initial query is provided
   useEffect(() => {
     if (initialQuery && !hasSearched) {
-      handleStartSearch();
+      handleStartSearch("autorun");
     }
   }, [initialQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -46,7 +47,11 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
     setHasSearched(false);
   };
 
-  const handleStartSearch = async () => {
+  const handleParsingChange = (parsing: boolean) => {
+    setIsParsing(parsing);
+  };
+
+  const handleStartSearch = async (source: "manual" | "autorun" = "manual") => {
     if (!parsedQuery || !sourcingCriteria) {
       toast({
         title: "Error",
@@ -83,6 +88,15 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
       const searchId = saveResult.data.id;
       console.log("[Search Client] Search saved with ID:", searchId);
 
+      if (source === "autorun") {
+        posthog.capture('search_autorun_triggered', {
+          search_id: searchId,
+          organization_id: activeOrg.id,
+          query_text: queryText,
+          query_text_length: queryText.length,
+        });
+      }
+
       // Trigger the QStash workflow for reliable background processing
       console.log("[Search Client] Triggering sourcing workflow...");
       
@@ -98,6 +112,14 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
 
       console.log("[Search Client] Workflow triggered with run ID:", workflowResult.workflowRunId);
       
+      posthog.capture('search-started', {
+        search_id: searchId,
+        organization_id: activeOrg.id,
+        workflow_run_id: workflowResult.workflowRunId,
+        source,
+        query_text_length: queryText.length,
+      });
+
       toast({
         title: "Search Started",
         description: "Redirecting to results...",
@@ -111,6 +133,13 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
       console.error("[Search Client] Error:", error);
       const errorMessage =
         error instanceof Error ? error.message : "An unexpected error occurred";
+      
+      posthog.capture('search-failed', {
+        error_message: errorMessage,
+        organization_id: activeOrg?.id,
+        query_text_length: queryText.length,
+      });
+
       toast({
         title: "Search Error",
         description: errorMessage,
@@ -127,12 +156,13 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
         <div className="w-full max-w-2xl relative space-y-4">
           <SearchInput
             onQueryParsed={handleQueryParsed}
-            onParsingChange={setIsParsing}
-            onSearch={handleStartSearch}
+            onParsingChange={handleParsingChange}
+            onSearch={() => handleStartSearch("manual")}
             isLoading={isSearching}
             hasParsedQuery={!!parsedQuery && !!sourcingCriteria}
             value={queryText}
             onQueryTextChange={setQueryText}
+            organizationId={activeOrg?.id}
             className="w-full"
           />
         </div>

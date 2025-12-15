@@ -2,12 +2,14 @@
 
 import { useCallback, useState, useEffect, useRef } from "react";
 import { useReactTable, getCoreRowModel, getPaginationRowModel } from "@tanstack/react-table";
+import posthog from "posthog-js";
 import { CandidateCard } from "./candidate-card";
 import { CandidateDetailsSheet } from "./candidate-details-sheet";
 import { DataTablePagination } from "@/components/data-table/data-table-pagination";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { CandidateCardActionBar } from "./candidate-card-action-bar";
 import { SkeletonCard } from "./skeleton-card";
+import { useActiveOrganization } from "@/lib/auth-client";
 
 // Type for candidate from database schema
 interface SearchCandidate {
@@ -53,6 +55,7 @@ export function CandidateCardListPaginated({
   onSelectionChange,
   skeletonCount = 0,
 }: CandidateCardListPaginatedProps) {
+  const { data: activeOrg } = useActiveOrganization();
   const [selectedCandidate, setSelectedCandidate] = useState<SearchCandidate | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   
@@ -91,8 +94,13 @@ export function CandidateCardListPaginated({
     : candidates.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
 
   const handleShowCandidate = useCallback((candidate: SearchCandidate) => {
+    posthog.capture("candidate_details_viewed", {
+      search_id: searchId,
+      organization_id: activeOrg?.id,
+      candidate_id: candidate.candidate.id,
+    });
     setSelectedCandidate(candidate);
-  }, []);
+  }, [activeOrg?.id, searchId]);
 
   const handleEmail = useCallback(() => {
     console.log("[Candidates] Send email - not implemented yet");

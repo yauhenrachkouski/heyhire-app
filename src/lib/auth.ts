@@ -8,30 +8,31 @@ import * as schema from "@/db/schema";
 import { Resend } from "resend";
 import Stripe from "stripe";
 import { DISALLOWED_DOMAINS } from "./constants";
+import { getPostHogServer } from "@/lib/posthog/posthog-server";
 
 // Validate Stripe environment variables at startup
 function validateStripeConfig() {
-  const requiredVars = [
-    'STRIPE_SECRET_KEY',
-    'STRIPE_WEBHOOK_SECRET',
-    'STRIPE_STARTER_PRICE_ID',
-    'STRIPE_PRO_PRICE_ID',
-  ];
-  
-  const missing = requiredVars.filter((varName) => {
-    const value = process.env[varName];
-    return !value || value.includes('placeholder');
-  });
-  
-  if (missing.length > 0) {
-    const errorMsg = `Missing or invalid Stripe configuration: ${missing.join(', ')}. Please set these environment variables in your .env.local file.`;
-    console.error(errorMsg);
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error(errorMsg);
-    }
-    // Log warning in development but don't throw
-    console.warn('⚠️ Stripe configuration incomplete - some features may not work');
-  }
+   const requiredVars = [
+      'STRIPE_SECRET_KEY',
+      'STRIPE_WEBHOOK_SECRET',
+      'STRIPE_STARTER_PRICE_ID',
+      'STRIPE_PRO_PRICE_ID',
+   ];
+
+   const missing = requiredVars.filter((varName) => {
+      const value = process.env[varName];
+      return !value || value.includes('placeholder');
+   });
+
+   if (missing.length > 0) {
+      const errorMsg = `Missing or invalid Stripe configuration: ${missing.join(', ')}. Please set these environment variables in your .env.local file.`;
+      console.error(errorMsg);
+      if (process.env.NODE_ENV === 'production') {
+         throw new Error(errorMsg);
+      }
+      // Log warning in development but don't throw
+      console.warn('⚠️ Stripe configuration incomplete - some features may not work');
+   }
 }
 
 // Validate on startup
@@ -89,6 +90,118 @@ export const auth = betterAuth({
                console.log(`[Organization] Created organization "${organization.name}" (${organization.id}) by user ${user.email}`);
                // TODO: Send welcome email to organization creator
             },
+            afterCreateInvitation: async ({ invitation, inviter, organization }) => {
+               console.log(`[Invitation] Created invitation ${invitation.id} for ${invitation.email} to org ${organization.id} by ${inviter.email}`);
+               try {
+                  const posthog = getPostHogServer();
+                  posthog.capture({
+                     distinctId: inviter.id,
+                     event: "invitation_created",
+                     properties: {
+                        invitationId: invitation.id,
+                        organizationId: organization.id,
+                        invitedEmail: invitation.email,
+                        role: invitation.role,
+                        status: invitation.status,
+                     },
+                  });
+               } catch (e) {
+                  console.error("[PostHog] Failed to capture invitation_created", e);
+               }
+            },
+            beforeAcceptInvitation: async ({ invitation, user, organization }) => {
+               console.log(`[Invitation] User ${user.email} attempting to accept invitation ${invitation.id} for org ${organization.id}`);
+               try {
+                  const posthog = getPostHogServer();
+                  posthog.capture({
+                     distinctId: user.id,
+                     event: "invitation_accept_attempted",
+                     properties: {
+                        invitationId: invitation.id,
+                        organizationId: organization.id,
+                        invitedEmail: invitation.email,
+                        role: invitation.role,
+                        invitationStatus: invitation.status,
+                     },
+                  });
+               } catch (e) {
+                  console.error("[PostHog] Failed to capture invitation_accept_attempted", e);
+               }
+            },
+            afterAcceptInvitation: async ({ invitation, member, user, organization }) => {
+               console.log(`[Invitation] ✅ Accepted invitation ${invitation.id}. User ${user.email} is now member ${member.id} of org ${organization.id}`);
+               try {
+                  const posthog = getPostHogServer();
+                  posthog.capture({
+                     distinctId: user.id,
+                     event: "invitation_accepted",
+                     properties: {
+                        invitationId: invitation.id,
+                        organizationId: organization.id,
+                        memberId: member.id,
+                        role: member.role,
+                     },
+                  });
+               } catch (e) {
+                  console.error("[PostHog] Failed to capture invitation_accepted", e);
+               }
+            },
+            beforeRejectInvitation: async ({ invitation, user, organization }) => {
+               console.log(`[Invitation] User ${user.email} attempting to reject invitation ${invitation.id} for org ${organization.id}`);
+               try {
+                  const posthog = getPostHogServer();
+                  posthog.capture({
+                     distinctId: user.id,
+                     event: "invitation_reject_attempted",
+                     properties: {
+                        invitationId: invitation.id,
+                        organizationId: organization.id,
+                        invitedEmail: invitation.email,
+                        role: invitation.role,
+                        invitationStatus: invitation.status,
+                     },
+                  });
+               } catch (e) {
+                  console.error("[PostHog] Failed to capture invitation_reject_attempted", e);
+               }
+            },
+            afterRejectInvitation: async ({ invitation, user, organization }) => {
+               console.log(`[Invitation] ❌ Rejected invitation ${invitation.id} by user ${user.email} for org ${organization.id}`);
+               try {
+                  const posthog = getPostHogServer();
+                  posthog.capture({
+                     distinctId: user.id,
+                     event: "invitation_rejected",
+                     properties: {
+                        invitationId: invitation.id,
+                        organizationId: organization.id,
+                        invitedEmail: invitation.email,
+                        role: invitation.role,
+                     },
+                  });
+               } catch (e) {
+                  console.error("[PostHog] Failed to capture invitation_rejected", e);
+               }
+            },
+            afterCancelInvitation: async ({ invitation, cancelledBy, organization }) => {
+               console.log(`[Invitation] Canceled invitation ${invitation.id} for ${invitation.email} by ${cancelledBy.email} in org ${organization.id}`);
+               try {
+                  const posthog = getPostHogServer();
+                  posthog.capture({
+                     distinctId: cancelledBy.id,
+                     event: "invitation_canceled",
+                     properties: {
+                        invitationId: invitation.id,
+                        organizationId: organization.id,
+                        invitedEmail: invitation.email,
+                        role: invitation.role,
+                        status: invitation.status,
+                     },
+                  });
+               } catch (e) {
+                  console.error("[PostHog] Failed to capture invitation_canceled", e);
+               }
+            },
          },
       }),
       lastLoginMethod({
@@ -99,7 +212,7 @@ export const auth = betterAuth({
             // Validate email domain before sending magic link
             if (DISALLOWED_DOMAINS.length > 0) {
                const emailDomain = email.split("@")[1]?.toLowerCase();
-               
+
                if (emailDomain && DISALLOWED_DOMAINS.includes(emailDomain)) {
                   throw new APIError("BAD_REQUEST", {
                      message: `Email addresses from ${emailDomain} are not allowed. Please use your work email.`,
@@ -185,7 +298,7 @@ export const auth = betterAuth({
                      // Do NOT override it here, let the client value pass through
                   };
                }
-               return { 
+               return {
                   params: {},
                   // NOTE: referenceId is passed from the client (subscribe-cards.tsx)
                   // Do NOT override it here, let the client value pass through
@@ -197,18 +310,18 @@ export const auth = betterAuth({
                if (referenceId === user.id) {
                   return true;
                }
-               
+
                // Check if user is a member of the organization
                const { member: memberTable } = require("@/db/schema");
                const { eq, and } = require("drizzle-orm");
-               
+
                const member = await db.query.member.findFirst({
                   where: and(
                      eq(memberTable.userId, user.id),
                      eq(memberTable.organizationId, referenceId)
                   ),
                });
-               
+
                // Only allow owners and admins to manage subscriptions
                return member?.role === "owner" || member?.role === "admin";
             },
@@ -225,7 +338,7 @@ export const auth = betterAuth({
             console.log(`\n[Stripe Webhook] ${timestamp}`);
             console.log(`[Stripe Webhook] Event Type: ${event.type}`);
             console.log(`[Stripe Webhook] Event ID: ${event.id}`);
-            
+
             const { subscription: sub } = require("@/db/schema");
             const { eq } = require("drizzle-orm");
 
@@ -238,30 +351,30 @@ export const auth = betterAuth({
                      console.log(`[Stripe Webhook] Processing subscription ${stripeSubscription.id}`);
                      console.log(`[Stripe Webhook] Status: ${stripeSubscription.status}`);
                      console.log(`[Stripe Webhook] Customer ID: ${stripeSubscription.customer}`);
-                     
+
                      try {
                         const result = await db
                            .update(sub)
                            .set({
                               stripeSubscriptionId: stripeSubscription.id,
                               status: stripeSubscription.status,
-                              periodStart: stripeSubscription.current_period_start 
-                                 ? new Date(stripeSubscription.current_period_start * 1000) 
+                              periodStart: stripeSubscription.current_period_start
+                                 ? new Date(stripeSubscription.current_period_start * 1000)
                                  : null,
-                              periodEnd: stripeSubscription.current_period_end 
-                                 ? new Date(stripeSubscription.current_period_end * 1000) 
+                              periodEnd: stripeSubscription.current_period_end
+                                 ? new Date(stripeSubscription.current_period_end * 1000)
                                  : null,
-                              trialStart: stripeSubscription.trial_start 
-                                 ? new Date(stripeSubscription.trial_start * 1000) 
+                              trialStart: stripeSubscription.trial_start
+                                 ? new Date(stripeSubscription.trial_start * 1000)
                                  : null,
-                              trialEnd: stripeSubscription.trial_end 
-                                 ? new Date(stripeSubscription.trial_end * 1000) 
+                              trialEnd: stripeSubscription.trial_end
+                                 ? new Date(stripeSubscription.trial_end * 1000)
                                  : null,
                               cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end || false,
                            })
                            .where(eq(sub.stripeCustomerId, stripeSubscription.customer))
                            .returning();
-                        
+
                         console.log(`[Stripe Webhook] ✅ Updated subscription record: ${result[0]?.id}`);
                         console.log(`[Stripe Webhook] Updated fields:`, {
                            stripeSubscriptionId: stripeSubscription.id,
@@ -278,7 +391,7 @@ export const auth = betterAuth({
                   case "customer.subscription.deleted": {
                      const stripeSubscription = event.data.object as any;
                      console.log(`[Stripe Webhook] Subscription deleted: ${stripeSubscription.id}`);
-                     
+
                      try {
                         const result = await db
                            .update(sub)
@@ -288,7 +401,7 @@ export const auth = betterAuth({
                            })
                            .where(eq(sub.stripeSubscriptionId, stripeSubscription.id))
                            .returning();
-                        
+
                         console.log(`[Stripe Webhook] ✅ Marked subscription as canceled: ${result[0]?.id}`);
                      } catch (error) {
                         console.error(`[Stripe Webhook] ❌ Error marking subscription canceled:`, error);
@@ -300,7 +413,7 @@ export const auth = betterAuth({
                   case "invoice.payment_succeeded": {
                      const invoice = event.data.object as any;
                      console.log(`[Stripe Webhook] Payment succeeded for invoice ${invoice.id}`);
-                     
+
                      try {
                         const result = await db
                            .update(sub)
@@ -309,25 +422,25 @@ export const auth = betterAuth({
                            })
                            .where(eq(sub.stripeCustomerId, invoice.customer))
                            .returning();
-                        
+
                         console.log(`[Stripe Webhook] ✅ Marked subscription as active: ${result[0]?.id}`);
-                        
+
                         // Grant credits for subscription
                         if (result[0]) {
                            const { addCredits } = require("@/actions/credits");
                            const { getPlanCreditAllocation, CREDIT_TYPES } = require("@/lib/credits");
                            const { organization } = require("@/db/schema");
-                           
+
                            const subscriptionRecord = result[0];
                            const plan = subscriptionRecord.plan;
                            const organizationId = subscriptionRecord.referenceId;
-                           
+
                            // Get the organization's owner to use as the userId for the transaction
                            const { member } = require("@/db/schema");
                            const orgOwner = await db.query.member.findFirst({
                               where: eq(member.organizationId, organizationId),
                            });
-                           
+
                            if (orgOwner && organizationId) {
                               // Grant contact lookup credits
                               const contactLookupCredits = getPlanCreditAllocation(plan, CREDIT_TYPES.CONTACT_LOOKUP);
@@ -344,7 +457,7 @@ export const auth = betterAuth({
                                  });
                                  console.log(`[Stripe Webhook] ✅ Granted ${contactLookupCredits} contact lookup credits`);
                               }
-                              
+
                               // Grant export credits
                               const exportCredits = getPlanCreditAllocation(plan, CREDIT_TYPES.EXPORT);
                               if (exportCredits > 0) {
@@ -371,7 +484,7 @@ export const auth = betterAuth({
                   case "invoice.payment_failed": {
                      const invoice = event.data.object as any;
                      console.log(`[Stripe Webhook] ⚠️ Payment failed for invoice ${invoice.id}`);
-                     
+
                      try {
                         const result = await db
                            .update(sub)
@@ -380,7 +493,7 @@ export const auth = betterAuth({
                            })
                            .where(eq(sub.stripeCustomerId, invoice.customer))
                            .returning();
-                        
+
                         console.log(`[Stripe Webhook] ✅ Marked subscription as past_due: ${result[0]?.id}`);
                      } catch (error) {
                         console.error(`[Stripe Webhook] ❌ Error handling failed payment:`, error);
@@ -410,7 +523,7 @@ export const auth = betterAuth({
             } catch (error) {
                console.error(`[Stripe Webhook] ❌ Error processing event:`, error);
             }
-            
+
             console.log(`[Stripe Webhook] ${timestamp} - Event processing complete\n`);
          },
       })
@@ -422,14 +535,14 @@ export const auth = betterAuth({
                // Only validate if domains are configured
                if (DISALLOWED_DOMAINS.length > 0) {
                   const emailDomain = user.email.split("@")[1]?.toLowerCase();
-                  
+
                   if (emailDomain && DISALLOWED_DOMAINS.includes(emailDomain)) {
                      throw new APIError("BAD_REQUEST", {
                         message: `Email addresses from ${emailDomain} are not allowed. Please use your work email.`,
                      });
                   }
                }
-               
+
                return { data: user };
             },
          },
@@ -440,7 +553,7 @@ export const auth = betterAuth({
                // Get the user's first organization to set as active
                const { member: memberTable } = require("@/db/schema");
                const { eq } = require("drizzle-orm");
-               
+
                const userMember = await db.query.member.findFirst({
                   where: eq(memberTable.userId, session.userId),
                   with: {
@@ -448,7 +561,7 @@ export const auth = betterAuth({
                   },
                   orderBy: (member, { desc }) => [desc(member.createdAt)],
                });
-               
+
                if (userMember) {
                   console.log(`[Auth] Auto-setting active organization for user ${session.userId}: ${userMember.organizationId}`);
                   return {
@@ -458,7 +571,7 @@ export const auth = betterAuth({
                      },
                   };
                }
-               
+
                return { data: session };
             },
          },

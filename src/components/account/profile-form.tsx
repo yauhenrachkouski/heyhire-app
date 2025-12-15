@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import posthog from 'posthog-js'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,6 +25,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [userName, setUserName] = useState(user.name)
+  const lastSavedUserNameRef = useRef(user.name)
   const [userImage, setUserImage] = useState(user.image || '')
   const [isLoading, setIsLoading] = useState(false)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
@@ -38,11 +40,20 @@ export function ProfileForm({ user }: ProfileFormProps) {
 
     setIsLoading(true)
     try {
+      const fromName = lastSavedUserNameRef.current
       const result = await updateUserProfile({
         name: userName
       })
 
+      posthog.capture('profile-updated', {
+        success: result.success,
+        error: result.error,
+        from_name: result.success ? fromName : undefined,
+        to_name: result.success ? userName : undefined,
+      })
+
       if (result.success) {
+        lastSavedUserNameRef.current = userName
         toast.success('Profile updated successfully')
         router.refresh()
       } else {
@@ -74,10 +85,20 @@ export function ProfileForm({ user }: ProfileFormProps) {
 
     setIsUploadingAvatar(true)
     try {
+      const fromHasAvatar = !!userImage
       const formData = new FormData()
       formData.append('file', file)
 
       const result = await uploadAvatar(formData)
+
+      posthog.capture('avatar-uploaded', {
+        success: result.success,
+        file_size: file.size,
+        file_type: file.type,
+        error: result.error,
+        from_has_avatar: result.success ? fromHasAvatar : undefined,
+        to_has_avatar: result.success ? true : undefined,
+      })
 
       if (result.success && result.imageUrl) {
         setUserImage(result.imageUrl)
@@ -100,7 +121,15 @@ export function ProfileForm({ user }: ProfileFormProps) {
   const handleRemoveAvatar = async () => {
     setIsUploadingAvatar(true)
     try {
+      const fromHasAvatar = !!userImage
       const result = await removeAvatar()
+
+      posthog.capture('avatar-removed', {
+        success: result.success,
+        error: result.error,
+        from_has_avatar: result.success ? fromHasAvatar : undefined,
+        to_has_avatar: result.success ? false : undefined,
+      })
 
       if (result.success) {
         setUserImage('')
@@ -223,4 +252,3 @@ export function ProfileForm({ user }: ProfileFormProps) {
     </Card>
   )
 }
-

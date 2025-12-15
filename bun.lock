@@ -72,7 +72,7 @@
         "next-themes": "^0.4.6",
         "nuqs": "^2.7.1",
         "postgres": "^3.4.7",
-        "posthog-js": "^1.306.0",
+        "posthog-js": "^1.306.1",
         "posthog-node": "^5.17.2",
         "react": "19.2.0",
         "react-day-picker": "^9.11.1",
@@ -1376,7 +1376,7 @@
 
     "postgres-interval": ["postgres-interval@1.2.0", "", { "dependencies": { "xtend": "^4.0.0" } }, "sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ=="],
 
-    "posthog-js": ["posthog-js@1.306.0", "", { "dependencies": { "@posthog/core": "1.7.1", "core-js": "^3.38.1", "fflate": "^0.4.8", "preact": "^10.19.3", "web-vitals": "^4.2.4" } }, "sha512-sjsy0El4HL6PgbyWiUF0CaKb2d1Q8okbSeT4eajan3QSvkWus6ygHQuW2l4lfvp6NLRQrIZKH/0sUanhASptUQ=="],
+    "posthog-js": ["posthog-js@1.306.1", "", { "dependencies": { "@posthog/core": "1.7.1", "core-js": "^3.38.1", "fflate": "^0.4.8", "preact": "^10.19.3", "web-vitals": "^4.2.4" } }, "sha512-wO7bliv/5tlAlfoKCUzwkGXZVNexk0dHigMf9tNp0q1rzs62wThogREY7Tz7h/iWKYiuXy1RumtVlTmHuBXa1w=="],
 
     "posthog-node": ["posthog-node@5.17.2", "", { "dependencies": { "@posthog/core": "1.7.1" } }, "sha512-lz3YJOr0Nmiz0yHASaINEDHqoV+0bC3eD8aZAG+Ky292dAnVYul+ga/dMX8KCBXg8hHfKdxw0SztYD5j6dgUqQ=="],
 

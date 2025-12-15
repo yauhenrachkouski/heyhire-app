@@ -4,6 +4,7 @@ import { Sora } from 'next/font/google'
 import { NuqsAdapter } from 'nuqs/adapters/next/app'
 import { QueryProvider, ToasterProvider } from '@/providers/query-provider'
 import { WebVitals } from '@/lib/axiom/client'
+import { PostHogIdentityProvider } from '@/providers/posthog-identity-provider'
 const sora = Sora({
   variable: "--font-sora",
   subsets: ["latin", "latin-ext"],
@@ -16,14 +17,12 @@ export const metadata: Metadata = {
   description: "Multi-tenant B2B recruitment platform",
 };
 
-// ✅ OFFICIAL PATTERN: Server Component fetches auth data once
+
 export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-
-
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -31,8 +30,10 @@ export default async function RootLayout({
       <body className={`${sora.variable} antialiased min-h-screen bg-background font-sans`}>
         <NuqsAdapter>
           <QueryProvider>
-            {children}
-            <ToasterProvider />
+            <PostHogIdentityProvider>
+              {children}
+              <ToasterProvider />
+            </PostHogIdentityProvider>
           </QueryProvider>
         </NuqsAdapter>
       </body>

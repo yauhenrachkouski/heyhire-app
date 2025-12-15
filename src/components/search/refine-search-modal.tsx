@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import posthog from 'posthog-js';
 import {
   Dialog,
   DialogContent,
@@ -17,6 +18,7 @@ import type { ParsedQuery } from "@/types/search";
 import { SearchInput } from "./search-input";
 import { AppliedFilters } from "./applied-filters";
 import { SearchAiSuggestions } from "./search-ai-suggestions";
+import { useActiveOrganization } from "@/lib/auth-client";
 
 interface RefineSearchModalProps {
   params: ParsedQuery;
@@ -25,6 +27,7 @@ interface RefineSearchModalProps {
 }
 
 export function RefineSearchModal({ params, initialQueryText, onRemoveFilter }: RefineSearchModalProps) {
+  const { data: activeOrg } = useActiveOrganization();
   const [currentQueryText, setCurrentQueryText] = useState("");
   const [currentParsedQuery, setCurrentParsedQuery] = useState<ParsedQuery>(params);
 
@@ -61,6 +64,12 @@ export function RefineSearchModal({ params, initialQueryText, onRemoveFilter }: 
   };
 
   const handleSuggestionClick = (suggestionValue: string) => {
+    posthog.capture('refine_search_ai_suggestion_clicked', { 
+      organization_id: activeOrg?.id,
+      suggestion: suggestionValue,
+      current_query_text: currentQueryText,
+      current_query_text_length: currentQueryText.length,
+    });
     setCurrentQueryText((prev) => prev + suggestionValue);
   };
 
@@ -111,7 +120,16 @@ export function RefineSearchModal({ params, initialQueryText, onRemoveFilter }: 
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <Button onClick={() => { console.log("Saving refined query:", currentParsedQuery); }}>Save changes</Button>
+          <Button onClick={() => { 
+            posthog.capture('refine_search_saved', { 
+              organization_id: activeOrg?.id,
+              from_query_text: initialQueryText ?? "",
+              to_query_text: currentQueryText,
+              from_query_text_length: (initialQueryText ?? "").length,
+              to_query_text_length: currentQueryText.length,
+            });
+            console.log("Saving refined query:", currentParsedQuery); 
+          }}>Save changes</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

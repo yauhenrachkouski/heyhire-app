@@ -13,11 +13,12 @@ export default async function LoginPage({
     headers: await headers()
  })
 
- if (session) {
-    return redirect("/")
- }
-
   const params = await searchParams
+  const callbackUrl = typeof params.callbackUrl === 'string' ? params.callbackUrl : undefined
+
+ if (session) {
+    return redirect(callbackUrl || "/")
+ }
   const errorMessage = typeof params.error === 'string' ? params.error : undefined
 
   return (
