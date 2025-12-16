@@ -5,7 +5,7 @@ import {
   DataTableActionBar,
   DataTableActionBarAction,
 } from "@/components/data-table/data-table-action-bar";
-import { Download } from "lucide-react";
+import { IconDownload } from "@tabler/icons-react";
 import { toast } from "sonner";
 import type { Table } from "@tanstack/react-table";
 
@@ -96,7 +96,7 @@ export function CandidateCardActionBar({
         onClick={handleExport}
         size="icon"
       >
-        <Download />
+        <IconDownload />
       </DataTableActionBarAction>
 
       <DataTableActionBarAction

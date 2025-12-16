@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useUpdateMembersMutation } from "./members-queries";
-import { Loader } from "lucide-react";
+import { IconLoader2 } from "@tabler/icons-react";
 
 const updateMembersSchema = z.object({
   role: z.string().min(1, "Role is required"),
@@ -142,7 +142,7 @@ export function UpdateMembersDialog({
               </Button>
               <Button type="submit" disabled={updateMutation.isPending}>
                 {updateMutation.isPending && (
-                  <Loader className="mr-2 size-4 animate-spin" />
+                  <IconLoader2 className="mr-2 size-4 animate-spin" />
                 )}
                 Update Members
               </Button>

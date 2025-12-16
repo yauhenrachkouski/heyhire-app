@@ -6,6 +6,9 @@ import { QueryProvider } from '@/providers/query-provider'
 import { WebVitals } from '@/lib/axiom/client'
 import { PostHogIdentityProvider } from '@/providers/posthog-identity-provider'
 import { Toaster } from '@/components/ui/sonner'
+
+const inter = Sora({subsets:['latin'],variable:'--font-sans'});
+
 const sora = Sora({
   variable: "--font-sora",
   subsets: ["latin", "latin-ext"],
@@ -26,7 +29,7 @@ export default async function RootLayout({
 }) {
 
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={inter.variable}>
       <WebVitals />
       <body className={`${sora.variable} antialiased min-h-screen bg-background font-sans`}>
         <NuqsAdapter>

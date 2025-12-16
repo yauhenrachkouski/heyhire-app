@@ -25,7 +25,15 @@ export function isSubscriptionActive(
 ): boolean {
   if (!sub) return false;
   const activeStatuses: SubscriptionStatus[] = ["active", "trialing"];
-  return activeStatuses.includes((sub.status as SubscriptionStatus) || "none");
+  const status = (sub.status as SubscriptionStatus) || "none";
+
+  if (!activeStatuses.includes(status)) return false;
+
+  if (sub.plan === "trial" && sub.periodEnd) {
+    return new Date(sub.periodEnd).getTime() > Date.now();
+  }
+
+  return true;
 }
 
 /**

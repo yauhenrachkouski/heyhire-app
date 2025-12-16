@@ -12,7 +12,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useDeleteMembersMutation } from "./members-queries";
-import { Loader } from "lucide-react";
+import { IconLoader2 } from "@tabler/icons-react";
 
 interface DeleteMembersDialogProps {
   open: boolean;
@@ -69,7 +69,7 @@ export function DeleteMembersDialog({
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
             {deleteMutation.isPending && (
-              <Loader className="mr-2 size-4 animate-spin" />
+              <IconLoader2 className="mr-2 size-4 animate-spin" />
             )}
             Delete
           </AlertDialogAction>

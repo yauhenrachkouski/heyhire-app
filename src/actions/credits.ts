@@ -164,6 +164,95 @@ export async function addCredits(
   }
 }
 
+export async function setCreditsBalance(params: {
+  organizationId: string;
+  userId: string;
+  newBalance: number;
+  type: CreditTransaction["type"];
+  creditType: CreditType;
+  relatedEntityId?: string | null;
+  description: string;
+  metadata?: Record<string, unknown>;
+}): Promise<CreditOperationResult> {
+  const {
+    organizationId,
+    userId,
+    newBalance,
+    type,
+    creditType,
+    relatedEntityId,
+    description,
+    metadata,
+  } = params;
+
+  if (newBalance < 0) {
+    return {
+      success: false,
+      error: "Balance cannot be negative",
+    };
+  }
+
+  try {
+    const result = await db.transaction(async (tx) => {
+      const org = await tx.query.organization.findFirst({
+        where: eq(organization.id, organizationId),
+        columns: { credits: true },
+      });
+
+      if (!org) {
+        throw new Error("Organization not found");
+      }
+
+      const balanceBefore = org.credits;
+      const balanceAfter = newBalance;
+      const amount = balanceAfter - balanceBefore;
+
+      if (amount === 0) {
+        return undefined;
+      }
+
+      await tx
+        .update(organization)
+        .set({ credits: balanceAfter })
+        .where(eq(organization.id, organizationId));
+
+      const transactionId = generateId();
+      const metadataJson = metadata ? JSON.stringify(metadata) : null;
+
+      await tx.insert(creditTransactions).values({
+        id: transactionId,
+        organizationId,
+        userId,
+        type,
+        creditType,
+        amount,
+        balanceBefore,
+        balanceAfter,
+        relatedEntityId: relatedEntityId ?? null,
+        description,
+        metadata: metadataJson,
+      });
+
+      const transaction = await tx.query.creditTransactions.findFirst({
+        where: eq(creditTransactions.id, transactionId),
+      });
+
+      return transaction;
+    });
+
+    return {
+      success: true,
+      transaction: result ?? undefined,
+    };
+  } catch (error) {
+    console.error("[Credits] Error setting credit balance:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to set credit balance",
+    };
+  }
+}
+
 /**
  * Deduct credits from an organization with full audit trail
  * Throws error if insufficient credits

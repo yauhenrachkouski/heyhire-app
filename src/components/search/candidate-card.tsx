@@ -191,10 +191,7 @@ export function CandidateCard({
       }`}
     >
 
-      {/* Light hover effect */}
-      <div className="pointer-events-none absolute inset-0 rounded-lg opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-        <div className="absolute -top-16 left-1/2 h-48 w-48 -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
-      </div>
+     
 
       <div className="flex gap-4">
         {/* Left column: Checkbox */}

@@ -2,11 +2,11 @@
 
 import type { ColumnSort, SortDirection, Table } from "@tanstack/react-table";
 import {
-  ArrowDownUp,
-  ChevronsUpDown,
-  GripVertical,
-  Trash2,
-} from "lucide-react";
+  IconArrowsSort,
+  IconSelector,
+  IconGripVertical,
+  IconTrash,
+} from "@tabler/icons-react";
 import * as React from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -31,13 +31,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Sortable,
-  SortableContent,
-  SortableItem,
-  SortableItemHandle,
-  SortableOverlay,
-} from "@/components/ui/sortable";
 import { dataTableConfig } from "@/config/data-table";
 import { cn } from "@/lib/utils";
 
@@ -167,97 +160,81 @@ export function DataTableSortList<TData>({
   );
 
   return (
-    <Sortable
-      value={sorting}
-      onValueChange={onSortingChange}
-      getItemValue={(item) => item.id}
-    >
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" onKeyDown={onTriggerKeyDown}>
-            <ArrowDownUp />
-            Sort
-            {sorting.length > 0 && (
-              <Badge
-                variant="secondary"
-                className="h-[18.24px] rounded-[3.2px] px-[5.12px] font-mono font-normal text-[10.4px]"
-              >
-                {sorting.length}
-              </Badge>
-            )}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent
-          aria-labelledby={labelId}
-          aria-describedby={descriptionId}
-          className="flex w-full max-w-[var(--radix-popover-content-available-width)] origin-[var(--radix-popover-content-transform-origin)] flex-col gap-3.5 p-4 sm:min-w-[380px]"
-          {...props}
-        >
-          <div className="flex flex-col gap-1">
-            <h4 id={labelId} className="font-medium leading-none">
-              {sorting.length > 0 ? "Sort by" : "No sorting applied"}
-            </h4>
-            <p
-              id={descriptionId}
-              className={cn(
-                "text-muted-foreground text-sm",
-                sorting.length > 0 && "sr-only",
-              )}
-            >
-              {sorting.length > 0
-                ? "Modify sorting to organize your rows."
-                : "Add sorting to organize your rows."}
-            </p>
-          </div>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" onKeyDown={onTriggerKeyDown}>
+          <IconArrowsSort />
+          Sort
           {sorting.length > 0 && (
-            <SortableContent asChild>
-              <ul className="flex max-h-[300px] flex-col gap-2 overflow-y-auto p-1">
-                {sorting.map((sort) => (
-                  <DataTableSortItem
-                    key={sort.id}
-                    sort={sort}
-                    sortItemId={`${id}-sort-${sort.id}`}
-                    columns={columns}
-                    columnLabels={columnLabels}
-                    onSortUpdate={onSortUpdate}
-                    onSortRemove={onSortRemove}
-                  />
-                ))}
-              </ul>
-            </SortableContent>
+            <Badge
+              variant="secondary"
+              className="h-[18.24px] rounded-[3.2px] px-[5.12px] font-mono font-normal text-[10.4px]"
+            >
+              {sorting.length}
+            </Badge>
           )}
-          <div className="flex w-full items-center gap-2">
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        aria-labelledby={labelId}
+        aria-describedby={descriptionId}
+        className="flex w-full max-w-[var(--radix-popover-content-available-width)] origin-[var(--radix-popover-content-transform-origin)] flex-col gap-3.5 p-4 sm:min-w-[380px]"
+        {...props}
+      >
+        <div className="flex flex-col gap-1">
+          <h4 id={labelId} className="font-medium leading-none">
+            {sorting.length > 0 ? "Sort by" : "No sorting applied"}
+          </h4>
+          <p
+            id={descriptionId}
+            className={cn(
+              "text-muted-foreground text-sm",
+              sorting.length > 0 && "sr-only",
+            )}
+          >
+            {sorting.length > 0
+              ? "Modify sorting to organize your rows."
+              : "Add sorting to organize your rows."}
+          </p>
+        </div>
+        {sorting.length > 0 && (
+          <ul className="flex max-h-[300px] flex-col gap-2 overflow-y-auto p-1">
+            {sorting.map((sort) => (
+              <DataTableSortItem
+                key={sort.id}
+                sort={sort}
+                sortItemId={`${id}-sort-${sort.id}`}
+                columns={columns}
+                columnLabels={columnLabels}
+                onSortUpdate={onSortUpdate}
+                onSortRemove={onSortRemove}
+              />
+            ))}
+          </ul>
+        )}
+        <div className="flex w-full items-center gap-2">
+          <Button
+            size="sm"
+            className="rounded"
+            ref={addButtonRef}
+            onClick={onSortAdd}
+            disabled={columns.length === 0}
+          >
+            Add sort
+          </Button>
+          {sorting.length > 0 && (
             <Button
+              variant="outline"
               size="sm"
               className="rounded"
-              ref={addButtonRef}
-              onClick={onSortAdd}
-              disabled={columns.length === 0}
+              onClick={onSortingReset}
             >
-              Add sort
+              Reset sorting
             </Button>
-            {sorting.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded"
-                onClick={onSortingReset}
-              >
-                Reset sorting
-              </Button>
-            )}
-          </div>
-        </PopoverContent>
-      </Popover>
-      <SortableOverlay>
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-[180px] rounded-sm bg-primary/10" />
-          <div className="h-8 w-24 rounded-sm bg-primary/10" />
-          <div className="size-8 shrink-0 rounded-sm bg-primary/10" />
-          <div className="size-8 shrink-0 rounded-sm bg-primary/10" />
+          )}
         </div>
-      </SortableOverlay>
-    </Sortable>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -308,13 +285,12 @@ function DataTableSortItem({
   );
 
   return (
-    <SortableItem value={sort.id} asChild>
-      <li
-        id={sortItemId}
-        tabIndex={-1}
-        className="flex items-center gap-2"
-        onKeyDown={onItemKeyDown}
-      >
+    <li
+      id={sortItemId}
+      tabIndex={-1}
+      className="flex items-center gap-2"
+      onKeyDown={onItemKeyDown}
+    >
         <Popover open={showFieldSelector} onOpenChange={setShowFieldSelector}>
           <PopoverTrigger asChild>
             <Button
@@ -325,7 +301,7 @@ function DataTableSortItem({
               className="w-44 justify-between rounded font-normal"
             >
               <span className="truncate">{columnLabels.get(sort.id)}</span>
-              <ChevronsUpDown className="opacity-50" />
+              <IconSelector className="opacity-50" />
             </Button>
           </PopoverTrigger>
           <PopoverContent
@@ -383,18 +359,11 @@ function DataTableSortItem({
           className="size-8 shrink-0 rounded"
           onClick={() => onSortRemove(sort.id)}
         >
-          <Trash2 />
+          <IconTrash />
         </Button>
-        <SortableItemHandle asChild>
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8 shrink-0 rounded"
-          >
-            <GripVertical />
-          </Button>
-        </SortableItemHandle>
+        <Button variant="outline" size="icon" className="size-8 shrink-0 rounded" disabled>
+          <IconGripVertical />
+        </Button>
       </li>
-    </SortableItem>
   );
 }

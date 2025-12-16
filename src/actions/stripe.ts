@@ -81,7 +81,7 @@ export async function requireActiveSubscription() {
     return {
       hasSubscription: false,
       shouldRedirect: true,
-      redirectTo: error.includes("No active organization") ? "/onboarding" : "/subscribe",
+      redirectTo: error.includes("No active organization") ? "/onboarding" : "/paywall",
       error,
     };
   }
@@ -90,7 +90,7 @@ export async function requireActiveSubscription() {
     return {
       hasSubscription: false,
       shouldRedirect: true,
-      redirectTo: "/subscribe",
+      redirectTo: "/paywall",
       error: "No subscription found",
     };
   }
@@ -100,7 +100,7 @@ export async function requireActiveSubscription() {
   return {
     hasSubscription: isActive,
     shouldRedirect: !isActive,
-    redirectTo: isActive ? null : "/subscribe",
+    redirectTo: isActive ? null : "/paywall",
     subscription: orgSubscription,
     error: null,
   };

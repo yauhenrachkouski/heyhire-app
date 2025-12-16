@@ -2,14 +2,23 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Sparkles, MapPin, Briefcase, GraduationCap, Building2, Code, TrendingUp, ChevronDown } from "lucide-react";
+import {
+  IconSparkles,
+  IconMapPin,
+  IconBriefcase,
+  IconSchool,
+  IconBuilding,
+  IconCode,
+  IconTrendingUp,
+  IconChevronDown,
+} from "@tabler/icons-react";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import type { ParsedQuery } from "@/types/search";
-import type { LucideIcon } from "lucide-react";
+import type { ComponentType } from "react";
 
 interface SearchAiSuggestionsProps {
   parsedQuery: ParsedQuery;
@@ -23,7 +32,7 @@ interface SuggestionOption {
 
 interface SuggestionQuestion {
   question: string;
-  icon: LucideIcon;
+  icon: ComponentType<{ className?: string }>;
   options: SuggestionOption[];
   priority: number;
 }
@@ -66,7 +75,7 @@ function generateQuestions(query: ParsedQuery): SuggestionQuestion[] {
   if (isEmpty(query.location)) {
     questions.push({
       question: "Is this position remote-friendly or location-specific?",
-      icon: MapPin,
+      icon: IconMapPin,
       options: [
         { label: "Remote (Anywhere)", value: " working remotely" },
         { label: "United States", value: " located in United States" },
@@ -84,7 +93,7 @@ function generateQuestions(query: ParsedQuery): SuggestionQuestion[] {
   if (isEmpty(query.years_of_experience)) {
     const experienceQuestion: SuggestionQuestion = {
       question: "What experience level are you looking for?",
-      icon: TrendingUp,
+      icon: IconTrendingUp,
       options: [],
       priority: 9,
     };
@@ -117,7 +126,7 @@ function generateQuestions(query: ParsedQuery): SuggestionQuestion[] {
     if (isTechRole) {
       const techStackQuestion: SuggestionQuestion = {
         question: "Could you improve the tech stack requirements?",
-        icon: Code,
+        icon: IconCode,
         options: [],
         priority: 10,
       };
@@ -181,7 +190,7 @@ function generateQuestions(query: ParsedQuery): SuggestionQuestion[] {
     } else if (isDesigner) {
       questions.push({
         question: "What design tools and skills should they have?",
-        icon: Code,
+        icon: IconCode,
         options: [
           { label: "Figma", value: " skilled in Figma" },
           { label: "Adobe Creative Suite", value: " with Adobe Creative Suite expertise" },
@@ -194,7 +203,7 @@ function generateQuestions(query: ParsedQuery): SuggestionQuestion[] {
     } else if (isProductManager) {
       questions.push({
         question: "What product management skills are essential?",
-        icon: Code,
+        icon: IconCode,
         options: [
           { label: "Agile/Scrum", value: " with Agile and Scrum methodology experience" },
           { label: "Product Roadmapping", value: " with product roadmapping skills" },
@@ -207,7 +216,7 @@ function generateQuestions(query: ParsedQuery): SuggestionQuestion[] {
     } else if (isMarketing) {
       questions.push({
         question: "What marketing skills are you looking for?",
-        icon: Code,
+        icon: IconCode,
         options: [
           { label: "SEO/SEM", value: " skilled in SEO and SEM" },
           { label: "Content Marketing", value: " with content marketing experience" },
@@ -220,7 +229,7 @@ function generateQuestions(query: ParsedQuery): SuggestionQuestion[] {
     } else if (isSales) {
       questions.push({
         question: "What sales expertise do you need?",
-        icon: Code,
+        icon: IconCode,
         options: [
           { label: "B2B Sales", value: " with B2B sales experience" },
           { label: "CRM (Salesforce)", value: " with Salesforce CRM expertise" },
@@ -233,7 +242,7 @@ function generateQuestions(query: ParsedQuery): SuggestionQuestion[] {
     } else if (isFinance) {
       questions.push({
         question: "What financial skills are required?",
-        icon: Code,
+        icon: IconCode,
         options: [
           { label: "Financial Modeling", value: " with financial modeling expertise" },
           { label: "Excel Advanced", value: " with advanced Excel skills" },
@@ -246,7 +255,7 @@ function generateQuestions(query: ParsedQuery): SuggestionQuestion[] {
     } else if (isHealthcare) {
       questions.push({
         question: "What healthcare skills and certifications are needed?",
-        icon: Code,
+        icon: IconCode,
         options: [
           { label: "Patient Care", value: " with patient care experience" },
           { label: "EMR Systems", value: " with electronic medical records experience" },
@@ -258,7 +267,7 @@ function generateQuestions(query: ParsedQuery): SuggestionQuestion[] {
     } else if (isHR) {
       questions.push({
         question: "What HR skills are you looking for?",
-        icon: Code,
+        icon: IconCode,
         options: [
           { label: "Talent Acquisition", value: " with talent acquisition experience" },
           { label: "HRIS Systems", value: " with HRIS systems expertise" },
@@ -274,7 +283,7 @@ function generateQuestions(query: ParsedQuery): SuggestionQuestion[] {
   if (isEmpty(query.company)) {
     const companyQuestion: SuggestionQuestion = {
       question: "What type of company background do you prefer?",
-      icon: Building2,
+      icon: IconBuilding,
       options: [
         { label: "Startups (Early Stage)", value: " with startup experience" },
         { label: "Scale-ups (100-1000 employees)", value: " from scale-up companies" },
@@ -296,7 +305,7 @@ function generateQuestions(query: ParsedQuery): SuggestionQuestion[] {
   if (isEmpty(query.education)) {
     const educationQuestion: SuggestionQuestion = {
       question: "What educational background is required?",
-      icon: GraduationCap,
+      icon: IconSchool,
       options: [],
       priority: 6,
     };
@@ -349,7 +358,7 @@ function generateQuestions(query: ParsedQuery): SuggestionQuestion[] {
 
     questions.push({
       question: "Which industry experience would be valuable?",
-      icon: Briefcase,
+      icon: IconBriefcase,
       options: industryOptions,
       priority: 5,
     });
@@ -361,7 +370,7 @@ function generateQuestions(query: ParsedQuery): SuggestionQuestion[] {
   if (hasBasicInfo && isEmpty(query.company)) {
     questions.push({
       question: "Should they have leadership or management experience?",
-      icon: TrendingUp,
+      icon: IconTrendingUp,
       options: [
         { label: "Team Leadership", value: " with team leadership experience" },
         { label: "People Management", value: " with people management experience" },
@@ -400,7 +409,7 @@ function CollapsibleQuestion({
             <Icon className="h-4 w-4 text-primary" />
             <span>{question.question}</span>
           </div>
-          <ChevronDown
+          <IconChevronDown
             className={`h-4 w-4 transition-transform duration-200 ${
               isOpen ? "rotate-180" : ""
             }`}
@@ -433,7 +442,7 @@ export function SearchAiSuggestions({ parsedQuery, onSuggestionClick }: SearchAi
     return (
       <div className="space-y-3">
         <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-          <Sparkles className="h-4 w-4" />
+          <IconSparkles className="h-4 w-4" />
           AI Suggestions to Refine Your Search:
         </h3>
         <p className="text-sm text-muted-foreground">
@@ -446,7 +455,7 @@ export function SearchAiSuggestions({ parsedQuery, onSuggestionClick }: SearchAi
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-        <Sparkles className="h-4 w-4" />
+        <IconSparkles className="h-4 w-4" />
         AI Suggestions to Refine Your Search:
       </h3>
       <div className="space-y-3">

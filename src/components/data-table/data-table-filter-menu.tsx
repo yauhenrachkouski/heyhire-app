@@ -2,13 +2,13 @@
 
 import type { Column, Table } from "@tanstack/react-table";
 import {
-  BadgeCheck,
-  CalendarIcon,
-  Check,
-  ListFilter,
-  Text,
-  X,
-} from "lucide-react";
+  IconCalendar,
+  IconCheck,
+  IconCircleCheck,
+  IconFilter,
+  IconTextRecognition,
+  IconX,
+} from "@tabler/icons-react";
 import { useQueryState } from "nuqs";
 import * as React from "react";
 
@@ -249,7 +249,7 @@ export function DataTableFilterMenu<TData>({
           className="size-8"
           onClick={onFiltersReset}
         >
-          <X />
+          <IconX />
         </Button>
       )}
       <Popover open={open} onOpenChange={onOpenChange}>
@@ -262,7 +262,7 @@ export function DataTableFilterMenu<TData>({
             ref={triggerRef}
             onKeyDown={onTriggerKeyDown}
           >
-            <ListFilter />
+            <IconFilter />
             {filters.length > 0 ? null : "Filter"}
           </Button>
         </PopoverTrigger>
@@ -444,7 +444,7 @@ function DataTableFilterItem<TData>({
                       <span className="truncate">
                         {column.columnDef.meta?.label ?? column.id}
                       </span>
-                      <Check
+                      <IconCheck
                         className={cn(
                           "ml-auto",
                           column.id === filter.id ? "opacity-100" : "opacity-0",
@@ -507,7 +507,7 @@ function DataTableFilterItem<TData>({
           className="h-full rounded-none rounded-r-md border border-l-0 px-1.5 font-normal dark:bg-input/30"
           onClick={() => onFilterRemove(filter.filterId)}
         >
-          <X className="size-3.5" />
+          <IconX className="size-3.5" />
         </Button>
       </div>
     );
@@ -585,12 +585,12 @@ function FilterValueSelector<TData>({
           >
             {isEmpty ? (
               <>
-                <Text />
+                <IconTextRecognition />
                 <span>Type to add filter...</span>
               </>
             ) : (
               <>
-                <BadgeCheck />
+                <IconCircleCheck />
                 <span className="truncate">Filter by &quot;{value}&quot;</span>
               </>
             )}
@@ -776,7 +776,7 @@ function onFilterInputRender<TData>({
                       {option.icon && <option.icon />}
                       <span className="truncate">{option.label}</span>
                       {filter.variant === "multiSelect" && (
-                        <Check
+                        <IconCheck
                           className={cn(
                             "ml-auto",
                             selectedValues.includes(option.value)
@@ -825,7 +825,7 @@ function onFilterInputRender<TData>({
                 !filter.value && "text-muted-foreground",
               )}
             >
-              <CalendarIcon className="size-3.5" />
+              <IconCalendar className="size-3.5" />
               <span className="truncate">{displayValue}</span>
             </Button>
           </PopoverTrigger>

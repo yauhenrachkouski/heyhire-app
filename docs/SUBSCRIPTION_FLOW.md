@@ -28,9 +28,9 @@ This is by design, according to better-auth Stripe plugin documentation. The sub
 - **No subscription is created at this stage**
 
 ### 3. Subscription Selection
-**File**: `src/app/subscribe/page.tsx`, `src/components/subscribe/subscribe-cards.tsx`
+**File**: `src/app/paywall/page.tsx`, `src/components/subscribe/subscribe-cards.tsx`
 
-- User is redirected to `/subscribe` page
+- User is redirected to `/paywall` page
 - User sees available plans (Starter, Pro, Enterprise)
 - Trial eligibility is checked via `hasUsedTrial()` action
   - Trial is marked as "used" when any subscription reaches `trialing`, `active`, or `past_due` status
@@ -44,8 +44,8 @@ When user clicks "Start Trial" or "Get Started":
 await subscription.upgrade({
   plan: "starter" | "pro",
   referenceId: activeOrganizationId, // Links subscription to organization
-  successUrl: `${window.location.origin}/subscribe/success`,
-  cancelUrl: `${window.location.origin}/subscribe`,
+  successUrl: `${window.location.origin}/paywall/success`,
+  cancelUrl: `${window.location.origin}/paywall`,
 })
 ```
 
@@ -128,7 +128,7 @@ If a subscription isn't found by organizationId, the system falls back to checki
 **File**: `src/actions/stripe.ts` (requireActiveSubscription)
 
 Protected routes check subscription status:
-- If no active subscription: redirect to `/subscribe`
+- If no active subscription: redirect to `/paywall`
 - Active statuses: `active`, `trialing`
 - Organization-level check: uses active organizationId from session
 
@@ -138,7 +138,7 @@ Protected routes check subscription status:
 Fetches subscription for the active organization, with fallback to user's Stripe customer.
 
 ### `requireActiveSubscription()`
-Gate that redirects users without active subscriptions to `/subscribe`.
+Gate that redirects users without active subscriptions to `/paywall`.
 
 ### `hasUsedTrial()`
 Checks if organization has already used their trial based on subscription history.

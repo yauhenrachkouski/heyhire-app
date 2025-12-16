@@ -1,7 +1,7 @@
 "use client";
 
 import type { Table } from "@tanstack/react-table";
-import { Plus } from "lucide-react";
+import { IconPlus } from "@tabler/icons-react";
 import * as React from "react";
 
 import { DataTableFilterItem } from "@/components/data-table/data-table-filter-item";
@@ -80,7 +80,7 @@ export function DataTableFilterList<TData>({
             ref={addButtonRef}
             title="Add filter"
           >
-            <Plus className="size-4" />
+            <IconPlus className="size-4" />
             Add filter
           </Button>
         </PopoverTrigger>

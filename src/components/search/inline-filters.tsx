@@ -10,8 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Sparkles } from "lucide-react";
-import { IconSortAscending, IconSortDescending } from "@tabler/icons-react";
+import { IconSparkles, IconSortAscending, IconSortDescending } from "@tabler/icons-react";
 
 interface InlineFiltersProps {
   onScoreRangeChange?: (min: number, max: number) => void;
@@ -93,7 +92,7 @@ export function InlineFilters({ onScoreRangeChange, onSortChange }: InlineFilter
               aria-label={scoreLabel}
               title={scoreLabel}
             >
-              <Sparkles className="h-4 w-4 text-purple-500" />
+              <IconSparkles className="h-4 w-4 text-purple-500" />
               <span className="hidden sm:inline">{scoreLabel}</span>
             </SelectTrigger>
             <SelectContent>

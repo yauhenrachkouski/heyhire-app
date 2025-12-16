@@ -50,7 +50,10 @@ export async function isInTrialPeriod() {
     }
 
     const sub = orgSubscription[0];
-    const inTrial = sub.status === "trialing";
+    const now = new Date();
+    const inTrial =
+      sub.status === "trialing" ||
+      (sub.plan === "trial" && !!sub.periodEnd && new Date(sub.periodEnd).getTime() > now.getTime());
 
     return {
       inTrial,

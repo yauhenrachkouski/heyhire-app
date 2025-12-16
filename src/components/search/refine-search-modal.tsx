@@ -13,7 +13,7 @@ import {
   DialogClose, // Import DialogClose
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Sparkles } from "lucide-react";
+import { IconSparkles } from "@tabler/icons-react";
 import type { ParsedQuery } from "@/types/search";
 import { SearchInput } from "./search-input";
 import { AppliedFilters } from "./applied-filters";
@@ -80,7 +80,7 @@ export function RefineSearchModal({ params, initialQueryText, onRemoveFilter }: 
           variant="outline" 
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-normal ml-2"
         >
-          <Sparkles className="h-4 w-4" />
+          <IconSparkles className="h-4 w-4" />
           Refine Search
         </Button>
       </DialogTrigger>

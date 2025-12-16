@@ -1,5 +1,5 @@
 import type { Column } from "@tanstack/react-table";
-import { CalendarIcon } from "lucide-react";
+import { IconCalendar } from "@tabler/icons-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -61,7 +61,7 @@ export function DateFilterInput<TData>({
             !filter.value && "text-muted-foreground",
           )}
         >
-          <CalendarIcon className="mr-2 size-4 shrink-0" />
+          <IconCalendar className="mr-2 size-4 shrink-0" />
           <span className="truncate">{displayValue}</span>
         </Button>
       </PopoverTrigger>

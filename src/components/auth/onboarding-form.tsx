@@ -68,7 +68,7 @@ export function OnboardingForm() {
       toast.success('Onboarding completed successfully!')
       console.log('[OnboardingForm] Redirecting to /subscribe')
       await new Promise(resolve => setTimeout(resolve, 500))
-      router.push('/subscribe')
+      router.push('/paywall')
     } catch (err: any) {
       console.error('[OnboardingForm] Organization creation error:', err)
       setError(err?.message || 'Failed to create organization')
@@ -92,7 +92,7 @@ export function OnboardingForm() {
 
       toast.success('Default workspace created!')
       console.log('[OnboardingForm] Redirecting to /subscribe')
-      router.push('/subscribe')
+      router.push('/paywall')
     } catch (err: any) {
       console.error('[OnboardingForm] Failed to create default organization:', err)
       toast.error('Failed to create workspace. Please try again.')

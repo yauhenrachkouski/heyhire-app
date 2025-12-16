@@ -13,6 +13,14 @@ export default async function OnboardingPage() {
   if (!session) {
     return redirect("/auth/signin")
   }
+
+  const organizations = await auth.api.listOrganizations({
+    headers: await headers(),
+  })
+
+  if (organizations && organizations.length > 0) {
+    return redirect('/paywall')
+  }
   
   return (
     <div className="flex min-h-svh flex-col p-6 md:p-10">

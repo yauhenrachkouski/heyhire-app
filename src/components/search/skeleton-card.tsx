@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Mail, Phone, Plus, Eye } from "lucide-react";
+import { IconMail, IconPhone, IconPlus, IconEye } from "@tabler/icons-react";
 
 interface SkeletonCardProps {
   index?: number;
@@ -107,7 +107,7 @@ export function SkeletonCard({ index = 0 }: SkeletonCardProps) {
           className="h-8 w-8"
           disabled
         >
-          <Plus className="h-4 w-4" />
+          <IconPlus className="h-4 w-4" />
         </Button>
         <Button
           variant="ghost"
@@ -115,7 +115,7 @@ export function SkeletonCard({ index = 0 }: SkeletonCardProps) {
           className="h-8 w-8"
           disabled
         >
-          <Eye className="h-4 w-4" />
+          <IconEye className="h-4 w-4" />
         </Button>
         <Button
           variant="ghost"
@@ -123,7 +123,7 @@ export function SkeletonCard({ index = 0 }: SkeletonCardProps) {
           className="h-8 w-8"
           disabled
         >
-          <Mail className="h-4 w-4" />
+          <IconMail className="h-4 w-4" />
         </Button>
         <Button
           variant="ghost"
@@ -131,7 +131,7 @@ export function SkeletonCard({ index = 0 }: SkeletonCardProps) {
           className="h-8 w-8"
           disabled
         >
-          <Phone className="h-4 w-4" />
+          <IconPhone className="h-4 w-4" />
         </Button>
       </div>
     </div>

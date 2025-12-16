@@ -1,7 +1,7 @@
 "use client";
 
 import type { Column } from "@tanstack/react-table";
-import { X } from "lucide-react";
+import { IconX } from "@tabler/icons-react";
 import * as React from "react";
 
 import { BooleanFilterInput } from "@/components/data-table/filter-inputs/boolean-filter-input";
@@ -113,7 +113,7 @@ export function DataTableFilterItem<TData>({
         onClick={() => onFilterRemove(filter.filterId)}
         data-slot="filters-remove"
       >
-        <X className="size-3.5 opacity-60" />
+        <IconX className="size-3.5 opacity-60" />
       </Button>
     </div>
   );

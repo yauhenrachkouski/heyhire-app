@@ -86,17 +86,13 @@ export const TRANSACTION_TYPES: Record<string, TransactionType> = {
  * Default credit allocations per subscription plan
  */
 export const PLAN_CREDIT_ALLOCATIONS: Record<string, { contact_lookup: number; export: number }> = {
-  starter: {
+  trial: {
     contact_lookup: 100,
-    export: 50,
+    export: 0,
   },
-  pro: {
-    contact_lookup: 500,
-    export: 200,
-  },
-  enterprise: {
-    contact_lookup: -1, // -1 means unlimited
-    export: -1,
+  standard: {
+    contact_lookup: 1000,
+    export: 0,
   },
 };
 

@@ -3,6 +3,11 @@
 import { headers as getHeaders } from "next/headers"
 import { redirect } from "next/navigation"
 import { getSessionWithOrg } from "@/lib/auth-helpers"
+import { db } from "@/db/drizzle"
+import { subscription } from "@/db/schema"
+import { user } from "@/db/schema"
+import { eq } from "drizzle-orm"
+import { stripeClient } from "@/lib/auth"
 
 /**
  * Server action to initiate subscription checkout
@@ -13,7 +18,7 @@ export async function initiateSubscriptionCheckout(formData: FormData) {
   
   console.log('[initiateSubscriptionCheckout] Starting checkout for plan:', plan)
 
-  if (!plan || (plan !== "starter" && plan !== "pro")) {
+  if (!plan || plan !== "standard") {
     throw new Error("Invalid plan selected")
   }
 
@@ -43,8 +48,8 @@ export async function initiateSubscriptionCheckout(formData: FormData) {
     body: JSON.stringify({
       plan: plan,
       referenceId: activeOrgId,
-      successUrl: `${siteUrl}/subscribe/success`,
-      cancelUrl: `${siteUrl}/subscribe`,
+      successUrl: `${siteUrl}/paywall/success`,
+      cancelUrl: `${siteUrl}/paywall`,
     }),
   })
 
@@ -65,6 +70,61 @@ export async function initiateSubscriptionCheckout(formData: FormData) {
     console.error('[initiateSubscriptionCheckout] No checkout URL received')
     throw new Error("Failed to get checkout URL")
   }
+}
+
+/**
+ * Server action to initiate one-time trial checkout
+ * Uses Stripe Checkout (mode=payment). Trial is available once per organization.
+ */
+export async function initiateTrialCheckout() {
+  const { activeOrgId, userId } = await getSessionWithOrg()
+
+  const orgSubscriptions = await db
+    .select({ status: subscription.status })
+    .from(subscription)
+    .where(eq(subscription.referenceId, activeOrgId))
+
+  const paidStatuses = ["trialing", "active", "past_due", "paused"]
+  const trialAlreadyUsed = orgSubscriptions.some((s) => s.status && paidStatuses.includes(s.status))
+  if (trialAlreadyUsed) {
+    throw new Error("Trial already used")
+  }
+
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+    "http://localhost:3000"
+
+  const trialPriceId = process.env.STRIPE_TRIAL_PRICE_ID
+  if (!trialPriceId) {
+    throw new Error("Missing STRIPE_TRIAL_PRICE_ID")
+  }
+
+  const userRecord = await db.query.user.findFirst({
+    where: eq(user.id, userId),
+    columns: { stripeCustomerId: true },
+  })
+
+  const session = await stripeClient.checkout.sessions.create({
+    mode: "payment",
+    customer: userRecord?.stripeCustomerId ?? undefined,
+    payment_method_collection: "always",
+    line_items: [{ price: trialPriceId, quantity: 1 }],
+    success_url: `${baseUrl}/paywall/success`,
+    cancel_url: `${baseUrl}/paywall`,
+    client_reference_id: activeOrgId,
+    metadata: {
+      plan: "trial",
+      referenceId: activeOrgId,
+      userId,
+    },
+  })
+
+  if (!session.url) {
+    throw new Error("Failed to create checkout session")
+  }
+
+  redirect(session.url)
 }
 
 /**

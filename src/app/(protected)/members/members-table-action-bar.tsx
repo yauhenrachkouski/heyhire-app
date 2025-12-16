@@ -7,7 +7,7 @@ import {
   DataTableActionBarAction,
   DataTableActionBarSelection,
 } from "@/components/data-table/data-table-action-bar";
-import { Download, Trash2, UserCog } from "lucide-react";
+import { IconDownload, IconTrash, IconUserCog } from "@tabler/icons-react";
 import type { Member } from "@/actions/members";
 import { exportTableToCSV } from "@/lib/export";
 import { DeleteMembersDialog } from "./delete-members-dialog";
@@ -49,7 +49,7 @@ export function MembersTableActionBar({ table }: MembersTableActionBarProps) {
           tooltip="Update role"
           onClick={() => setShowUpdateDialog(true)}
         >
-          <UserCog />
+          <IconUserCog />
           Update Role
         </DataTableActionBarAction>
 
@@ -57,7 +57,7 @@ export function MembersTableActionBar({ table }: MembersTableActionBarProps) {
           tooltip="Export selected"
           onClick={handleExport}
         >
-          <Download />
+          <IconDownload />
           Export
         </DataTableActionBarAction>
 
@@ -65,7 +65,7 @@ export function MembersTableActionBar({ table }: MembersTableActionBarProps) {
           tooltip="Delete selected"
           onClick={() => setShowDeleteDialog(true)}
         >
-          <Trash2 />
+          <IconTrash />
           Delete
         </DataTableActionBarAction>
       </DataTableActionBar>

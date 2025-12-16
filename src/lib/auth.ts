@@ -9,14 +9,15 @@ import { Resend } from "resend";
 import Stripe from "stripe";
 import { DISALLOWED_DOMAINS } from "./constants";
 import { getPostHogServer } from "@/lib/posthog/posthog-server";
+import { eq } from "drizzle-orm";
 
 // Validate Stripe environment variables at startup
 function validateStripeConfig() {
    const requiredVars = [
       'STRIPE_SECRET_KEY',
       'STRIPE_WEBHOOK_SECRET',
-      'STRIPE_STARTER_PRICE_ID',
-      'STRIPE_PRO_PRICE_ID',
+      'STRIPE_PRICE_ID',
+      'STRIPE_TRIAL_PRICE_ID',
    ];
 
    const missing = requiredVars.filter((varName) => {
@@ -246,53 +247,47 @@ export const auth = betterAuth({
             enabled: true,
             plans: [
                {
-                  name: "starter",
-                  priceId: process.env.STRIPE_STARTER_PRICE_ID || "price_1SKbRLBFuK3GeesLncMInoVH",
-                  limits: {
-                     searches: 100,
-                     candidates: 1000,
-                  },
-                  freeTrial: {
-                     days: 3,
-                     onTrialStart: async (subscription) => {
-                        console.log(`Trial started for organization: ${subscription.referenceId}`);
-                     },
-                     onTrialEnd: async ({ subscription }) => {
-                        console.log(`Trial ended for organization ${subscription.referenceId}, converting to Starter plan`);
-                     },
-                     onTrialExpired: async (subscription) => {
-                        console.log(`Trial expired for organization ${subscription.referenceId}`);
-                     },
-                  },
-               },
-               {
-                  name: "pro",
-                  priceId: process.env.STRIPE_PRO_PRICE_ID || "price_1SKbQwBFuK3GeesLv8h5MIfA",
+                  name: "standard",
+                  priceId: process.env.STRIPE_PRICE_ID || "price_placeholder",
                   limits: {
                      searches: 500,
                      candidates: 5000,
                   },
-                  freeTrial: {
-                     days: 3,
-                     onTrialStart: async (subscription) => {
-                        console.log(`Pro trial started for organization: ${subscription.referenceId}`);
-                     },
-                     onTrialEnd: async ({ subscription }) => {
-                        console.log(`Pro trial ended for organization ${subscription.referenceId}, converting to Pro plan`);
-                     },
-                  },
                },
             ],
-            // Charge $3 for the trial period - use organization as reference
             getCheckoutSessionParams: async ({ user, session, plan, subscription }) => {
-               // Only charge $3 for trial if it's Starter or Pro plan and no existing subscription
-               if ((plan.name === "starter" || plan.name === "pro") && !subscription) {
+               if (plan.name === "standard" && !subscription) {
+                  const referenceId = (session as any)?.referenceId;
+
+                  // One-time trial eligibility: allow trial only if this org has never had
+                  // a subscription in a paid/trialing state.
+                  // If we can't determine referenceId, fall back to no trial.
+                  if (referenceId) {
+                     const { subscription: subscriptionTable } = require("@/db/schema");
+                     const orgSubscriptions = await db
+                        .select({ status: subscriptionTable.status })
+                        .from(subscriptionTable)
+                        .where(eq(subscriptionTable.referenceId, referenceId));
+
+                     const paidStatuses = ["trialing", "active", "past_due", "paused"];
+                     const trialEligible = !orgSubscriptions.some((s: any) => s.status && paidStatuses.includes(s.status));
+
+                     if (trialEligible) {
+                        return {
+                           params: {
+                              payment_method_collection: 'always',
+                              // "Cup of coffee" one-time trial fee
+                              // Adds a one-off charge on the first invoice only.
+                           },
+                           // NOTE: referenceId is passed from the client (subscribe-cards.tsx)
+                           // Do NOT override it here, let the client value pass through
+                        };
+                     }
+                  }
+
                   return {
                      params: {
                         payment_method_collection: 'always',
-                        subscription_data: {
-                           trial_period_days: 3,
-                        },
                      },
                      // NOTE: referenceId is passed from the client (subscribe-cards.tsx)
                      // Do NOT override it here, let the client value pass through
@@ -344,6 +339,86 @@ export const auth = betterAuth({
 
             try {
                switch (event.type) {
+                  case "checkout.session.completed": {
+                     const session = event.data.object as any;
+
+                     // One-time trial purchase (Stripe Checkout mode=payment)
+                     if (session?.mode === "payment" && session?.metadata?.plan === "trial") {
+                        const referenceId = session?.metadata?.referenceId || session?.client_reference_id;
+                        const userId = session?.metadata?.userId;
+
+                        if (!referenceId) {
+                           console.error("[Stripe Webhook] Missing referenceId for trial checkout.session.completed");
+                           break;
+                        }
+
+                        const existing = await db.query.subscription.findFirst({
+                           where: eq(sub.stripeSubscriptionId, session.id),
+                        });
+
+                        if (existing) {
+                           console.log(`[Stripe Webhook] Trial session already processed: ${session.id}`);
+                           break;
+                        }
+
+                        const now = new Date();
+                        const trialEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+                        const { generateId } = require("@/lib/id");
+
+                        const insertedRows = await db
+                           .insert(sub)
+                           .values({
+                              id: generateId(),
+                              plan: "trial",
+                              referenceId,
+                              stripeCustomerId: session.customer || null,
+                              stripeSubscriptionId: session.id,
+                              status: "active",
+                              periodStart: now,
+                              periodEnd: trialEnd,
+                              trialStart: now,
+                              trialEnd,
+                              cancelAtPeriodEnd: true,
+                              seats: null,
+                           })
+                           .returning();
+
+                        const insertedRow = (insertedRows as any[])[0];
+
+                        console.log(`[Stripe Webhook] ✅ Created trial access record: ${insertedRow?.id}`);
+
+                        // Grant credits for trial
+                        const { addCredits } = require("@/actions/credits");
+                        const { getPlanCreditAllocation, CREDIT_TYPES } = require("@/lib/credits");
+                        const { member } = require("@/db/schema");
+
+                        const orgOwner = await db.query.member.findFirst({
+                           where: eq(member.organizationId, referenceId),
+                        });
+
+                        const creditUserId = userId || orgOwner?.userId;
+
+                        if (orgOwner && creditUserId) {
+                           const contactLookupCredits = getPlanCreditAllocation("trial", CREDIT_TYPES.CONTACT_LOOKUP);
+                           if (contactLookupCredits > 0) {
+                              await addCredits({
+                                 organizationId: referenceId,
+                                 userId: creditUserId,
+                                 amount: contactLookupCredits,
+                                 type: "purchase",
+                                 creditType: CREDIT_TYPES.CONTACT_LOOKUP,
+                                 relatedEntityId: insertedRow?.id,
+                                 description: `Trial purchase: ${contactLookupCredits} contact lookup credits`,
+                                 metadata: { plan: "trial", checkoutSessionId: session.id },
+                              });
+                              console.log(`[Stripe Webhook] ✅ Granted ${contactLookupCredits} trial contact lookup credits`);
+                           }
+                        }
+                     }
+
+                     break;
+                  }
                   // === SUBSCRIPTION EVENTS ===
                   case "customer.subscription.created":
                   case "customer.subscription.updated": {
@@ -382,6 +457,33 @@ export const auth = betterAuth({
                            periodEnd: stripeSubscription.current_period_end ? new Date(stripeSubscription.current_period_end * 1000) : null,
                            trialEnd: stripeSubscription.trial_end ? new Date(stripeSubscription.trial_end * 1000) : null,
                         });
+
+                        const inactiveStatuses = ["canceled", "unpaid", "incomplete_expired"];
+                        if (result[0] && stripeSubscription.status && inactiveStatuses.includes(stripeSubscription.status)) {
+                           const { setCreditsBalance } = require("@/actions/credits");
+                           const { CREDIT_TYPES } = require("@/lib/credits");
+                           const subscriptionRecord = result[0];
+                           const organizationId = subscriptionRecord.referenceId;
+
+                           const { member } = require("@/db/schema");
+                           const orgOwner = await db.query.member.findFirst({
+                              where: eq(member.organizationId, organizationId),
+                           });
+
+                           if (orgOwner && organizationId) {
+                              await setCreditsBalance({
+                                 organizationId,
+                                 userId: orgOwner.userId,
+                                 newBalance: 0,
+                                 type: "subscription_grant",
+                                 creditType: CREDIT_TYPES.CONTACT_LOOKUP,
+                                 relatedEntityId: subscriptionRecord.id,
+                                 description: `Subscription became inactive (${stripeSubscription.status}): credits reset to 0`,
+                                 metadata: { plan: subscriptionRecord.plan, subscriptionId: subscriptionRecord.id },
+                              });
+                              console.log(`[Stripe Webhook] ✅ Reset credits to 0 (subscription inactive)`);
+                           }
+                        }
                      } catch (error) {
                         console.error(`[Stripe Webhook] ❌ Error updating subscription:`, error);
                      }
@@ -403,6 +505,32 @@ export const auth = betterAuth({
                            .returning();
 
                         console.log(`[Stripe Webhook] ✅ Marked subscription as canceled: ${result[0]?.id}`);
+
+                        if (result[0]) {
+                           const { setCreditsBalance } = require("@/actions/credits");
+                           const { CREDIT_TYPES } = require("@/lib/credits");
+                           const subscriptionRecord = result[0];
+                           const organizationId = subscriptionRecord.referenceId;
+
+                           const { member } = require("@/db/schema");
+                           const orgOwner = await db.query.member.findFirst({
+                              where: eq(member.organizationId, organizationId),
+                           });
+
+                           if (orgOwner && organizationId) {
+                              await setCreditsBalance({
+                                 organizationId,
+                                 userId: orgOwner.userId,
+                                 newBalance: 0,
+                                 type: "subscription_grant",
+                                 creditType: CREDIT_TYPES.CONTACT_LOOKUP,
+                                 relatedEntityId: subscriptionRecord.id,
+                                 description: "Subscription ended: credits reset to 0",
+                                 metadata: { plan: subscriptionRecord.plan, subscriptionId: subscriptionRecord.id },
+                              });
+                              console.log(`[Stripe Webhook] ✅ Reset credits to 0 (subscription ended)`);
+                           }
+                        }
                      } catch (error) {
                         console.error(`[Stripe Webhook] ❌ Error marking subscription canceled:`, error);
                      }
@@ -427,7 +555,7 @@ export const auth = betterAuth({
 
                         // Grant credits for subscription
                         if (result[0]) {
-                           const { addCredits } = require("@/actions/credits");
+                           const { addCredits, setCreditsBalance } = require("@/actions/credits");
                            const { getPlanCreditAllocation, CREDIT_TYPES } = require("@/lib/credits");
                            const { organization } = require("@/db/schema");
 
@@ -445,17 +573,17 @@ export const auth = betterAuth({
                               // Grant contact lookup credits
                               const contactLookupCredits = getPlanCreditAllocation(plan, CREDIT_TYPES.CONTACT_LOOKUP);
                               if (contactLookupCredits > 0) {
-                                 await addCredits({
+                                 await setCreditsBalance({
                                     organizationId,
                                     userId: orgOwner.userId,
-                                    amount: contactLookupCredits,
+                                    newBalance: contactLookupCredits,
                                     type: "subscription_grant",
                                     creditType: CREDIT_TYPES.CONTACT_LOOKUP,
                                     relatedEntityId: subscriptionRecord.id,
-                                    description: `Subscription grant: ${contactLookupCredits} contact lookup credits for ${plan} plan`,
-                                    metadata: { plan, subscriptionId: subscriptionRecord.id },
+                                    description: `Subscription monthly reset: ${contactLookupCredits} contact lookup credits for ${plan} plan`,
+                                    metadata: { plan, subscriptionId: subscriptionRecord.id, invoiceId: invoice.id },
                                  });
-                                 console.log(`[Stripe Webhook] ✅ Granted ${contactLookupCredits} contact lookup credits`);
+                                 console.log(`[Stripe Webhook] ✅ Reset contact lookup credits to ${contactLookupCredits}`);
                               }
 
                               // Grant export credits
@@ -495,6 +623,32 @@ export const auth = betterAuth({
                            .returning();
 
                         console.log(`[Stripe Webhook] ✅ Marked subscription as past_due: ${result[0]?.id}`);
+
+                        if (result[0]) {
+                           const { setCreditsBalance } = require("@/actions/credits");
+                           const { CREDIT_TYPES } = require("@/lib/credits");
+                           const subscriptionRecord = result[0];
+                           const organizationId = subscriptionRecord.referenceId;
+
+                           const { member } = require("@/db/schema");
+                           const orgOwner = await db.query.member.findFirst({
+                              where: eq(member.organizationId, organizationId),
+                           });
+
+                           if (orgOwner && organizationId) {
+                              await setCreditsBalance({
+                                 organizationId,
+                                 userId: orgOwner.userId,
+                                 newBalance: 0,
+                                 type: "subscription_grant",
+                                 creditType: CREDIT_TYPES.CONTACT_LOOKUP,
+                                 relatedEntityId: subscriptionRecord.id,
+                                 description: "Subscription payment failed: credits reset to 0",
+                                 metadata: { plan: subscriptionRecord.plan, subscriptionId: subscriptionRecord.id, invoiceId: invoice.id },
+                              });
+                              console.log(`[Stripe Webhook] ✅ Reset credits to 0 (payment failed)`);
+                           }
+                        }
                      } catch (error) {
                         console.error(`[Stripe Webhook] ❌ Error handling failed payment:`, error);
                      }
@@ -531,7 +685,7 @@ export const auth = betterAuth({
    databaseHooks: {
       user: {
          create: {
-            before: async (user) => {
+            before: async (user: { email: string }) => {
                // Only validate if domains are configured
                if (DISALLOWED_DOMAINS.length > 0) {
                   const emailDomain = user.email.split("@")[1]?.toLowerCase();
@@ -549,7 +703,7 @@ export const auth = betterAuth({
       },
       session: {
          create: {
-            before: async (session) => {
+            before: async (session: { userId: string }) => {
                // Get the user's first organization to set as active
                const { member: memberTable } = require("@/db/schema");
                const { eq } = require("drizzle-orm");
