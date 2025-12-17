@@ -1,13 +1,9 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useActiveOrganization } from "@/lib/auth-client";
-import { getUserSubscription, getSubscriptionStatus } from "@/actions/stripe";
-import { isSubscriptionActive, getSubscriptionStatus as getStatusInfo } from "@/lib/subscription";
-
-// =============================================================================
-// TYPES
-// =============================================================================
+import { getUserSubscription } from "@/actions/stripe";
+import { getSubscriptionStatus as getStatusInfo } from "@/lib/subscription";
 
 export interface SubscriptionState {
     subscription: Awaited<ReturnType<typeof getUserSubscription>>["subscription"];
@@ -23,22 +19,18 @@ export interface SubscriptionState {
     refetch: () => void;
 }
 
-// =============================================================================
-// QUERY KEYS
-// =============================================================================
-
 export const subscriptionKeys = {
     all: ["subscription"] as const,
     organization: (orgId: string) => [...subscriptionKeys.all, "org", orgId] as const,
 };
 
-// =============================================================================
-// HOOK
-// =============================================================================
-
 /**
  * Client-side hook for subscription state
  * Single source of truth for subscription status in React components
+ * 
+ * Handles race conditions with:
+ * - Wait for org to load before querying
+ * - keepPreviousData to prevent flash
  */
 export function useSubscription(): SubscriptionState {
     const { data: activeOrg } = useActiveOrganization();
@@ -51,16 +43,17 @@ export function useSubscription(): SubscriptionState {
             return result;
         },
         enabled: !!orgId,
-        staleTime: 30 * 1000, // 30 seconds
+        placeholderData: keepPreviousData,  // Prevent flash on org change
+        staleTime: 30 * 1000,
         refetchOnWindowFocus: true,
     });
 
     const subscription = data?.subscription ?? null;
-    const statusInfo = getStatusInfo(subscription);
+    const statusInfo = subscription ? getStatusInfo(subscription) : null;
 
     return {
         subscription,
-        isActive: statusInfo.isActive,
+        isActive: statusInfo?.isActive ?? false,
         isTrialing: subscription?.status === "trialing" || subscription?.plan === "trial",
         willCancel: subscription?.cancelAtPeriodEnd ?? false,
         plan: subscription?.plan ?? null,
@@ -86,11 +79,11 @@ export function useHasActiveSubscription(): boolean {
  */
 export function useSubscriptionDisplay() {
     const { subscription, isLoading } = useSubscription();
-    const statusInfo = getStatusInfo(subscription);
+    const statusInfo = subscription ? getStatusInfo(subscription) : null;
 
     return {
-        display: statusInfo.display,
-        needsAction: statusInfo.needsAction,
+        display: statusInfo?.display ?? "No subscription",
+        needsAction: statusInfo?.needsAction ?? false,
         isLoading,
     };
 }

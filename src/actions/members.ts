@@ -3,6 +3,13 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { getErrorMessage } from "@/lib/handle-error";
+import { db } from "@/db/drizzle";
+import { member, organization, user } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
+import { Resend } from "resend";
+import { MemberRemovedEmail } from "@/emails";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Types
 export type Member = {
@@ -104,12 +111,63 @@ export async function getMembers(input?: {
  */
 export async function removeMember(memberIdOrEmail: string) {
   try {
+    const reqHeaders = await headers();
+
+    const session = await auth.api.getSession({ headers: reqHeaders });
+    const removedMember = await db.query.member.findFirst({
+      where: eq(member.id, memberIdOrEmail),
+      with: { user: true, organization: true },
+    });
+    const removedUserByEmail = !removedMember
+      ? await db.query.user.findFirst({
+          where: eq(user.email, memberIdOrEmail),
+          columns: { id: true, email: true, name: true },
+        })
+      : null;
+    const removedMemberByEmail = removedUserByEmail
+      ? await db.query.member.findFirst({
+          where: eq(member.userId, removedUserByEmail.id),
+          with: { organization: true },
+        })
+      : null;
+
     await auth.api.removeMember({
       body: {
         memberIdOrEmail,
       },
-      headers: await headers(),
+      headers: reqHeaders,
     });
+
+    try {
+      const removedEmail = removedMember?.user?.email || removedUserByEmail?.email;
+      const removedNameOrEmail = removedMember?.user?.name || removedUserByEmail?.name || removedEmail;
+      const orgId = removedMember?.organizationId || removedMemberByEmail?.organizationId;
+
+      if (removedEmail && orgId && session?.user?.email) {
+        const orgRecord = await db.query.organization.findFirst({
+          where: eq(organization.id, orgId),
+          columns: { name: true },
+        });
+
+        const removedByNameOrEmail = session.user.name || session.user.email;
+
+        const emailContent = MemberRemovedEmail({
+          removedUserNameOrEmail: removedNameOrEmail || removedEmail,
+          organizationName: orgRecord?.name || orgId,
+          removedByNameOrEmail,
+          ctaUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/auth/signin`,
+        });
+
+        await resend.emails.send({
+          from: process.env.EMAIL_FROM as string,
+          to: removedEmail,
+          subject: `You were removed from ${orgRecord?.name || "a workspace"}`,
+          react: emailContent,
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to send member removed email", e);
+    }
 
     return {
       success: true,
@@ -206,23 +264,75 @@ export async function updateMembers(input: { ids: string[]; role: string }) {
  */
 export async function deleteMembers(input: { ids: string[] }) {
   try {
+    const reqHeaders = await headers();
+    const session = await auth.api.getSession({ headers: reqHeaders });
+
     const results = await Promise.allSettled(
       input.ids.map(async (id) => {
+        const removedMember = await db.query.member.findFirst({
+          where: eq(member.id, id),
+          with: { user: true, organization: true },
+        });
+        const removedUserByEmail = !removedMember
+          ? await db.query.user.findFirst({
+              where: eq(user.email, id),
+              columns: { id: true, email: true, name: true },
+            })
+          : null;
+        const removedMemberByEmail = removedUserByEmail
+          ? await db.query.member.findFirst({
+              where: eq(member.userId, removedUserByEmail.id),
+              with: { organization: true },
+            })
+          : null;
+
         // Try to remove as member first (works for both member ID and email)
         try {
           await auth.api.removeMember({
             body: {
               memberIdOrEmail: id,
             },
-            headers: await headers(),
+            headers: reqHeaders,
           });
+
+          try {
+            const removedEmail = removedMember?.user?.email || removedUserByEmail?.email;
+            const removedNameOrEmail =
+              removedMember?.user?.name || removedUserByEmail?.name || removedEmail;
+            const orgId = removedMember?.organizationId || removedMemberByEmail?.organizationId;
+
+            if (removedEmail && orgId && session?.user?.email) {
+              const orgRecord = await db.query.organization.findFirst({
+                where: eq(organization.id, orgId),
+                columns: { name: true },
+              });
+
+              const removedByNameOrEmail = session.user.name || session.user.email;
+
+              const emailContent = MemberRemovedEmail({
+                removedUserNameOrEmail: removedNameOrEmail || removedEmail,
+                organizationName: orgRecord?.name || orgId,
+                removedByNameOrEmail,
+                ctaUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/auth/signin`,
+              });
+
+              await resend.emails.send({
+                from: process.env.EMAIL_FROM as string,
+                to: removedEmail,
+                subject: `You were removed from ${orgRecord?.name || "a workspace"}`,
+                react: emailContent,
+              });
+            }
+          } catch (e) {
+            console.warn("Failed to send member removed email", e);
+          }
         } catch {
           // If removeMember fails, try to cancel as invitation
           await auth.api.cancelInvitation({
             body: {
               invitationId: id,
             },
-            headers: await headers(),
+            headers: reqHeaders,
           });
         }
       })

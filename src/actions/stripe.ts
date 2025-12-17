@@ -3,11 +3,15 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/db/drizzle";
-import { subscription, user } from "@/db/schema";
+import { subscription, user, organization } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { isSubscriptionActive } from "@/lib/subscription";
 import { getSessionWithOrg } from "@/lib/auth-helpers";
 import { trackServerEvent } from "@/lib/posthog/track";
+import { Resend } from "resend";
+import { SubscriptionCanceledEmail, SubscriptionActivatedEmail } from "@/emails";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 /**
  * Get the active organization's subscription
@@ -229,6 +233,34 @@ export async function cancelSubscription() {
       .where(eq(subscription.referenceId, activeOrgId));
 
     const endDate = new Date((canceledSubscription as any).current_period_end * 1000);
+
+    try {
+      const orgRecord = await db.query.organization.findFirst({
+        where: eq(organization.id, activeOrgId),
+        columns: { name: true },
+      });
+
+      const userRecord = await db.query.user.findFirst({
+        where: eq(user.id, userId),
+        columns: { email: true, name: true },
+      });
+
+      if (userRecord?.email) {
+        const emailContent = SubscriptionCanceledEmail({
+          organizationName: orgRecord?.name || activeOrgId,
+          ctaUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/billing`,
+        });
+        await resend.emails.send({
+          from: process.env.EMAIL_FROM as string,
+          to: userRecord.email,
+          subject: `Subscription will cancel on ${endDate.toLocaleDateString()}`,
+          react: emailContent,
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to send cancel confirmation email", e);
+    }
+
     return {
       success: true,
       message: `Your subscription will be canceled at the end of your billing period on ${endDate.toLocaleDateString()}`,
@@ -282,6 +314,34 @@ export async function resumeSubscription() {
         cancelAtPeriodEnd: false,
       })
       .where(eq(subscription.referenceId, activeOrgId));
+
+    try {
+      const orgRecord = await db.query.organization.findFirst({
+        where: eq(organization.id, activeOrgId),
+        columns: { name: true },
+      });
+
+      const userRecord = await db.query.user.findFirst({
+        where: eq(user.id, userId),
+        columns: { email: true, name: true },
+      });
+
+      if (userRecord?.email) {
+        const emailContent = SubscriptionActivatedEmail({
+          organizationName: orgRecord?.name || activeOrgId,
+          planName: orgSubscription?.plan || "standard",
+          ctaUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/billing`,
+        });
+        await resend.emails.send({
+          from: process.env.EMAIL_FROM as string,
+          to: userRecord.email,
+          subject: "Subscription resumed",
+          react: emailContent,
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to send resume confirmation email", e);
+    }
 
     return {
       success: true,

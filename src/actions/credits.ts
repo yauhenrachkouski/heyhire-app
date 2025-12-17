@@ -1,9 +1,11 @@
 "use server";
 
 import { db } from "@/db/drizzle";
-import { organization, creditTransactions } from "@/db/schema";
+import { organization, creditTransactions, member, user } from "@/db/schema";
 import { eq, and, desc, gte, lte, sql } from "drizzle-orm";
 import { generateId } from "@/lib/id";
+import { Resend } from "resend";
+import { CreditsRunningLowEmail } from "@/emails";
 import type {
   AddCreditsParams,
   DeductCreditsParams,
@@ -13,6 +15,25 @@ import type {
   CreditType,
   CreditTransaction,
 } from "@/types/credits";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+async function getOrgOwnerEmail(organizationId: string): Promise<string | null> {
+  const owner = await db.query.member.findFirst({
+    where: and(eq(member.organizationId, organizationId), eq(member.role, "owner")),
+    columns: { userId: true },
+  });
+
+  const ownerId = owner?.userId;
+  if (!ownerId) return null;
+
+  const ownerUser = await db.query.user.findFirst({
+    where: eq(user.id, ownerId),
+    columns: { email: true },
+  });
+
+  return ownerUser?.email || null;
+}
 
 /**
  * Get current credit balance for an organization
@@ -150,6 +171,48 @@ export async function addCredits(
       
       return transaction;
     });
+
+    // Best-effort low credits email alert
+    try {
+      const thresholdRaw = process.env.CREDITS_LOW_THRESHOLD;
+      const threshold = thresholdRaw ? Number(thresholdRaw) : NaN;
+
+      if (Number.isFinite(threshold) && threshold >= 0) {
+        const before = result?.balanceBefore;
+        const after = result?.balanceAfter;
+
+        if (
+          typeof before === "number" &&
+          typeof after === "number" &&
+          before > threshold &&
+          after <= threshold
+        ) {
+          const to = await getOrgOwnerEmail(params.organizationId);
+          if (to) {
+            const orgRecord = await db.query.organization.findFirst({
+              where: eq(organization.id, params.organizationId),
+              columns: { name: true },
+            });
+
+            const emailContent = CreditsRunningLowEmail({
+              organizationName: orgRecord?.name || params.organizationId,
+              creditsRemaining: after,
+              threshold,
+              ctaUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/billing`,
+            });
+
+            await resend.emails.send({
+              from: process.env.EMAIL_FROM as string,
+              to,
+              subject: `Credits running low (${after} remaining)`,
+              react: emailContent,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[Credits] Failed to send low credits email", e);
+    }
     
     return {
       success: true,

@@ -1,14 +1,11 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { getOrganizationCredits, getCreditLedger } from "@/actions/credits";
 import { isLowOnCredits } from "@/lib/credits";
 import { creditsKeys } from "@/lib/credits";
-
-// =============================================================================
-// TYPES
-// =============================================================================
+import { useCallback } from "react";
 
 export interface CreditsState {
     balance: number;
@@ -19,13 +16,13 @@ export interface CreditsState {
     invalidate: () => void;
 }
 
-// =============================================================================
-// HOOK
-// =============================================================================
-
 /**
  * Client-side hook for credits balance
  * Single source of truth for credits state in React components
+ * 
+ * Handles race conditions with:
+ * - Wait for org to load before querying
+ * - keepPreviousData to prevent flash
  */
 export function useCredits(): CreditsState {
     const { data: activeOrg } = useActiveOrganization();
@@ -38,20 +35,22 @@ export function useCredits(): CreditsState {
             if (!orgId) return 0;
             return getOrganizationCredits(orgId);
         },
-        enabled: !!orgId,
-        staleTime: 10 * 1000, // 10 seconds - credits change more frequently
+        enabled: !!orgId, // Wait for org to load
+        placeholderData: keepPreviousData,  // Prevent flash
+        staleTime: 10 * 1000,
         refetchOnWindowFocus: true,
     });
 
+    // Combined loading state
     const balance = data ?? 0;
 
-    const invalidate = () => {
+    const invalidate = useCallback(() => {
         if (orgId) {
             queryClient.invalidateQueries({ queryKey: creditsKeys.organization(orgId) });
         } else {
             queryClient.invalidateQueries({ queryKey: creditsKeys.all });
         }
-    };
+    }, [orgId, queryClient]);
 
     return {
         balance,
@@ -77,6 +76,7 @@ export function useCreditsWithHistory(limit: number = 10) {
             return getCreditLedger({ organizationId: orgId, limit });
         },
         enabled: !!orgId,
+        placeholderData: keepPreviousData,
         staleTime: 30 * 1000,
     });
 

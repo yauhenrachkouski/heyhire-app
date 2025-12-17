@@ -6,6 +6,10 @@ import { auth } from '@/lib/auth'
 import { db } from '@/db/drizzle'
 import { account, user, organization as orgTable, member } from '@/db/schema'
 import { eq, and } from 'drizzle-orm'
+import { Resend } from 'resend'
+import { AccountDeletedEmail } from '@/emails'
+
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function updateUserProfile(data: {
   name: string
@@ -264,6 +268,20 @@ export async function softDeleteAccount() {
 
     if (!session?.user) {
       return { success: false, error: 'Not authenticated' }
+    }
+
+    try {
+      const emailContent = AccountDeletedEmail({
+        userNameOrEmail: session.user.name || session.user.email,
+      })
+      await resend.emails.send({
+        from: process.env.EMAIL_FROM as string,
+        to: session.user.email,
+        subject: 'Your Heyhire account was deleted',
+        react: emailContent,
+      })
+    } catch (e) {
+      console.warn('Failed to send account deleted email', e)
     }
 
     // Soft delete by setting a deletedAt timestamp
