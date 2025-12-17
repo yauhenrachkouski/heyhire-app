@@ -32,7 +32,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!userName.trim()) {
       toast.error('Name is required')
       return
@@ -45,7 +45,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
         name: userName
       })
 
-      posthog.capture('profile-updated', {
+      posthog.capture('profile_updated', {
         success: result.success,
         error: result.error,
         from_name: result.success ? fromName : undefined,
@@ -91,7 +91,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
 
       const result = await uploadAvatar(formData)
 
-      posthog.capture('avatar-uploaded', {
+      posthog.capture('avatar_uploaded', {
         success: result.success,
         file_size: file.size,
         file_type: file.type,
@@ -124,7 +124,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
       const fromHasAvatar = !!userImage
       const result = await removeAvatar()
 
-      posthog.capture('avatar-removed', {
+      posthog.capture('avatar_removed', {
         success: result.success,
         error: result.error,
         from_has_avatar: result.success ? fromHasAvatar : undefined,

@@ -3,7 +3,7 @@
 import { deductCredits } from "@/actions/credits";
 import { getSessionWithOrg } from "@/lib/auth-helpers";
 import { CREDIT_TYPES } from "@/lib/credits";
-import { getPostHogServer } from "@/lib/posthog/posthog-server";
+import { trackServerEvent } from "@/lib/posthog/track";
 
 export async function consumeCreditsForLinkedInOpen(params: {
   candidateId: string;
@@ -28,29 +28,16 @@ export async function consumeCreditsForLinkedInOpen(params: {
       return { success: false, error: result.error || "Failed to consume credits" };
     }
 
-    try {
-      const posthog = getPostHogServer();
-      posthog.capture({
-        distinctId: userId,
-        event: "candidate_linkedin_opened",
-        groups: {
-          organization: activeOrgId,
-        },
-        properties: {
-          organization_id: activeOrgId,
-          user_id: userId,
-          candidate_id: candidateId,
-          linkedin_url: linkedinUrl,
-          credit_type: CREDIT_TYPES.GENERAL,
-          credit_amount: 1,
-          credit_transaction_id: result.transaction?.id,
-          credits_before: result.transaction?.balanceBefore,
-          credits_after: result.transaction?.balanceAfter,
-        },
-      });
-    } catch (e) {
-      console.error("[PostHog] Failed to capture candidate_linkedin_opened", e);
-    }
+    trackServerEvent(userId, "credits_consumed", activeOrgId, {
+      action: "linkedin_profile_opened",
+      candidate_id: candidateId,
+      linkedin_url: linkedinUrl,
+      credit_type: CREDIT_TYPES.GENERAL,
+      credit_amount: 1,
+      credit_transaction_id: result.transaction?.id,
+      credits_before: result.transaction?.balanceBefore,
+      credits_after: result.transaction?.balanceAfter,
+    })
 
     return { success: true };
   } catch (err) {

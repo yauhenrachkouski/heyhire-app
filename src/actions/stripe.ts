@@ -7,6 +7,7 @@ import { subscription, user } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { isSubscriptionActive } from "@/lib/subscription";
 import { getSessionWithOrg } from "@/lib/auth-helpers";
+import { trackServerEvent } from "@/lib/posthog/track";
 
 /**
  * Get the active organization's subscription
@@ -14,12 +15,12 @@ import { getSessionWithOrg } from "@/lib/auth-helpers";
 export async function getUserSubscription() {
   try {
     const { activeOrgId, userId } = await getSessionWithOrg();
-console.log("activeOrgId", activeOrgId);
+    console.log("activeOrgId", activeOrgId);
     // First try: Look up by organization ID
     let orgSubscription = await db.query.subscription.findFirst({
       where: eq(subscription.referenceId, activeOrgId),
     });
-console.log("orgSubscription by orgId", orgSubscription);
+    console.log("orgSubscription by orgId", orgSubscription);
 
     // Fallback: If not found by org ID, try looking up by user's stripe customer
     // This handles legacy subscriptions created with user ID as referenceId
@@ -147,7 +148,7 @@ export async function getSubscriptionStatus() {
  */
 export async function getCustomerPortalSession() {
   try {
-    await getSessionWithOrg(); // Verify session exists, but don't use activeOrgId
+    const { activeOrgId, userId } = await getSessionWithOrg(); // Verify session exists
     const { subscription: orgSubscription } = await getUserSubscription();
 
     if (!orgSubscription?.stripeCustomerId) {
@@ -164,11 +165,15 @@ export async function getCustomerPortalSession() {
       process.env.NEXT_PUBLIC_APP_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
       "http://localhost:3000";
-    
+
     const portalSession = await stripeClient.billingPortal.sessions.create({
       customer: orgSubscription.stripeCustomerId,
       return_url: `${baseUrl}/billing`,
     });
+
+    trackServerEvent(userId, "billing_portal_session_created", activeOrgId, {
+      stripe_customer_id: orgSubscription.stripeCustomerId,
+    })
 
     return {
       url: portalSession.url,
@@ -191,7 +196,7 @@ export async function getCustomerPortalSession() {
  */
 export async function cancelSubscription() {
   try {
-    const { activeOrgId } = await getSessionWithOrg();
+    const { activeOrgId, userId } = await getSessionWithOrg();
     const { subscription: orgSubscription } = await getUserSubscription();
 
     if (!orgSubscription?.stripeSubscriptionId) {
@@ -203,13 +208,17 @@ export async function cancelSubscription() {
 
     // Dynamic import to access stripeClient
     const { stripeClient } = await import("@/lib/auth");
-    
+
     const canceledSubscription = await stripeClient.subscriptions.update(
       orgSubscription.stripeSubscriptionId,
       {
         cancel_at_period_end: true,
       }
     );
+
+    trackServerEvent(userId, "subscription_cancel_requested", activeOrgId, {
+      stripe_subscription_id: orgSubscription.stripeSubscriptionId,
+    })
 
     // Update database record
     await db
@@ -242,7 +251,7 @@ export async function cancelSubscription() {
  */
 export async function resumeSubscription() {
   try {
-    const { activeOrgId } = await getSessionWithOrg();
+    const { activeOrgId, userId } = await getSessionWithOrg();
     const { subscription: orgSubscription } = await getUserSubscription();
 
     if (!orgSubscription?.stripeSubscriptionId) {
@@ -254,13 +263,17 @@ export async function resumeSubscription() {
 
     // Dynamic import to access stripeClient
     const { stripeClient } = await import("@/lib/auth");
-    
+
     await stripeClient.subscriptions.update(
       orgSubscription.stripeSubscriptionId,
       {
         cancel_at_period_end: false,
       }
     );
+
+    trackServerEvent(userId, "subscription_resume_requested", activeOrgId, {
+      stripe_subscription_id: orgSubscription.stripeSubscriptionId,
+    })
 
     // Update database record
     await db

@@ -23,11 +23,11 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
   const [isParsing, setIsParsing] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [sourcingCriteria, setSourcingCriteria] = useState<SourcingCriteria | null>(null);
-  
+
   const { data: session } = useSession();
   const { data: activeOrg } = useActiveOrganization();
   const router = useRouter();
-  
+
   // Auto-trigger search when initial query is provided
   useEffect(() => {
     if (initialQuery && !hasSearched) {
@@ -66,7 +66,7 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
     }
 
     setIsSearching(true);
-    
+
     try {
       // Save search to database first
       const saveResult = await saveSearch(
@@ -75,7 +75,7 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
         session.user.id,
         activeOrg.id
       );
-      
+
       if (!saveResult.success || !saveResult.data?.id) {
         throw new Error(saveResult.error || "Failed to save search");
       }
@@ -94,7 +94,7 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
 
       // Trigger the QStash workflow for reliable background processing
       console.log("[Search Client] Triggering sourcing workflow...");
-      
+
       const workflowResult = await triggerSourcingWorkflow(
         queryText,
         sourcingCriteria,
@@ -106,8 +106,8 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
       }
 
       console.log("[Search Client] Workflow triggered with run ID:", workflowResult.workflowRunId);
-      
-      posthog.capture('search-started', {
+
+      posthog.capture('search_created', {
         search_id: searchId,
         organization_id: activeOrg.id,
         workflow_run_id: workflowResult.workflowRunId,
@@ -127,8 +127,8 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
       console.error("[Search Client] Error:", error);
       const errorMessage =
         error instanceof Error ? error.message : "An unexpected error occurred";
-      
-      posthog.capture('search-failed', {
+
+      posthog.capture('search_failed', {
         error_message: errorMessage,
         organization_id: activeOrg?.id,
         query_text_length: queryText.length,

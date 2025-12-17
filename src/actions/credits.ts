@@ -442,6 +442,22 @@ export async function getCreditStats(organizationId: string): Promise<CreditStat
   };
 }
 
+export async function getCreditLedger(params: {
+  organizationId: string;
+  limit?: number;
+}): Promise<{ balance: number; transactions: CreditTransaction[] }> {
+  const { organizationId, limit = 50 } = params;
+
+  const balance = await getOrganizationCredits(organizationId);
+  const transactions = await db.query.creditTransactions.findMany({
+    where: eq(creditTransactions.organizationId, organizationId),
+    orderBy: [desc(creditTransactions.createdAt)],
+    limit,
+  });
+
+  return { balance, transactions };
+}
+
 
 
 
