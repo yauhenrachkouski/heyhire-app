@@ -1,43 +1,44 @@
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { Icon } from '@/components/ui/icon'
+import Link from "next/link"
+import { IconFolderCode } from "@tabler/icons-react"
+import { ArrowUpRightIcon } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty"
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-screen w-full items-center justify-center px-6">
-      <div className="text-center max-w-2xl">
-        <div className="inline-flex items-center justify-center rounded-full bg-primary/10 text-primary px-3 py-1 text-sm font-medium">
-          <Icon name="alert-triangle" aria-hidden />
-          <span className="ml-2">404</span>
-        </div>
+    <div className="flex min-h-0 w-full flex-1 items-center justify-center px-6">
+      <div className="w-full max-w-2xl">
+        <Empty className="p-6 sm:p-12">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <IconFolderCode />
+            </EmptyMedia>
+            <EmptyTitle>Page not found</EmptyTitle>
+            <EmptyDescription>
+              Sorry, we couldn’t find the page you’re looking for. It might have
+              been moved, renamed, or removed.
+            </EmptyDescription>
+          </EmptyHeader>
 
-        <h1 className="mt-6 text-4xl md:text-5xl font-bold tracking-tight">
-          Page not found
-        </h1>
-        <p className="mt-3 text-muted-foreground">
-          Sorry, we couldn’t find the page you’re looking for. It might have been moved, renamed, or removed.
-        </p>
+          <EmptyContent>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button asChild>
+                <Link href="/">Go Home</Link>
+              </Button>
+              
+            </div>
+          </EmptyContent>
 
-        <div className="mt-8 flex items-center justify-center gap-3">
-          <Link href="/">
-            <Button className="gap-2">
-              <Icon name="home" aria-hidden />
-              Home
-            </Button>
-          </Link>
-          <Link href="/candidates">
-            <Button variant="secondary" className="gap-2">
-              <Icon name="users" aria-hidden />
-              Candidates
-            </Button>
-          </Link>
-          <Link href="/jobs">
-            <Button variant="ghost" className="gap-2">
-              <Icon name="briefcase" aria-hidden />
-              Jobs
-            </Button>
-          </Link>
-        </div>
+          
+        </Empty>
       </div>
     </div>
   )

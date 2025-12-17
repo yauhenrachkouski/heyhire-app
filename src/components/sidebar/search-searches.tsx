@@ -92,7 +92,7 @@ export function SearchSearches({ organizationId }: SearchSearchesProps) {
   }
 
   return (
-    <div ref={containerRef} className="relative px-2 pb-2">
+    <div ref={containerRef} className="relative px-2 py-2">
       <div className="relative">
         <Icon
           name="search"

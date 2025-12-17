@@ -70,14 +70,16 @@ export default async function DashboardLayout({
           recentSearches={recentSearches ?? []}
         />
         <SidebarInset>
-          <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12 bg-background">
-            <div className="flex items-center gap-2 px-4">
+          <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear bg-background border-b">
+            <div className="flex h-full items-center gap-2 px-4 leading-none">
               <SidebarTrigger className="-ml-1" />
               <Separator
               orientation="vertical"
               className="mr-2 my-auto block shrink-0 data-[orientation=vertical]:h-4"
             />
-              {breadcrumbs}
+              <div className="flex items-center min-w-0">
+                {breadcrumbs}
+              </div>
             </div>
           </header>
           <div className="flex flex-1 flex-col gap-4 p-4">
@@ -87,4 +89,5 @@ export default async function DashboardLayout({
       </PersistentSidebarProvider>
     </TooltipProvider>
   )
-} 
+}
+ 
