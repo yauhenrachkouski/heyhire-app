@@ -23,14 +23,26 @@ interface PricingPlan {
   price: number;
   description: string;
   features: string[];
-  planId: "standard";
+  planId: "starter" | "pro";
 }
 
 const plans: PricingPlan[] = [
   {
-    name: "Standard",
+    name: "Starter",
+    price: 29,
+    planId: "starter",
+    description: "7-day free trial + 300 reveals included",
+    features: [
+      "Search candidates",
+      "Save candidates",
+      "Exports",
+      "Support",
+    ],
+  },
+  {
+    name: "Pro",
     price: 69,
-    planId: "standard",
+    planId: "pro",
     description: "Everything you need to source candidates",
     features: [
       "Search candidates",
@@ -148,7 +160,7 @@ export function BillingSection({ subscription: initialSubscription }: BillingSec
     });
   };
 
-  const currentPlan = (subscription?.plan as "standard" | null) || null;
+  const currentPlan = (subscription?.plan as "starter" | "pro" | null) || null;
   const currentPlanData = plans.find(p => p.planId === currentPlan);
 
   return (

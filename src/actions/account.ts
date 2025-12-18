@@ -343,6 +343,10 @@ export async function createOrganizationWithSetup(data: {
         headers: await headers(),
         body: { organizationId: existingMembership.organizationId }
       })
+
+      revalidatePath('/(protected)', 'layout')
+      revalidatePath('/paywall')
+
       return { success: true, organizationId: existingMembership.organizationId }
     }
 
@@ -373,6 +377,9 @@ export async function createOrganizationWithSetup(data: {
       headers: await headers(),
       body: { organizationId: createResult.id }
     })
+
+    revalidatePath('/(protected)', 'layout')
+    revalidatePath('/paywall')
 
     console.log('[createOrganizationWithSetup] Organization set as active:', setActiveResult)
 
@@ -428,7 +435,15 @@ export async function createDefaultOrganization() {
     })
 
     if (existingMembership) {
-      // User already has an organization, just return success
+      // User already has an organization; ensure it's set as active in the session
+      await auth.api.setActiveOrganization({
+        headers: await headers(),
+        body: { organizationId: existingMembership.organizationId }
+      })
+
+      revalidatePath('/(protected)', 'layout')
+      revalidatePath('/paywall')
+
       return { success: true, organizationId: existingMembership.organizationId }
     }
 
@@ -458,6 +473,9 @@ export async function createDefaultOrganization() {
       headers: await headers(),
       body: { organizationId }
     })
+
+    revalidatePath('/(protected)', 'layout')
+    revalidatePath('/paywall')
 
     return { success: true, organizationId }
   } catch (err) {

@@ -29,10 +29,6 @@ export function isSubscriptionActive(
 
   if (!activeStatuses.includes(status)) return false;
 
-  if (sub.plan === "trial" && sub.periodEnd) {
-    return new Date(sub.periodEnd).getTime() > Date.now();
-  }
-
   return true;
 }
 

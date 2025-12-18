@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -68,6 +68,7 @@ export function OnboardingForm() {
       toast.success('Onboarding completed successfully!')
       console.log('[OnboardingForm] Redirecting to /subscribe')
       await new Promise(resolve => setTimeout(resolve, 500))
+      router.refresh()
       router.push('/paywall')
     } catch (err: any) {
       console.error('[OnboardingForm] Organization creation error:', err)
@@ -92,6 +93,7 @@ export function OnboardingForm() {
 
       toast.success('Default workspace created!')
       console.log('[OnboardingForm] Redirecting to /subscribe')
+      router.refresh()
       router.push('/paywall')
     } catch (err: any) {
       console.error('[OnboardingForm] Failed to create default organization:', err)
@@ -102,10 +104,10 @@ export function OnboardingForm() {
   }
 
   return (
-    <Card className="w-full shadow-none border-none">
+    <Card className="w-full shadow-none ring-0">
       <CardHeader className="text-left">
         <CardTitle className="text-2xl font-bold">Welcome to Heyhire! 👋</CardTitle>
-        <p className="text-gray-600">Let's set up your workspace to get started</p>
+        <CardDescription className="text-muted-foreground text-base">Let's set up your workspace to get started</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">

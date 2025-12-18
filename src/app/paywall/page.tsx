@@ -4,7 +4,7 @@ import { redirect } from "next/navigation"
 import Image from "next/image"
 import { SubscribeCardsServer, SubscribeHeader } from "@/components/subscribe/subscribe-cards"
 import { requireActiveSubscription } from "@/actions/stripe"
-import { hasUsedTrial } from "@/actions/trial"
+import { getTrialEligibility } from "@/actions/subscription"
 import heyhireLogo from "@/assets/heyhire_logo.svg"
 
 // Always render fresh, never cache the subscribe page
@@ -27,8 +27,7 @@ export default async function PaywallPage() {
     return redirect("/")
   }
 
-  // Check if user has used their trial
-  const { hasUsed: trialUsed } = await hasUsedTrial()
+  const { isTrialEligible } = await getTrialEligibility()
 
   return (
     <div className="flex min-h-svh flex-col p-6 md:p-10">
@@ -42,10 +41,10 @@ export default async function PaywallPage() {
           />
         </a>
       </div>
-      <div className="flex flex-1 items-center justify-center">
+      <div className="flex flex-1 justify-center pt-[10svh]">
         <div className="w-full max-w-4xl">
-          <SubscribeHeader isRequired={true} trialEligible={!trialUsed} />
-          <SubscribeCardsServer isRequired={true} trialEligible={!trialUsed} showSupportSections />
+          <SubscribeHeader isRequired={true} isTrialEligible={isTrialEligible} />
+          <SubscribeCardsServer isRequired={true} isTrialEligible={isTrialEligible} showSupportSections />
         </div>
       </div>
     </div>

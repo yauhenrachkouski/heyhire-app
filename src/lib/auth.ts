@@ -11,34 +11,10 @@ import { DISALLOWED_DOMAINS } from "./constants";
 import { eq, and } from "drizzle-orm";
 import { trackServerEvent } from "@/lib/posthog/track";
 import { handleStripeEvent } from "@/lib/stripe/webhooks";
-import { isTrialEligible } from "@/lib/stripe/subscription-service";
 import { logger } from "@/lib/axiom/server";
 import { InvitationAcceptedEmail, InvitationEmail, MagicLinkEmail, WelcomeEmail } from "@/emails";
 
-function validateStripeConfig() {
-   const requiredVars = [
-      'STRIPE_SECRET_KEY',
-      'STRIPE_WEBHOOK_SECRET',
-      'STRIPE_PRICE_ID',
-      'STRIPE_TRIAL_PRICE_ID',
-   ];
 
-   const missing = requiredVars.filter((varName) => {
-      const value = process.env[varName];
-      return !value || value.includes('placeholder');
-   });
-
-   if (missing.length > 0) {
-      const errorMsg = `Missing or invalid Stripe configuration: ${missing.join(', ')}. Please set these environment variables in your .env.local file.`;
-      console.error(errorMsg);
-      if (process.env.NODE_ENV === 'production') {
-         throw new Error(errorMsg);
-      }
-      console.warn('⚠️ Stripe configuration incomplete - some features may not work');
-   }
-}
-
-validateStripeConfig();
 
 const log = logger.with({ service: "auth" });
 
@@ -217,32 +193,33 @@ export const auth = betterAuth({
             enabled: true,
             plans: [
                {
-                  name: "standard",
-                  priceId: process.env.STRIPE_PRICE_ID || "price_placeholder",
+                  name: "starter",
+                  priceId: process.env.STRIPE_STARTER_PRICE_ID || "price_placeholder",
                   limits: {
-                     searches: 500,
-                     candidates: 5000,
+                     reveals: 300,
+                  },
+                  freeTrial: {
+                     days: 7,
+                  },
+               },
+               {
+                  name: "pro",
+                  priceId: process.env.STRIPE_PRO_PRICE_ID || "price_placeholder",
+                  limits: {
+                     reveals: 1000,
                   },
                },
             ],
             getCheckoutSessionParams: async ({ user, session, plan, subscription }) => {
-               if (plan.name === "standard" && !subscription) {
-                  const referenceId = (session as any)?.referenceId;
-
-                  if (referenceId) {
-                     const trialEligible = await isTrialEligible(referenceId);
-                     if (trialEligible) {
-                        return {
-                           params: { payment_method_collection: 'always' },
-                        };
-                     }
-                  }
-
-                  return {
-                     params: { payment_method_collection: 'always' },
-                  };
-               }
-               return { params: {} };
+               void user;
+               void session;
+               void plan;
+               void subscription;
+               return {
+                  params: {
+                     payment_method_collection: "always",
+                  },
+               };
             },
             authorizeReference: async ({ user, referenceId }) => {
                if (referenceId === user.id) return true;

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -89,7 +89,7 @@ export function LoginForm({ initialError }: { initialError?: string }) {
 
   if (emailSent) {
     return (
-      <Card className="w-full shadow-none border-none">
+      <Card className="w-full shadow-none ring-0">
         <CardHeader className="text-left">
           <CardTitle className="text-2xl font-bold">Check your email</CardTitle>
         </CardHeader>
@@ -118,7 +118,7 @@ export function LoginForm({ initialError }: { initialError?: string }) {
   }
 
   return (
-    <Card className="w-full shadow-none border-none">
+    <Card className="w-full shadow-none ring-0">
       <CardHeader className="text-left space-y-6">
         <a href="/" className="flex items-center gap-2 font-medium">
           <Image
@@ -130,7 +130,7 @@ export function LoginForm({ initialError }: { initialError?: string }) {
         </a>
         <div className="space-y-2">
           <CardTitle className="text-2xl font-bold">Welcome to HeyHire</CardTitle>
-          <p className="text-gray-600">Enter your email to continue</p>
+          <CardDescription className="text-muted-foreground text-base">Select a sign-in method</CardDescription>   
         </div>
 
         {isInviteCallback && (

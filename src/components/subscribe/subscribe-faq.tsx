@@ -1,10 +1,10 @@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 interface SubscribeFAQProps {
-  trialEligible?: boolean;
+  isTrialEligible?: boolean;
 }
 
-export function SubscribeFAQ({ trialEligible = true }: SubscribeFAQProps) {
+export function SubscribeFAQ({ isTrialEligible = true }: SubscribeFAQProps) {
   return (
     <div className="mt-16 max-w-3xl mx-auto">
       <h3 className="text-3xl font-bold mb-4">Frequently Asked Questions</h3>
@@ -78,7 +78,7 @@ export function SubscribeFAQ({ trialEligible = true }: SubscribeFAQProps) {
             </AccordionTrigger>
             <AccordionContent className="text-base leading-relaxed">
               <p className="text-muted-foreground">
-                {trialEligible
+                {isTrialEligible
                   ? "If you’re eligible, you’ll see the trial option in checkout. Trials are available once per organization."
                   : "Your organization has already used its trial. You can still subscribe anytime to continue using HeyHire."}
               </p>

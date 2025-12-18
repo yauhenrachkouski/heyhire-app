@@ -2,9 +2,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { IconCheck, IconInfoCircle, IconLock } from "@tabler/icons-react";
-import { initiateSubscriptionCheckout, initiateTrialCheckout } from "@/actions/subscription";
 import { SubscribeFAQ } from "@/components/subscribe/subscribe-faq";
 import { SubscribeSupport } from "@/components/subscribe/subscribe-support";
+import { SubscribeCheckoutButton } from "@/components/subscribe/subscribe-checkout-button";
 import {
   Tooltip,
   TooltipContent,
@@ -17,31 +17,31 @@ interface PricingPlan {
   description: string;
   features: string[];
   popular?: boolean;
-  planId: "standard" | "trial";
-  billingLabel: "/month" | "one-time";
+  planId: "starter" | "pro";
+  billingLabel: "/month";
   ctaText: string;
   ctaTextNoTrial: string;
 }
 
 const plans: PricingPlan[] = [
   {
-    name: "Trial",
-    price: 9,
-    planId: "trial",
-    billingLabel: "one-time",
-    description: "7 days access + 100 reveals included",
-    ctaText: "Start Trial",
-    ctaTextNoTrial: "Trial unavailable",
+    name: "Starter",
+    price: 29,
+    planId: "starter",
+    billingLabel: "/month",
+    description: "7-day free trial",
+    ctaText: "Start free trial",
+    ctaTextNoTrial: "Get started",
     features: [
       "Search across 100M+ profiles",
-      "100 reveals included",
+      "300 reveals included",
       "Support included",
     ],
   },
   {
-    name: "Standard",
+    name: "Pro",
     price: 69,
-    planId: "standard",
+    planId: "pro",
     billingLabel: "/month",
     description: "Everything you need to source candidates",
     popular: true,
@@ -59,16 +59,16 @@ const plans: PricingPlan[] = [
 
 interface SubscribeCardsServerProps {
   isRequired?: boolean;
-  trialEligible?: boolean;
+  isTrialEligible?: boolean;
   showSupportSections?: boolean;
 }
 
 interface SubscribeHeaderProps {
   isRequired?: boolean;
-  trialEligible?: boolean;
+  isTrialEligible?: boolean;
 }
 
-export function SubscribeHeader({ isRequired = false, trialEligible = true }: SubscribeHeaderProps) {
+export function SubscribeHeader({ isRequired = false, isTrialEligible = true }: SubscribeHeaderProps) {
   return (
     <div className="text-center mb-8">
       <h1 className="text-4xl font-bold mb-4">
@@ -79,30 +79,30 @@ export function SubscribeHeader({ isRequired = false, trialEligible = true }: Su
         Choose the perfect plan for your next sourcing. Upgrade anytime.
       </p>
 
-      {trialEligible && (
-        <p className="text-xl text-muted-foreground mb-2">
-          Start with a 7-day trial ($9 one-time, available once)
-        </p>
-      )}
     </div>
   );
 }
 
 export function SubscribeCardsServer({
   isRequired = false,
-  trialEligible = true,
+  isTrialEligible = true,
   showSupportSections = true,
 }: SubscribeCardsServerProps) {
+  void isRequired;
+  void isTrialEligible;
+
+  const visiblePlans = plans;
+
   return (
     <div className="container mx-auto px-4">
-      <div className="grid md:grid-cols-1 gap-8 max-w-2xl mx-auto">
-        {plans.map((plan) => {
-          if (plan.planId === "trial" && !trialEligible) {
-            return null;
-          }
-
+      <div
+        className={`grid grid-cols-1 gap-8 max-w-4xl mx-auto ${
+          visiblePlans.length === 1 ? "md:grid-cols-1" : "md:grid-cols-2"
+        }`}
+      >
+        {visiblePlans.map((plan) => {
           const displayPrice = plan.price;
-          const periodLabel = plan.billingLabel === "one-time" ? "" : plan.billingLabel;
+          const periodLabel = plan.billingLabel;
           
           return (
             <Card
@@ -123,32 +123,22 @@ export function SubscribeCardsServer({
                   <>
                     <div className="text-4xl font-bold">
                       ${displayPrice}
-                      {periodLabel ? (
-                        <span className="text-lg font-normal text-muted-foreground">
-                          {periodLabel}
-                        </span>
-                      ) : (
-                        <span className="text-lg font-normal text-muted-foreground">
-                          one-time
-                        </span>
-                      )}
+                      <span className="text-lg font-normal text-muted-foreground">
+                        {periodLabel}
+                      </span>
                     </div>
-                    {plan.planId === "trial" && (
-                      <p className="text-sm text-green-600 font-semibold mt-2">
-                        One-time trial (available once)
-                      </p>
-                    )}
+                    
                   </>
                   <div className="mt-3 space-y-1">
-                    {plan.planId === "standard" ? (
+                    {plan.planId === "pro" ? (
                       <>
                         <p className="text-xs text-muted-foreground">Billed monthly</p>
                         <p className="text-xs text-muted-foreground">1,000 reveals/month</p>
                       </>
                     ) : (
                       <>
-                        <p className="text-xs text-muted-foreground">Cancel anytime.</p>
-                        <p className="text-xs text-muted-foreground">Secure checkout with Stripe.</p>
+                        <p className="text-xs text-muted-foreground">Billed monthly after trial</p>
+                        <p className="text-xs text-muted-foreground">300 reveals/month</p>
                       </>
                     )}
                   </div>
@@ -186,21 +176,13 @@ export function SubscribeCardsServer({
               </CardContent>
 
               <CardFooter>
-                <form action={plan.planId === "trial" ? initiateTrialCheckout : initiateSubscriptionCheckout} className="w-full">
-                  {plan.planId !== "trial" && (
-                    <input type="hidden" name="plan" value={plan.planId} />
-                  )}
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    size="lg"
-                    variant={plan.planId === "standard" ? "default" : "outline"}
-                  >
-                    {plan.planId === "trial" ? plan.ctaText : (trialEligible ? plan.ctaText : plan.ctaTextNoTrial)}
-                  </Button>
-
-                  
-                </form>
+                <SubscribeCheckoutButton
+                  plan={plan.planId}
+                  className="w-full"
+                  variant={plan.planId === "pro" ? "default" : "outline"}
+                >
+                  {plan.ctaText}
+                </SubscribeCheckoutButton>
               </CardFooter>
             </Card>
           );
@@ -208,7 +190,7 @@ export function SubscribeCardsServer({
       </div>
 
       {showSupportSections && (
-        <SubscribeFAQ trialEligible={trialEligible} />
+        <SubscribeFAQ isTrialEligible={isTrialEligible} />
       )}
 
       {showSupportSections && (

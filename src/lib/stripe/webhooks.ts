@@ -41,12 +41,16 @@ interface StripeSubscriptionExtended extends Stripe.Subscription {
 function getPlanNameFromStripeSubscription(sub: Stripe.Subscription): string {
     const priceId = sub.items.data[0]?.price?.id;
 
-    if (priceId && process.env.STRIPE_TRIAL_PRICE_ID && priceId === process.env.STRIPE_TRIAL_PRICE_ID) {
-        return "trial";
+    if (priceId && process.env.STRIPE_STARTER_PRICE_ID && priceId === process.env.STRIPE_STARTER_PRICE_ID) {
+        return "starter";
     }
 
-    // Default paid plan (current app has a single paid plan)
-    return "standard";
+    if (priceId && process.env.STRIPE_PRO_PRICE_ID && priceId === process.env.STRIPE_PRO_PRICE_ID) {
+        return "pro";
+    }
+
+    // Fallback for legacy data
+    return "pro";
 }
 
 function isSubscriptionEvent(
@@ -140,136 +144,7 @@ export async function handleStripeEvent(event: Stripe.Event, stripeClient: Strip
 async function handleCheckoutCompleted(ctx: WebhookContext) {
     if (!isCheckoutSessionEvent(ctx.event)) return;
     const session = ctx.event.data.object;
-
-    // Handle one-time trial purchase (mode=payment)
-    if (session.mode === "payment" && session.metadata?.plan === "trial") {
-        await handleTrialPurchase(ctx, session);
-    }
-}
-
-async function handleTrialPurchase(ctx: WebhookContext, session: Stripe.Checkout.Session) {
-    const referenceId = session.metadata?.referenceId || session.client_reference_id;
-    const userId = session.metadata?.userId;
-    const eventContext = { eventId: ctx.event.id, sessionId: session.id, referenceId };
-
-    if (!referenceId) {
-        log.error("Missing referenceId for trial purchase", eventContext);
-        return;
-    }
-
-    // Idempotency check
-    const existing = await db.query.subscription.findFirst({
-        where: eq(subscriptionTable.stripeSubscriptionId, session.id),
-    });
-
-    if (existing) {
-        log.info("Trial session already processed", eventContext);
-        return;
-    }
-
-    // Use transaction for atomicity
-    const result = await db.transaction(async (tx) => {
-        const now = new Date();
-        const trialEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-        const subscriptionId = generateId();
-
-        // 1. Create subscription record
-        await tx.insert(subscriptionTable).values({
-            id: subscriptionId,
-            plan: "trial",
-            referenceId,
-            stripeCustomerId: (session.customer as string) || null,
-            stripeSubscriptionId: session.id,
-            status: "active",
-            periodStart: now,
-            periodEnd: trialEnd,
-            trialStart: now,
-            trialEnd,
-            cancelAtPeriodEnd: true,
-            seats: null,
-        });
-
-        // 2. Get org owner (correctly!)
-        const ownerId = userId || await getOrgOwnerId(referenceId);
-        if (!ownerId) {
-            log.warn("No owner found for credits", { ...eventContext, subscriptionId });
-            return { subscriptionId, creditsGranted: false };
-        }
-
-        // 3. Get current balance and grant credits
-        const org = await tx.query.organization.findFirst({
-            where: eq(organization.id, referenceId),
-            columns: { credits: true },
-        });
-
-        const creditsToGrant = getPlanCreditAllocation("trial", CREDIT_TYPES.CONTACT_LOOKUP);
-        const balanceBefore = org?.credits ?? 0;
-        const balanceAfter = balanceBefore + creditsToGrant;
-
-        // 4. Update organization credits
-        await tx
-            .update(organization)
-            .set({ credits: balanceAfter })
-            .where(eq(organization.id, referenceId));
-
-        // 5. Record credit transaction
-        await tx.insert(creditTransactions).values({
-            id: generateId(),
-            organizationId: referenceId,
-            userId: ownerId,
-            type: "subscription_grant",
-            creditType: CREDIT_TYPES.CONTACT_LOOKUP,
-            amount: creditsToGrant,
-            balanceBefore,
-            balanceAfter,
-            relatedEntityId: subscriptionId,
-            description: `Trial purchase: ${creditsToGrant} contact lookup credits`,
-            metadata: JSON.stringify({
-                plan: "trial",
-                stripeEventId: ctx.event.id,
-                stripeEventType: ctx.event.type,
-                checkoutSessionId: session.id,
-                stripeCustomerId: session.customer,
-            }),
-        });
-
-        return { subscriptionId, creditsGranted: true, creditsAmount: creditsToGrant, ownerId };
-    });
-
-    log.info("Trial purchase processed", { ...eventContext, ...result });
-
-    // Track after transaction succeeds
-    if (result.creditsGranted && result.ownerId) {
-        trackServerEvent(result.ownerId, "trial_purchase_completed", referenceId, {
-            subscription_id: result.subscriptionId,
-            credits_granted: result.creditsAmount,
-            stripe_checkout_session_id: session.id,
-        });
-
-        try {
-            const ownerUser = await db.query.user.findFirst({
-                where: eq(user.id, result.ownerId),
-                columns: { email: true },
-            });
-
-            if (ownerUser?.email) {
-                const trialEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-                const emailContent = TrialStartedEmail({
-                    organizationName: referenceId,
-                    trialEndsAtLabel: trialEnd.toLocaleDateString(),
-                    ctaUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/billing`,
-                });
-                await resend.emails.send({
-                    from: process.env.EMAIL_FROM as string,
-                    to: ownerUser.email,
-                    subject: "Your Heyhire trial has started",
-                    react: emailContent,
-                });
-            }
-        } catch (e) {
-            log.warn("Failed to send trial started email", { eventId: ctx.event.id, error: String(e) });
-        }
-    }
+    void session;
 }
 
 async function handleCheckoutExpired(ctx: WebhookContext) {
@@ -318,6 +193,26 @@ async function handleSubscriptionUpdated(ctx: WebhookContext) {
         .returning();
 
     log.info("Subscription updated", { ...eventContext, internalId: result[0].id });
+
+    if (sub.status === "trialing" && newPlan === "starter") {
+        if (!(await isEventProcessed(ctx.event.id))) {
+            const ownerId = await getOrgOwnerId(result[0].referenceId);
+            if (ownerId) {
+                await grantPlanCreditsWithTransaction(
+                    result[0].referenceId,
+                    ownerId,
+                    newPlan,
+                    result[0].id,
+                    ctx.event
+                );
+
+                trackServerEvent(ownerId, "trial_started", result[0].referenceId, {
+                    internal_subscription_id: result[0].id,
+                    stripe_subscription_id: sub.id,
+                });
+            }
+        }
+    }
 
     if (existing.plan && existing.plan !== newPlan) {
         try {
@@ -568,7 +463,7 @@ async function handleTrialRevocation(ctx: WebhookContext, obj: Record<string, un
         });
 
         const session = sessions?.data?.[0];
-        if (!session || session.mode !== "payment" || session.metadata?.plan !== "trial") return;
+        if (!session || session.mode !== "payment") return;
 
         const referenceId = session.metadata?.referenceId || session.client_reference_id;
         if (!referenceId) return;

@@ -54,7 +54,7 @@ export function useSubscription(): SubscriptionState {
     return {
         subscription,
         isActive: statusInfo?.isActive ?? false,
-        isTrialing: subscription?.status === "trialing" || subscription?.plan === "trial",
+        isTrialing: subscription?.status === "trialing",
         willCancel: subscription?.cancelAtPeriodEnd ?? false,
         plan: subscription?.plan ?? null,
         periodEnd: subscription?.periodEnd ?? null,

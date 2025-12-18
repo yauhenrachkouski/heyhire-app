@@ -8,10 +8,11 @@ import { formatCreditBalance } from "@/lib/credits";
 interface CreditBalanceProps {
   credits: number;
   maxCredits?: number;
-  currentPlan?: "starter" | "pro" | "enterprise" | null;
+  currentPlan?: "starter" | "pro" | null;
+  isTrialEligible?: boolean;
 }
 
-export function CreditBalance({ credits, maxCredits, currentPlan }: CreditBalanceProps) {
+export function CreditBalance({ credits, maxCredits, currentPlan, isTrialEligible }: CreditBalanceProps) {
   const isUnlimited = credits === -1;
   const isOutOfCredits = credits === 0 && !isUnlimited;
   
@@ -31,7 +32,7 @@ export function CreditBalance({ credits, maxCredits, currentPlan }: CreditBalanc
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <PlansModal currentPlan={currentPlan}>
+        <PlansModal currentPlan={currentPlan} isTrialEligible={isTrialEligible}>
           <SidebarMenuButton 
             tooltip={{ children: tooltipContent, side: "right" }}
             className="border border-border h-10"
