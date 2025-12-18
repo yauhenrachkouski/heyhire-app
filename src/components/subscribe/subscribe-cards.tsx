@@ -148,13 +148,7 @@ export function SubscribeCardsServer({
                         <span className="text-sm">
                           {feature}
                           {isReveal && (
-                            <Tooltip
-                              onOpenChange={(open) => {
-                                if (open && document.activeElement?.tagName === "BUTTON") {
-                                  (document.activeElement as HTMLButtonElement).blur();
-                                }
-                              }}
-                            >
+                            <Tooltip>
                               <TooltipTrigger asChild>
                                 <button
                                   type="button"

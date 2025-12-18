@@ -285,7 +285,7 @@ export const auth = betterAuth({
          stripeClient,
          stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "whsec_placeholder",
          createCustomerOnSignUp: false,
-         allowReTrialsForDifferentPlans: false,
+         // allowReTrialsForDifferentPlans: false,
          subscription: {
             enabled: true,
             plans: [
@@ -394,6 +394,7 @@ export const auth = betterAuth({
                         userId: user?.id,
                      },
                      subscription_data: {
+                        trial_from_plan: true,
                         metadata: {
                            referenceId,
                            plan: plan?.name,

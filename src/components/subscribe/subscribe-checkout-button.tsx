@@ -72,9 +72,23 @@ export function SubscribeCheckoutButton({
               cancelUrl: `${origin}/paywall`,
             })
 
-            const session: any = (result as any)?.data ?? result
+            const resultAny: any = result as any
+            const errorMessage =
+              resultAny?.error?.message ??
+              resultAny?.error ??
+              resultAny?.data?.error?.message ??
+              resultAny?.data?.error
+
+            if (errorMessage) {
+              console.error("[SubscribeCheckoutButton] subscription.upgrade error", resultAny)
+              toast.error(String(errorMessage))
+              return
+            }
+
+            const session: any = resultAny?.data ?? resultAny
 
             if (!session?.url) {
+              console.error("[SubscribeCheckoutButton] subscription.upgrade missing url", resultAny)
               toast.error("Failed to start checkout. Please try again.")
               return
             }
@@ -82,6 +96,8 @@ export function SubscribeCheckoutButton({
             window.location.href = session.url
           } catch (e) {
             const message = e instanceof Error ? e.message : "Failed to start checkout"
+
+            console.error("[SubscribeCheckoutButton] subscription.upgrade threw", e)
 
             if (message.includes("Not authenticated")) {
               router.push("/auth/signin")

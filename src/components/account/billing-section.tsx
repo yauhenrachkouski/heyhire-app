@@ -6,14 +6,6 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Icon } from "@/components/ui/icon"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
 import { cancelSubscription, resumeSubscription, getCustomerPortalSession } from "@/actions/stripe"
 import { toast } from "sonner"
 import { subscription as subscriptionSchema } from "@/db/schema"
@@ -49,7 +41,6 @@ interface BillingSectionProps {
 export function BillingSection({ subscription: initialSubscription }: BillingSectionProps) {
   const [subscription, setSubscription] = useState(initialSubscription);
   const [isLoading, setIsLoading] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const getStatusBadge = () => {
     if (!subscription) {
@@ -212,33 +203,9 @@ export function BillingSection({ subscription: initialSubscription }: BillingSec
 
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row gap-3">
-                <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                  <DialogTrigger asChild>
-                    <Button disabled={isLoading}>
-                      Manage Billing
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="w-[95vw] sm:max-w-[95vw]! md:max-w-[1400px]! max-h-[90vh] overflow-y-auto p-4 sm:p-6">
-                    <div className="text-center my-4 sm:my-8">
-                      <DialogTitle className="text-2xl sm:text-4xl font-bold mb-2 sm:mb-4">
-                        Manage Billing
-                      </DialogTitle>
-                      <p className="text-sm sm:text-lg text-muted-foreground">
-                        Update payment method, view invoices, or cancel your subscription
-                      </p>
-                    </div>
-                    <div className="max-w-2xl mx-auto mb-4 sm:mb-8">
-                      <Button
-                        className="w-full"
-                        size="lg"
-                        disabled={isLoading}
-                        onClick={handleManageBilling}
-                      >
-                        Open Stripe Customer Portal
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
+                <Button disabled={isLoading} onClick={handleManageBilling}>
+                  Manage Billing
+                </Button>
 
                 {subscription.cancelAtPeriodEnd ? (
                   <Button

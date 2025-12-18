@@ -15,8 +15,20 @@ Stripe **test mode** and **live mode** are separate. You need to create:
 - Product: `pro`
 - Price (recurring):
   - Pro monthly $69
+  - Trial: **3 days**
 
 Your app uses **Price IDs** (not Product IDs).
+
+## Trial configuration (required)
+
+The trial is configured at the Stripe **Price** level (`recurring.trial_period_days`).
+
+Additionally, our Better Auth checkout customization explicitly enables using the price trial:
+
+- `src/lib/auth.ts` -> `getCheckoutSessionParams` sets:
+  - `subscription_data.trial_from_plan = true`
+
+Without this, Stripe Checkout may create the subscription without applying the price's trial.
 
 ## Environment variables
 
@@ -61,7 +73,24 @@ stripe prices create \
   --currency=usd \
   --unit-amount=6900 \
   --recurring.interval=month \
-  --nickname="pro_monthly_69"
+  -d "recurring[trial_period_days]=3" \
+  --nickname="pro_monthly_69_trial_3d"
+```
+
+If you see errors like `No such price: 'price_...'` in the app, it means the Stripe CLI is
+creating objects in a different Stripe account/mode than your app's `STRIPE_SECRET_KEY`.
+
+Fix by creating with the same key explicitly:
+
+```bash
+stripe prices create \
+  --api-key "$STRIPE_SECRET_KEY" \
+  --product=PROD_PRO_TEST \
+  --currency=usd \
+  --unit-amount=6900 \
+  -d "recurring[interval]=month" \
+  -d "recurring[trial_period_days]=3" \
+  --nickname="pro_monthly_69_trial_3d"
 ```
 
 ### Live mode
@@ -79,7 +108,8 @@ stripe prices create \
   --currency=usd \
   --unit-amount=6900 \
   --recurring.interval=month \
-  --nickname="pro_monthly_69"
+  -d "recurring[trial_period_days]=3" \
+  --nickname="pro_monthly_69_trial_3d"
 ```
 
 Copy the resulting `price_...` IDs into production env vars.

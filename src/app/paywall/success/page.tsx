@@ -55,7 +55,7 @@ export default function SubscribeSuccessPage() {
 
     const timeout = setTimeout(() => {
       router.replace("/");
-    }, 600);
+    }, 1000);
 
     return () => clearTimeout(timeout);
   }, [isReady, router]);
