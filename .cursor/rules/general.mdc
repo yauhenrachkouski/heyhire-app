@@ -39,6 +39,12 @@ Generate migration - Run bun run db:generate (creates SQL in /migrations)
 Review the SQL - Check the generated migration file
 Apply migration - Run bun run db:migrate
 
+Migration flow rule (Drizzle)
+1) Always change src/db/schema.ts first.
+2) Then run "bun run db:generate" to create a new SQL migration in /migrations.
+3) Review the generated SQL and commit BOTH the schema change and the new migration files.
+4) Apply changes by running "bun run db:migrate" (especially in production/staging).
+5) Never use "bun run db:push" against production DBs (it may include destructive statements). Use db:push only for local dev emergencies.
 
 Do not create fallback. Always resolve the issues and make sure flow works.
 
@@ -51,3 +57,4 @@ https://raw.githubusercontent.com/better-auth/better-auth/refs/heads/main/docs/c
 Basic usage of better-auth auth, sign in, sign up, sign out, user profile, etc:
 https://raw.githubusercontent.com/better-auth/better-auth/refs/heads/main/docs/content/docs/basic-usage.mdx
 https://raw.githubusercontent.com/better-auth/better-auth/refs/heads/main/docs/content/docs/integrations/next.mdx
+

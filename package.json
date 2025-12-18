@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "dev:stripe": "stripe listen --forward-to http://localhost:3000/api/auth/stripe/webhook",
+    "dev:stripe": "stripe listen --forward-to localhost:3000/api/auth/stripe/webhook",
     "dev:tunnel": "cloudflared tunnel run localhost",
     "dev:all": "concurrently \"bun run dev\" \"bun run dev:stripe\" \"bun run dev:tunnel\"",
     "build": "bun run db:migrate && next build --turbopack",
