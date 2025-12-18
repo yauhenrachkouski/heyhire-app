@@ -236,14 +236,6 @@ export async function cancelSubscription() {
       stripe_subscription_id: orgSubscription.stripeSubscriptionId,
     })
 
-    // Update database record
-    await db
-      .update(subscription)
-      .set({
-        cancelAtPeriodEnd: true,
-      })
-      .where(eq(subscription.referenceId, activeOrgId));
-
     const endDate = new Date((canceledSubscription as any).current_period_end * 1000);
 
     try {
@@ -319,14 +311,6 @@ export async function resumeSubscription() {
     trackServerEvent(userId, "subscription_resume_requested", activeOrgId, {
       stripe_subscription_id: orgSubscription.stripeSubscriptionId,
     })
-
-    // Update database record
-    await db
-      .update(subscription)
-      .set({
-        cancelAtPeriodEnd: false,
-      })
-      .where(eq(subscription.referenceId, activeOrgId));
 
     try {
       const orgRecord = await db.query.organization.findFirst({

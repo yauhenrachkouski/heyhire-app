@@ -15,6 +15,7 @@ import { logger } from "@/lib/axiom/server";
 import { InvitationAcceptedEmail, InvitationEmail, MagicLinkEmail, WelcomeEmail } from "@/emails";
 import { generateId } from "@/lib/id";
 import { CREDIT_TYPES, getTrialCreditAllocation } from "@/lib/credits";
+import { PLAN_LIMITS } from "@/types/plans";
 
 
 
@@ -57,6 +58,70 @@ async function isBillingActionProcessed(key: string) {
       columns: { stripeEventId: true },
    });
    return !!existing;
+}
+
+async function revokeOrgCreditsToZero(params: {
+   key: string;
+   type: string;
+   referenceId: string;
+   internalSubscriptionId: string;
+   stripeCustomerId?: string | null;
+   stripeSubscriptionId?: string | null;
+}) {
+   if (await isBillingActionProcessed(params.key)) return;
+
+   const owner = await db.query.member.findFirst({
+      where: and(
+         eq(schema.member.organizationId, params.referenceId),
+         eq(schema.member.role, "owner")
+      ),
+   });
+   const ownerId = owner?.userId;
+   if (!ownerId) return;
+
+   await db.transaction(async (tx) => {
+      const org = await tx.query.organization.findFirst({
+         where: eq(schema.organization.id, params.referenceId),
+         columns: { credits: true },
+      });
+
+      const balanceBefore = org?.credits ?? 0;
+      if (balanceBefore === 0) return;
+
+      await tx
+         .update(schema.organization)
+         .set({ credits: 0 })
+         .where(eq(schema.organization.id, params.referenceId));
+
+      await tx.insert(schema.creditTransactions).values({
+         id: generateId(),
+         organizationId: params.referenceId,
+         userId: ownerId,
+         type: "subscription_grant",
+         creditType: CREDIT_TYPES.CONTACT_LOOKUP,
+         amount: -balanceBefore,
+         balanceBefore,
+         balanceAfter: 0,
+         relatedEntityId: params.internalSubscriptionId,
+         description: "Subscription ended",
+         metadata: JSON.stringify({
+            reason: params.type,
+            subscriptionId: params.internalSubscriptionId,
+         }),
+      });
+   });
+
+   trackServerEvent(ownerId, params.type, params.referenceId, {
+      internal_subscription_id: params.internalSubscriptionId,
+   });
+
+   await markBillingActionProcessed({
+      key: params.key,
+      type: params.type,
+      referenceId: params.referenceId,
+      stripeCustomerId: params.stripeCustomerId,
+      stripeSubscriptionId: params.stripeSubscriptionId,
+   });
 }
 
 export const auth = betterAuth({
@@ -220,6 +285,7 @@ export const auth = betterAuth({
          stripeClient,
          stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "whsec_placeholder",
          createCustomerOnSignUp: false,
+         allowReTrialsForDifferentPlans: false,
          subscription: {
             enabled: true,
             plans: [
@@ -227,8 +293,8 @@ export const auth = betterAuth({
                   name: "pro",
                   priceId: process.env.STRIPE_PRO_PRICE_ID || "price_placeholder",
                   limits: {
-                     credits: 1000,
-                     trialCredits: 100,
+                     credits: PLAN_LIMITS.pro.credits,
+                     trialCredits: PLAN_LIMITS.pro.trialCredits,
                   },
                   freeTrial: {
                      days: 3,
@@ -293,6 +359,19 @@ export const auth = betterAuth({
                            stripeSubscriptionId: subscription.stripeSubscriptionId,
                         });
                      },
+                     onTrialExpired: async (subscription) => {
+                        const referenceId = subscription.referenceId;
+                        if (!referenceId) return;
+
+                        await revokeOrgCreditsToZero({
+                           key: `better_auth:trial_expired:${subscription.id}`,
+                           type: "trial_expired",
+                           referenceId,
+                           internalSubscriptionId: subscription.id,
+                           stripeCustomerId: subscription.stripeCustomerId,
+                           stripeSubscriptionId: subscription.stripeSubscriptionId,
+                        });
+                     },
                   },
                },
             ],
@@ -339,67 +418,35 @@ export const auth = betterAuth({
                   planName: plan.name,
                });
             },
+            onSubscriptionUpdate: async ({ subscription }) => {
+               const status = subscription.status;
+               if (status !== "unpaid" && status !== "incomplete_expired") return;
+
+               const referenceId = subscription.referenceId;
+               if (!referenceId) return;
+
+               await revokeOrgCreditsToZero({
+                  key: `better_auth:subscription_inactive:${subscription.id}:${status}`,
+                  type: `subscription_${status}`,
+                  referenceId,
+                  internalSubscriptionId: subscription.id,
+                  stripeCustomerId: subscription.stripeCustomerId,
+                  stripeSubscriptionId: subscription.stripeSubscriptionId,
+               });
+            },
             onSubscriptionCancel: async ({ subscription }) => {
                log.info("Stripe subscription canceled", {
                   stripeSubscriptionId: subscription.id,
                });
             },
             onSubscriptionDeleted: async ({ subscription }) => {
-               const key = `better_auth:subscription_deleted:${subscription.id}`;
-               if (await isBillingActionProcessed(key)) return;
-
                const referenceId = subscription.referenceId;
                if (!referenceId) return;
-
-               const owner = await db.query.member.findFirst({
-                  where: and(
-                     eq(schema.member.organizationId, referenceId),
-                     eq(schema.member.role, "owner")
-                  ),
-               });
-               const ownerId = owner?.userId;
-               if (!ownerId) return;
-
-               await db.transaction(async (tx) => {
-                  const org = await tx.query.organization.findFirst({
-                     where: eq(schema.organization.id, referenceId),
-                     columns: { credits: true },
-                  });
-
-                  const balanceBefore = org?.credits ?? 0;
-                  if (balanceBefore === 0) return;
-
-                  await tx
-                     .update(schema.organization)
-                     .set({ credits: 0 })
-                     .where(eq(schema.organization.id, referenceId));
-
-                  await tx.insert(schema.creditTransactions).values({
-                     id: generateId(),
-                     organizationId: referenceId,
-                     userId: ownerId,
-                     type: "subscription_grant",
-                     creditType: CREDIT_TYPES.CONTACT_LOOKUP,
-                     amount: -balanceBefore,
-                     balanceBefore,
-                     balanceAfter: 0,
-                     relatedEntityId: subscription.id,
-                     description: "Subscription ended",
-                     metadata: JSON.stringify({
-                        reason: "subscription_deleted",
-                        subscriptionId: subscription.id,
-                     }),
-                  });
-               });
-
-               trackServerEvent(ownerId, "subscription_deleted", referenceId, {
-                  internal_subscription_id: subscription.id,
-               });
-
-               await markBillingActionProcessed({
-                  key,
+               await revokeOrgCreditsToZero({
+                  key: `better_auth:subscription_deleted:${subscription.id}`,
                   type: "subscription_deleted",
                   referenceId,
+                  internalSubscriptionId: subscription.id,
                   stripeCustomerId: subscription.stripeCustomerId,
                   stripeSubscriptionId: subscription.stripeSubscriptionId,
                });

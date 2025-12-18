@@ -5,7 +5,12 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get('error')
   
   // Redirect directly to sign-in with error message
-  const signInUrl = new URL('/auth/signin', request.url)
+  const forwardedHost = request.headers.get('x-forwarded-host')
+  const forwardedProto = request.headers.get('x-forwarded-proto')
+  const baseUrl = forwardedHost
+    ? `${forwardedProto || 'https'}://${forwardedHost}`
+    : request.nextUrl.origin
+  const signInUrl = new URL('/auth/signin', baseUrl)
   
   if (error) {
     // Format error message: replace underscores with spaces

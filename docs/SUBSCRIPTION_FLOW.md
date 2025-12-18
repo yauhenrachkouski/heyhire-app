@@ -73,18 +73,21 @@ await subscription.upgrade({
 
 When Stripe sends webhooks:
 
-**Event: `customer.subscription.created`**
-- better-auth plugin creates subscription record in database
-- Fields set: `referenceId` (organizationId), `stripeCustomerId`, `stripeSubscriptionId`, `status`, etc.
+**Better Auth (default sync)**
+- `checkout.session.completed`
+  - Syncs the internal `subscription` record after checkout (status, periods, trial dates, seats, stripe ids)
+- `customer.subscription.updated`
+  - Syncs subscription status/periods/seats and `cancelAtPeriodEnd`
+- `customer.subscription.deleted`
+  - Marks subscription as canceled
 
-**Event: `customer.subscription.updated`**
-- Updates subscription status, trial dates, period dates
-
-**Event: `invoice.payment_succeeded`**
-- Marks subscription as `active`
-
-**Event: `invoice.payment_failed`**
-- Marks subscription as `past_due`
+**Heyhire custom side-effects (via Better Auth `onEvent`)**
+- `invoice.payment_succeeded`
+  - Monthly credits reset (sets `organization.credits` to plan allocation)
+- `invoice.payment_failed`
+  - Sends payment failure email (does not revoke credits)
+- `customer.subscription.trial_will_end`
+  - Sends trial ending soon email
 
 ### 7. Subscription Verification
 **File**: `src/actions/stripe.ts` (getUserSubscription)
