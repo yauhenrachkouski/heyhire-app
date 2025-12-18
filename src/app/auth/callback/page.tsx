@@ -1,7 +1,8 @@
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
-import { revalidatePath } from 'next/cache'
+
+export const dynamic = 'force-dynamic'
 
 export default async function AuthCallbackPage() {
   const requestHeaders = await headers()
@@ -27,9 +28,6 @@ export default async function AuthCallbackPage() {
       headers: requestHeaders,
       body: { organizationId: organizations[0].id }
     })
-
-    revalidatePath('/(protected)', 'layout')
-    revalidatePath('/paywall')
     
     // User has organizations, go to dashboard
     return redirect('/')

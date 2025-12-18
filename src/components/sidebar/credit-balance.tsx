@@ -4,15 +4,18 @@ import { SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui
 import { Icon } from "@/components/ui/icon";
 import { PlansModal } from "@/components/sidebar/plans-modal";
 import { formatCreditBalance } from "@/lib/credits";
+import { usePlansModal } from "@/providers/plans-modal-provider";
+import type { PlanId } from "@/types/plans";
 
 interface CreditBalanceProps {
   credits: number;
   maxCredits?: number;
-  currentPlan?: "starter" | "pro" | null;
+  currentPlan?: PlanId | null;
   isTrialEligible?: boolean;
 }
 
 export function CreditBalance({ credits, maxCredits, currentPlan, isTrialEligible }: CreditBalanceProps) {
+  const { open, setOpen } = usePlansModal();
   const isUnlimited = credits === -1;
   const isOutOfCredits = credits === 0 && !isUnlimited;
   
@@ -32,7 +35,7 @@ export function CreditBalance({ credits, maxCredits, currentPlan, isTrialEligibl
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <PlansModal currentPlan={currentPlan} isTrialEligible={isTrialEligible}>
+        <PlansModal currentPlan={currentPlan} isTrialEligible={isTrialEligible} open={open} onOpenChange={setOpen}>
           <SidebarMenuButton 
             tooltip={{ children: tooltipContent, side: "right" }}
             className="border border-border h-10"

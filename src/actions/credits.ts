@@ -359,9 +359,7 @@ export async function deductCredits(
       
       // Check if sufficient balance
       if (balanceBefore < amount) {
-        throw new Error(
-          `Insufficient credits. Required: ${amount}, Available: ${balanceBefore}`
-        );
+        throw new Error("Insufficient credits. Please upgrade your plan");
       }
       
       const balanceAfter = balanceBefore - amount;

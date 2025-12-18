@@ -1,4 +1,5 @@
 import type { CreditType, TransactionType } from "@/types/credits";
+import { PLAN_LIMITS } from "@/types/plans";
 
 /**
  * Format credit amount for display
@@ -85,14 +86,18 @@ export const TRANSACTION_TYPES: Record<string, TransactionType> = {
 /**
  * Default credit allocations per subscription plan
  */
-export const PLAN_CREDIT_ALLOCATIONS: Record<string, { contact_lookup: number; export: number }> = {
-  trial: {
-    contact_lookup: 100,
-    export: 0,
+export const PLAN_CREDIT_ALLOCATIONS: Record<string, { contact_lookup: number }> = {
+  pro: {
+    contact_lookup: PLAN_LIMITS.pro.credits,
   },
-  standard: {
-    contact_lookup: 1000,
-    export: 0,
+};
+
+/**
+ * Default trial credit allocations per subscription plan
+ */
+export const TRIAL_CREDIT_ALLOCATIONS: Record<string, { contact_lookup: number }> = {
+  pro: {
+    contact_lookup: PLAN_LIMITS.pro.trialCredits,
   },
 };
 
@@ -108,10 +113,6 @@ export function hasUnlimitedCredits(plan: string, creditType: CreditType): boole
   
   if (creditType === "contact_lookup") {
     return allocation.contact_lookup === -1;
-  }
-  
-  if (creditType === "export") {
-    return allocation.export === -1;
   }
   
   return false;
@@ -131,10 +132,17 @@ export function getPlanCreditAllocation(plan: string, creditType: CreditType): n
     return allocation.contact_lookup;
   }
   
-  if (creditType === "export") {
-    return allocation.export;
+  return 0;
+}
+
+export function getTrialCreditAllocation(plan: string, creditType: CreditType): number {
+  const allocation = TRIAL_CREDIT_ALLOCATIONS[plan.toLowerCase()];
+  if (!allocation) return 0;
+
+  if (creditType === "contact_lookup") {
+    return allocation.contact_lookup;
   }
-  
+
   return 0;
 }
 

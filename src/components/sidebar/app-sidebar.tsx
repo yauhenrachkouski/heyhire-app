@@ -38,7 +38,9 @@ import { NavUser } from "@/components/sidebar/nav-user"
 import { SupportModal } from "@/components/sidebar/support-modal"
 import { CreditBalance } from "@/components/sidebar/credit-balance"
 import { getOrganizationCredits } from "@/actions/credits"
+import { getRecentSearches } from "@/actions/search"
 import { creditsKeys } from "@/lib/credits"
+import type { PlanId } from "@/types/plans"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import type { subscription } from "@/db/schema"
@@ -165,6 +167,25 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
     initialData: activeOrganization?.credits,
   })
 
+  const { data: recentSearchesData } = useQuery({
+    queryKey: organizationId ? ["recentSearches", organizationId] : ["recentSearches"],
+    queryFn: async () => {
+      if (!organizationId) return []
+
+      const res = await getRecentSearches(organizationId, 10)
+      if (!res.success || !res.data) return []
+
+      return res.data.map((s) => ({
+        id: s.id,
+        name: s.name,
+        query: s.query,
+        createdAt: s.createdAt,
+      }))
+    },
+    enabled: !!organizationId,
+    initialData: recentSearches,
+  })
+
   // Generate dynamic navigation data with recent job
 
   return (
@@ -217,12 +238,12 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
         )}
         
         {/* Recent Searches Section */}
-        {recentSearches && recentSearches.length > 0 && (
+        {recentSearchesData && recentSearchesData.length > 0 && (
           <SidebarGroup>
             <SidebarGroupLabel className="flex-shrink-0">Recent</SidebarGroupLabel>
             <SidebarGroupContent className="overflow-auto">
               <SidebarMenu>
-                <RecentSearches searches={recentSearches} currentPath={pathname} />
+                <RecentSearches searches={recentSearchesData} currentPath={pathname} />
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -339,7 +360,7 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
       </SidebarContent>
       <SidebarFooter>
         {activeOrganization && credits !== undefined && (
-          <CreditBalance credits={credits} currentPlan={subscription?.plan as "starter" | "pro" | "enterprise" | null | undefined} />
+          <CreditBalance credits={credits} currentPlan={subscription?.plan as PlanId | null | undefined} />
         )}
         <SidebarMenu>
           <SidebarMenuItem>

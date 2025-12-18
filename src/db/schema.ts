@@ -183,6 +183,22 @@ export const creditTransactions = pgTable("credit_transactions", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const stripeWebhookEvents = pgTable(
+  "stripe_webhook_events",
+  {
+    id: text("id").primaryKey(),
+    stripeEventId: text("stripe_event_id").notNull(),
+    stripeEventType: text("stripe_event_type").notNull(),
+    referenceId: text("reference_id"),
+    stripeCustomerId: text("stripe_customer_id"),
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    processedAt: timestamp("processed_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    uniqueStripeEventId: unique().on(table.stripeEventId),
+  })
+);
+
 export const candidates = pgTable("candidates", {
   id: text("id").primaryKey(),
   linkedinUrl: text("linkedin_url").notNull().unique(),

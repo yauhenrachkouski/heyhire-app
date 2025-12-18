@@ -10,6 +10,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { PlanId } from "@/types/plans";
 
 interface PricingPlan {
   name: string;
@@ -17,7 +18,7 @@ interface PricingPlan {
   description: string;
   features: string[];
   popular?: boolean;
-  planId: "starter" | "pro";
+  planId: PlanId;
   billingLabel: "/month";
   ctaText: string;
   ctaTextNoTrial: string;
@@ -25,27 +26,13 @@ interface PricingPlan {
 
 const plans: PricingPlan[] = [
   {
-    name: "Starter",
-    price: 29,
-    planId: "starter",
-    billingLabel: "/month",
-    description: "7-day free trial",
-    ctaText: "Start free trial",
-    ctaTextNoTrial: "Get started",
-    features: [
-      "Search across 100M+ profiles",
-      "300 reveals included",
-      "Support included",
-    ],
-  },
-  {
     name: "Pro",
     price: 69,
     planId: "pro",
     billingLabel: "/month",
-    description: "Everything you need to source candidates",
+    description: "3-day free trial",
     popular: true,
-    ctaText: "Start sourcing",
+    ctaText: "Start free trial",
     ctaTextNoTrial: "Get started",
     features: [
       "Advanced matching algorithm",
@@ -61,14 +48,16 @@ interface SubscribeCardsServerProps {
   isRequired?: boolean;
   isTrialEligible?: boolean;
   showSupportSections?: boolean;
+  currentPlan?: PlanId | null;
 }
 
 interface SubscribeHeaderProps {
   isRequired?: boolean;
   isTrialEligible?: boolean;
+  currentPlan?: PlanId | null;
 }
 
-export function SubscribeHeader({ isRequired = false, isTrialEligible = true }: SubscribeHeaderProps) {
+export function SubscribeHeader({ isRequired = false, isTrialEligible = true, currentPlan }: SubscribeHeaderProps) {
   return (
     <div className="text-center mb-8">
       <h1 className="text-4xl font-bold mb-4">
@@ -87,6 +76,7 @@ export function SubscribeCardsServer({
   isRequired = false,
   isTrialEligible = true,
   showSupportSections = true,
+  currentPlan,
 }: SubscribeCardsServerProps) {
   void isRequired;
   void isTrialEligible;
@@ -103,6 +93,13 @@ export function SubscribeCardsServer({
         {visiblePlans.map((plan) => {
           const displayPrice = plan.price;
           const periodLabel = plan.billingLabel;
+
+          const isCurrent = !!currentPlan && currentPlan === plan.planId;
+
+          const ctaText = (() => {
+            if (isCurrent) return "Current plan";
+            return plan.ctaText;
+          })();
           
           return (
             <Card
@@ -116,6 +113,11 @@ export function SubscribeCardsServer({
               <CardHeader>
                 <CardTitle className="text-2xl">{plan.name}</CardTitle>
                 <CardDescription>{plan.description}</CardDescription>
+                {isCurrent && (
+                  <div className="pt-2">
+                    <Badge variant="secondary">Current plan</Badge>
+                  </div>
+                )}
               </CardHeader>
 
               <CardContent className="flex-1">
@@ -130,17 +132,10 @@ export function SubscribeCardsServer({
                     
                   </>
                   <div className="mt-3 space-y-1">
-                    {plan.planId === "pro" ? (
-                      <>
-                        <p className="text-xs text-muted-foreground">Billed monthly</p>
-                        <p className="text-xs text-muted-foreground">1,000 reveals/month</p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-xs text-muted-foreground">Billed monthly after trial</p>
-                        <p className="text-xs text-muted-foreground">300 reveals/month</p>
-                      </>
-                    )}
+                    <>
+                      <p className="text-xs text-muted-foreground">Billed monthly after trial</p>
+                      <p className="text-xs text-muted-foreground">1,000 reveals/month</p>
+                    </>
                   </div>
                 </div>
 
@@ -153,7 +148,13 @@ export function SubscribeCardsServer({
                         <span className="text-sm">
                           {feature}
                           {isReveal && (
-                            <Tooltip>
+                            <Tooltip
+                              onOpenChange={(open) => {
+                                if (open && document.activeElement?.tagName === "BUTTON") {
+                                  (document.activeElement as HTMLButtonElement).blur();
+                                }
+                              }}
+                            >
                               <TooltipTrigger asChild>
                                 <button
                                   type="button"
@@ -176,13 +177,19 @@ export function SubscribeCardsServer({
               </CardContent>
 
               <CardFooter>
-                <SubscribeCheckoutButton
-                  plan={plan.planId}
-                  className="w-full"
-                  variant={plan.planId === "pro" ? "default" : "outline"}
-                >
-                  {plan.ctaText}
-                </SubscribeCheckoutButton>
+                {isCurrent ? (
+                  <Button className="w-full" size="lg" variant="outline" disabled>
+                    Current plan
+                  </Button>
+                ) : (
+                  <SubscribeCheckoutButton
+                    plan={plan.planId}
+                    className="w-full"
+                    variant={"default"}
+                  >
+                    {ctaText}
+                  </SubscribeCheckoutButton>
+                )}
               </CardFooter>
             </Card>
           );

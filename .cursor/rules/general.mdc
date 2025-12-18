@@ -3,10 +3,29 @@ alwaysApply: true
 ---
 #Stack 
 Bun
-Next.js 15 (App Router, Server Actions, Route Handlers, RSC-first)
-React 19, Tailwind CSS v4, shadcn/ui
+Next.js 16
+## Default assumptions
+- Assume Next.js 16 (App Router) is used unless explicitly stated otherwise.
+- Prefer React 19.2-compatible patterns.
+- Use React 19.2 features when beneficial (e.g., View Transitions), but keep changes isolated and reversible.
+## Caching & rendering
+- Prefer Cache Components and the `"use cache"` directive for server-side caching when appropriate.
+- Prefer Partial Prerendering (PPR) patterns where they improve TTFB without sacrificing interactivity.
+- When cache invalidation is needed, prefer tag-based invalidation and use `updateTag()` / `revalidateTag()` rather than ad-hoc cache busting.
+## Routing & navigation
+- Prefer idiomatic App Router navigation (`next/navigation`) and structure layouts to benefit from layout deduplication.
+- Prefer incremental prefetching behavior; avoid manual hacks that fight the router.
+## Middleware / networking boundary
+- If the project uses network interception/proxying, prefer `proxy.ts` (Node.js runtime) over legacy middleware patterns for that purpose.
+## Breaking-change awareness
+- Treat request/route params and certain APIs as async where applicable (handle Promises correctly).
+- Review `next/image` configuration and defaults when image behavior changes; adjust `images.localPatterns.search`, caching TTL, and quality settings as needed.
+## Security
+
+
+React 19, Tailwind CSS v4, shadcn/ui latest
 Neon Postgres (serverless), Drizzle ORM (SQL migrations, schema-first)
-Always use @tabler/icons
+Always and onlyuse @tabler/icons
 Zod schema
 
 Always use shdacn components with default style untill I will not  give you another styling instruction.
@@ -22,3 +41,13 @@ Apply migration - Run bun run db:migrate
 
 
 Do not create fallback. Always resolve the issues and make sure flow works.
+
+Documentation
+For better-auth and stripe documentation related to subscriptions, stripe use this link:
+https://raw.githubusercontent.com/better-auth/better-auth/refs/heads/main/docs/content/docs/plugins/organization.mdx
+https://raw.githubusercontent.com/better-auth/better-auth/refs/heads/main/docs/content/docs/plugins/stripe.mdx
+
+
+Basic usage of better-auth auth, sign in, sign up, sign out, user profile, etc:
+https://raw.githubusercontent.com/better-auth/better-auth/refs/heads/main/docs/content/docs/basic-usage.mdx
+https://raw.githubusercontent.com/better-auth/better-auth/refs/heads/main/docs/content/docs/integrations/next.mdx

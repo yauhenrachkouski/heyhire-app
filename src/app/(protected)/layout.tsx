@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { PersistentSidebarProvider } from "@/providers/sidebar-provider"
+import { PlansModalProvider } from "@/providers/plans-modal-provider"
 import { requireActiveSubscription, getUserSubscription } from "@/actions/stripe"
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
@@ -61,32 +62,34 @@ export default async function DashboardLayout({
 
   return (
     <TooltipProvider>
-      <PersistentSidebarProvider>
-        <AppSidebar 
-          subscription={subscription}
-          organizations={organizations}
-          activeOrganization={activeOrgWithCredits}
-          user={activeMember?.user ?? null}
-          recentSearches={recentSearches ?? []}
-        />
-        <SidebarInset>
-          <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear bg-background border-b">
-            <div className="flex h-full items-center gap-2 px-4 leading-none">
-              <SidebarTrigger className="-ml-1" />
-              <Separator
-              orientation="vertical"
-              className="mr-2 my-auto block shrink-0 data-[orientation=vertical]:h-4"
-            />
-              <div className="flex items-center min-w-0">
-                {breadcrumbs}
+      <PlansModalProvider>
+        <PersistentSidebarProvider>
+          <AppSidebar 
+            subscription={subscription}
+            organizations={organizations}
+            activeOrganization={activeOrgWithCredits}
+            user={activeMember?.user ?? null}
+            recentSearches={recentSearches ?? []}
+          />
+          <SidebarInset>
+            <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear bg-background border-b">
+              <div className="flex h-full items-center gap-2 px-4 leading-none">
+                <SidebarTrigger className="-ml-1" />
+                <Separator
+                orientation="vertical"
+                className="mr-2 my-auto block shrink-0 data-[orientation=vertical]:h-4"
+              />
+                <div className="flex items-center min-w-0">
+                  {breadcrumbs}
+                </div>
               </div>
+            </header>
+            <div className="flex flex-1 flex-col gap-4 p-4">
+              {children}
             </div>
-          </header>
-          <div className="flex flex-1 flex-col gap-4 p-4">
-            {children}
-          </div>
-        </SidebarInset>
-      </PersistentSidebarProvider>
+          </SidebarInset>
+        </PersistentSidebarProvider>
+      </PlansModalProvider>
     </TooltipProvider>
   )
 }

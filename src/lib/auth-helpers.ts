@@ -44,3 +44,20 @@ export async function getSession() {
   return session
 }
 
+export async function getActiveOrgId() {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session?.user) {
+    throw new Error('Not authenticated')
+  }
+
+  const activeOrgId = session.session.activeOrganizationId
+  if (!activeOrgId) {
+    throw new Error('No active organization')
+  }
+
+  return activeOrgId
+}
+

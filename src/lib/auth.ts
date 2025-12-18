@@ -13,6 +13,8 @@ import { trackServerEvent } from "@/lib/posthog/track";
 import { handleStripeEvent } from "@/lib/stripe/webhooks";
 import { logger } from "@/lib/axiom/server";
 import { InvitationAcceptedEmail, InvitationEmail, MagicLinkEmail, WelcomeEmail } from "@/emails";
+import { generateId } from "@/lib/id";
+import { CREDIT_TYPES, getTrialCreditAllocation } from "@/lib/credits";
 
 
 
@@ -27,6 +29,35 @@ const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 })
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+async function markBillingActionProcessed(params: {
+   key: string;
+   type: string;
+   referenceId?: string | null;
+   stripeCustomerId?: string | null;
+   stripeSubscriptionId?: string | null;
+}) {
+   try {
+      await db.insert(schema.stripeWebhookEvents).values({
+         id: generateId(),
+         stripeEventId: params.key,
+         stripeEventType: params.type,
+         referenceId: params.referenceId ?? null,
+         stripeCustomerId: params.stripeCustomerId ?? null,
+         stripeSubscriptionId: params.stripeSubscriptionId ?? null,
+      });
+   } catch {
+      // unique constraint hit -> already processed
+   }
+}
+
+async function isBillingActionProcessed(key: string) {
+   const existing = await db.query.stripeWebhookEvents.findFirst({
+      where: eq(schema.stripeWebhookEvents.stripeEventId, key),
+      columns: { stripeEventId: true },
+   });
+   return !!existing;
+}
 
 export const auth = betterAuth({
    database: drizzleAdapter(db, {
@@ -188,42 +219,111 @@ export const auth = betterAuth({
       stripe({
          stripeClient,
          stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "whsec_placeholder",
-         createCustomerOnSignUp: true,
+         createCustomerOnSignUp: false,
          subscription: {
             enabled: true,
             plans: [
                {
-                  name: "starter",
-                  priceId: process.env.STRIPE_STARTER_PRICE_ID || "price_placeholder",
-                  limits: {
-                     reveals: 300,
-                  },
-                  freeTrial: {
-                     days: 7,
-                  },
-               },
-               {
                   name: "pro",
                   priceId: process.env.STRIPE_PRO_PRICE_ID || "price_placeholder",
                   limits: {
-                     reveals: 1000,
+                     credits: 1000,
+                     trialCredits: 100,
+                  },
+                  freeTrial: {
+                     days: 3,
+                     onTrialStart: async (subscription) => {
+                        const key = `better_auth:trial_start:${subscription.id}`;
+                        if (await isBillingActionProcessed(key)) return;
+
+                        const referenceId = subscription.referenceId;
+                        if (!referenceId) return;
+
+                        const owner = await db.query.member.findFirst({
+                           where: and(
+                              eq(schema.member.organizationId, referenceId),
+                              eq(schema.member.role, "owner")
+                           ),
+                        });
+                        const ownerId = owner?.userId;
+                        if (!ownerId) return;
+
+                        const creditsToGrant = getTrialCreditAllocation("pro", CREDIT_TYPES.CONTACT_LOOKUP);
+                        if (creditsToGrant <= 0) return;
+
+                        await db.transaction(async (tx) => {
+                           const org = await tx.query.organization.findFirst({
+                              where: eq(schema.organization.id, referenceId),
+                              columns: { credits: true },
+                           });
+
+                           const balanceBefore = org?.credits ?? 0;
+                           await tx
+                              .update(schema.organization)
+                              .set({ credits: creditsToGrant })
+                              .where(eq(schema.organization.id, referenceId));
+
+                           await tx.insert(schema.creditTransactions).values({
+                              id: generateId(),
+                              organizationId: referenceId,
+                              userId: ownerId,
+                              type: "subscription_grant",
+                              creditType: CREDIT_TYPES.CONTACT_LOOKUP,
+                              amount: creditsToGrant - balanceBefore,
+                              balanceBefore,
+                              balanceAfter: creditsToGrant,
+                              relatedEntityId: subscription.id,
+                              description: `Trial credits: ${creditsToGrant} credits for pro plan`,
+                              metadata: JSON.stringify({
+                                 reason: "trial_start",
+                                 subscriptionId: subscription.id,
+                              }),
+                           });
+                        });
+
+                        trackServerEvent(ownerId, "trial_started", referenceId, {
+                           internal_subscription_id: subscription.id,
+                        });
+
+                        await markBillingActionProcessed({
+                           key,
+                           type: "trial_start",
+                           referenceId,
+                           stripeCustomerId: subscription.stripeCustomerId,
+                           stripeSubscriptionId: subscription.stripeSubscriptionId,
+                        });
+                     },
                   },
                },
             ],
             getCheckoutSessionParams: async ({ user, session, plan, subscription }) => {
-               void user;
                void session;
-               void plan;
-               void subscription;
+
+               const referenceId = subscription?.referenceId;
+               if (!referenceId) {
+                  throw new APIError("BAD_REQUEST", {
+                     message: "Missing referenceId for subscription checkout",
+                  });
+               }
                return {
                   params: {
                      payment_method_collection: "always",
+                     client_reference_id: referenceId,
+                     metadata: {
+                        referenceId,
+                        plan: plan?.name,
+                        userId: user?.id,
+                     },
+                     subscription_data: {
+                        metadata: {
+                           referenceId,
+                           plan: plan?.name,
+                        },
+                     },
                   },
                };
             },
             authorizeReference: async ({ user, referenceId }) => {
-               if (referenceId === user.id) return true;
-
                const memberRecord = await db.query.member.findFirst({
                   where: and(
                      eq(schema.member.userId, user.id),
@@ -242,6 +342,66 @@ export const auth = betterAuth({
             onSubscriptionCancel: async ({ subscription }) => {
                log.info("Stripe subscription canceled", {
                   stripeSubscriptionId: subscription.id,
+               });
+            },
+            onSubscriptionDeleted: async ({ subscription }) => {
+               const key = `better_auth:subscription_deleted:${subscription.id}`;
+               if (await isBillingActionProcessed(key)) return;
+
+               const referenceId = subscription.referenceId;
+               if (!referenceId) return;
+
+               const owner = await db.query.member.findFirst({
+                  where: and(
+                     eq(schema.member.organizationId, referenceId),
+                     eq(schema.member.role, "owner")
+                  ),
+               });
+               const ownerId = owner?.userId;
+               if (!ownerId) return;
+
+               await db.transaction(async (tx) => {
+                  const org = await tx.query.organization.findFirst({
+                     where: eq(schema.organization.id, referenceId),
+                     columns: { credits: true },
+                  });
+
+                  const balanceBefore = org?.credits ?? 0;
+                  if (balanceBefore === 0) return;
+
+                  await tx
+                     .update(schema.organization)
+                     .set({ credits: 0 })
+                     .where(eq(schema.organization.id, referenceId));
+
+                  await tx.insert(schema.creditTransactions).values({
+                     id: generateId(),
+                     organizationId: referenceId,
+                     userId: ownerId,
+                     type: "subscription_grant",
+                     creditType: CREDIT_TYPES.CONTACT_LOOKUP,
+                     amount: -balanceBefore,
+                     balanceBefore,
+                     balanceAfter: 0,
+                     relatedEntityId: subscription.id,
+                     description: "Subscription ended",
+                     metadata: JSON.stringify({
+                        reason: "subscription_deleted",
+                        subscriptionId: subscription.id,
+                     }),
+                  });
+               });
+
+               trackServerEvent(ownerId, "subscription_deleted", referenceId, {
+                  internal_subscription_id: subscription.id,
+               });
+
+               await markBillingActionProcessed({
+                  key,
+                  type: "subscription_deleted",
+                  referenceId,
+                  stripeCustomerId: subscription.stripeCustomerId,
+                  stripeSubscriptionId: subscription.stripeSubscriptionId,
                });
             },
          },

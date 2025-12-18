@@ -17,36 +17,25 @@ import {
 import { cancelSubscription, resumeSubscription, getCustomerPortalSession } from "@/actions/stripe"
 import { toast } from "sonner"
 import { subscription as subscriptionSchema } from "@/db/schema"
+import type { PlanId } from "@/types/plans"
 
 interface PricingPlan {
   name: string;
   price: number;
   description: string;
   features: string[];
-  planId: "starter" | "pro";
+  planId: PlanId;
 }
 
 const plans: PricingPlan[] = [
   {
-    name: "Starter",
-    price: 29,
-    planId: "starter",
-    description: "7-day free trial + 300 reveals included",
-    features: [
-      "Search candidates",
-      "Save candidates",
-      "Exports",
-      "Support",
-    ],
-  },
-  {
     name: "Pro",
     price: 69,
     planId: "pro",
-    description: "Everything you need to source candidates",
+    description: "3-day free trial to try, 100 reveals included",
     features: [
       "Search candidates",
-      "Save candidates",
+      "1,000 reveals included",
       "Exports",
       "Support",
     ],
@@ -96,7 +85,7 @@ export function BillingSection({ subscription: initialSubscription }: BillingSec
         setSubscription(prev => prev ? { ...prev, cancelAtPeriodEnd: true } : null);
       } else {
         toast.error("Failed to Cancel", {
-          description: result.error,
+          description: result.error || "Only organization owners/admins can manage billing",
         });
       }
     } catch (error) {
@@ -119,7 +108,7 @@ export function BillingSection({ subscription: initialSubscription }: BillingSec
         setSubscription(prev => prev ? { ...prev, cancelAtPeriodEnd: false } : null);
       } else {
         toast.error("Failed to Resume", {
-          description: result.error,
+          description: result.error || "Only organization owners/admins can manage billing",
         });
       }
     } catch (error) {
@@ -139,7 +128,7 @@ export function BillingSection({ subscription: initialSubscription }: BillingSec
         window.location.href = result.url;
       } else {
         toast.error("Failed to Open Portal", {
-          description: result.error,
+          description: result.error || "Only organization owners/admins can manage billing",
         });
         setIsLoading(false);
       }
@@ -160,14 +149,14 @@ export function BillingSection({ subscription: initialSubscription }: BillingSec
     });
   };
 
-  const currentPlan = (subscription?.plan as "starter" | "pro" | null) || null;
+  const currentPlan = (subscription?.plan as PlanId | null) || null;
   const currentPlanData = plans.find(p => p.planId === currentPlan);
 
   return (
     <Card>
         <CardHeader>
           <CardTitle>Current Subscription</CardTitle>
-          <CardDescription>Manage your billing and subscription settings</CardDescription>
+          <CardDescription>Manage your organization's billing and subscription settings</CardDescription>
         </CardHeader>
         
         <CardContent className="space-y-6">
@@ -180,7 +169,7 @@ export function BillingSection({ subscription: initialSubscription }: BillingSec
           ) : (
             <>
               {/* Current Plan Card */}
-              <div className="rounded-lg border p-4">
+              <div className="rounded-lg border p-4 w-fit">
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
                   <p className="text-lg sm:text-xl font-bold capitalize">{subscription.plan} Plan</p>
                   {currentPlanData && (
@@ -207,10 +196,7 @@ export function BillingSection({ subscription: initialSubscription }: BillingSec
                       <p className="font-medium">{formatDate(subscription.periodEnd)}</p>
                     </div>
                   )}
-                  <div className="rounded-lg border p-4">
-                    <p className="text-sm text-muted-foreground mb-1">Payment method</p>
-                    <p className="font-medium">Credit Card</p>
-                  </div>
+                 
                 </div>
               </div>
 
@@ -232,7 +218,7 @@ export function BillingSection({ subscription: initialSubscription }: BillingSec
                       Manage Billing
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="w-[95vw] sm:!max-w-[95vw] md:!max-w-[1400px] max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+                  <DialogContent className="w-[95vw] sm:max-w-[95vw]! md:max-w-[1400px]! max-h-[90vh] overflow-y-auto p-4 sm:p-6">
                     <div className="text-center my-4 sm:my-8">
                       <DialogTitle className="text-2xl sm:text-4xl font-bold mb-2 sm:mb-4">
                         Manage Billing

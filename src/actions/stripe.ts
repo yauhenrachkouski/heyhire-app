@@ -3,8 +3,8 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/db/drizzle";
-import { subscription, user, organization } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { subscription, user, organization, member } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
 import { isSubscriptionActive } from "@/lib/subscription";
 import { getSessionWithOrg } from "@/lib/auth-helpers";
 import { trackServerEvent } from "@/lib/posthog/track";
@@ -13,39 +13,41 @@ import { SubscriptionCanceledEmail, SubscriptionActivatedEmail } from "@/emails"
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+async function requireBillingAdmin(activeOrgId: string, userId: string) {
+  const memberRecord = await db.query.member.findFirst({
+    where: and(
+      eq(member.organizationId, activeOrgId),
+      eq(member.userId, userId)
+    ),
+    columns: { role: true },
+  });
+
+  const role = memberRecord?.role;
+  if (role !== "owner" && role !== "admin") {
+    throw new Error("Not authorized");
+  }
+}
+
 /**
  * Get the active organization's subscription
  */
 export async function getUserSubscription() {
   try {
     const { activeOrgId, userId } = await getSessionWithOrg();
-    console.log("activeOrgId", activeOrgId);
-    // First try: Look up by organization ID
-    let orgSubscription = await db.query.subscription.findFirst({
+    void userId;
+
+    const orgSubscription = await db.query.subscription.findFirst({
       where: eq(subscription.referenceId, activeOrgId),
     });
-    console.log("orgSubscription by orgId", orgSubscription);
-
-    // Fallback: If not found by org ID, try looking up by user's stripe customer
-    // This handles legacy subscriptions created with user ID as referenceId
-    if (!orgSubscription) {
-      console.log("Subscription not found by orgId, trying fallback by stripeCustomerId");
-      const userRecord = await db.query.user.findFirst({
-        where: eq(user.id, userId),
-      });
-
-      if (userRecord?.stripeCustomerId) {
-        console.log("Looking for subscription with stripeCustomerId:", userRecord.stripeCustomerId);
-        orgSubscription = await db.query.subscription.findFirst({
-          where: eq(subscription.stripeCustomerId, userRecord.stripeCustomerId),
-        });
-        console.log("Found subscription via fallback:", orgSubscription?.id);
-      }
-    }
 
     return { subscription: orgSubscription || null, error: null };
   } catch (error) {
-    console.error("Error fetching subscription:", error);
+    const message = error instanceof Error ? error.message : "Failed to fetch subscription";
+    if (message.includes("Not authenticated") || message.includes("No active organization")) {
+      console.warn("Error fetching subscription:", error);
+    } else {
+      console.error("Error fetching subscription:", error);
+    }
     return { subscription: null, error: error instanceof Error ? error.message : "Failed to fetch subscription" };
   }
 }
@@ -83,6 +85,14 @@ export async function requireActiveSubscription() {
   const { subscription: orgSubscription, error } = await getUserSubscription();
 
   if (error) {
+    if (error.includes("Not authenticated")) {
+      return {
+        hasSubscription: false,
+        shouldRedirect: true,
+        redirectTo: "/auth/signin",
+        error,
+      };
+    }
     return {
       hasSubscription: false,
       shouldRedirect: true,
@@ -153,6 +163,7 @@ export async function getSubscriptionStatus() {
 export async function getCustomerPortalSession() {
   try {
     const { activeOrgId, userId } = await getSessionWithOrg(); // Verify session exists
+    await requireBillingAdmin(activeOrgId, userId);
     const { subscription: orgSubscription } = await getUserSubscription();
 
     if (!orgSubscription?.stripeCustomerId) {
@@ -201,6 +212,7 @@ export async function getCustomerPortalSession() {
 export async function cancelSubscription() {
   try {
     const { activeOrgId, userId } = await getSessionWithOrg();
+    await requireBillingAdmin(activeOrgId, userId);
     const { subscription: orgSubscription } = await getUserSubscription();
 
     if (!orgSubscription?.stripeSubscriptionId) {
@@ -284,6 +296,7 @@ export async function cancelSubscription() {
 export async function resumeSubscription() {
   try {
     const { activeOrgId, userId } = await getSessionWithOrg();
+    await requireBillingAdmin(activeOrgId, userId);
     const { subscription: orgSubscription } = await getUserSubscription();
 
     if (!orgSubscription?.stripeSubscriptionId) {

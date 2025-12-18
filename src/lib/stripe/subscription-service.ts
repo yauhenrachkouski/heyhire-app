@@ -25,15 +25,6 @@ export async function getOrgSubscription(organizationId: string) {
 }
 
 /**
- * Get subscription by Stripe customer ID (fallback for legacy data)
- */
-export async function getSubscriptionByCustomerId(stripeCustomerId: string) {
-    return db.query.subscription.findFirst({
-        where: eq(subscriptionTable.stripeCustomerId, stripeCustomerId),
-    });
-}
-
-/**
  * Check if organization has trial eligibility
  */
 export async function isTrialEligible(organizationId: string): Promise<boolean> {

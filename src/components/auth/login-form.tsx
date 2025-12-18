@@ -130,7 +130,7 @@ export function LoginForm({ initialError }: { initialError?: string }) {
         </a>
         <div className="space-y-2">
           <CardTitle className="text-2xl font-bold">Welcome to HeyHire</CardTitle>
-          <CardDescription className="text-muted-foreground text-base">Select a sign-in method</CardDescription>   
+          <CardDescription className="text-muted-foreground text-base">Start your journey to finding the perfect candidates</CardDescription>   
         </div>
 
         {isInviteCallback && (

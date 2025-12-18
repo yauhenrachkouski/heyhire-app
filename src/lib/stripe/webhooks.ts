@@ -1,19 +1,15 @@
 import Stripe from "stripe";
 import { db } from "@/db/drizzle";
-import { subscription as subscriptionTable, member, creditTransactions, organization, user } from "@/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { subscription as subscriptionTable, member, creditTransactions, organization, user, stripeWebhookEvents } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
 import { trackServerEvent } from "@/lib/posthog/track";
 import { generateId } from "@/lib/id";
 import { logger } from "@/lib/axiom/server";
 import { getPlanCreditAllocation, CREDIT_TYPES } from "@/lib/credits";
-import { shouldRevokeCredits, isActive, type SubscriptionStatus } from "./state-machine";
 import { Resend } from "resend";
 import {
     PaymentFailedEmail,
-    SubscriptionActivatedEmail,
-    SubscriptionCanceledEmail,
-    SubscriptionPlanChangedEmail,
-    TrialStartedEmail,
+    TrialEndingSoonEmail,
 } from "@/emails";
 
 const log = logger.with({ service: "stripe-webhook" });
@@ -25,11 +21,10 @@ interface WebhookContext {
     event: Stripe.Event;
 }
 
-// Type guards for Stripe events
-function isCheckoutSessionEvent(
-    event: Stripe.Event
-): event is Stripe.Event & { data: { object: Stripe.Checkout.Session } } {
-    return event.type.startsWith("checkout.session.");
+function requireReferenceIdFromMetadata(metadata: Record<string, string> | null | undefined): string | null {
+    const referenceId = metadata?.referenceId;
+    if (!referenceId) return null;
+    return referenceId;
 }
 
 // Extended type for subscription with period fields
@@ -40,10 +35,6 @@ interface StripeSubscriptionExtended extends Stripe.Subscription {
 
 function getPlanNameFromStripeSubscription(sub: Stripe.Subscription): string {
     const priceId = sub.items.data[0]?.price?.id;
-
-    if (priceId && process.env.STRIPE_STARTER_PRICE_ID && priceId === process.env.STRIPE_STARTER_PRICE_ID) {
-        return "starter";
-    }
 
     if (priceId && process.env.STRIPE_PRO_PRICE_ID && priceId === process.env.STRIPE_PRO_PRICE_ID) {
         return "pro";
@@ -65,16 +56,32 @@ function isInvoiceEvent(
     return event.type.startsWith("invoice.");
 }
 
-/**
- * Check if event was already processed
- * Uses subscription.stripeSubscriptionId + metadata to track processed events
- */
-async function isEventProcessed(eventId: string): Promise<boolean> {
-    // Check credit_transactions metadata for this event ID
-    const existing = await db.query.creditTransactions.findFirst({
-        where: sql`${creditTransactions.metadata}::jsonb->>'stripeEventId' = ${eventId}`,
+async function isStripeEventProcessed(eventId: string): Promise<boolean> {
+    const existing = await db.query.stripeWebhookEvents.findFirst({
+        where: eq(stripeWebhookEvents.stripeEventId, eventId),
     });
     return !!existing;
+}
+
+async function markStripeEventProcessed(params: {
+    event: Stripe.Event;
+    referenceId?: string | null;
+    stripeCustomerId?: string | null;
+    stripeSubscriptionId?: string | null;
+}) {
+    try {
+        await db.insert(stripeWebhookEvents).values({
+            id: generateId(),
+            stripeEventId: params.event.id,
+            stripeEventType: params.event.type,
+            referenceId: params.referenceId ?? null,
+            stripeCustomerId: params.stripeCustomerId ?? null,
+            stripeSubscriptionId: params.stripeSubscriptionId ?? null,
+        });
+    } catch (e) {
+        // Idempotency: unique index on stripe_event_id
+        log.info("Stripe event already marked processed", { eventId: params.event.id, error: String(e) });
+    }
 }
 
 /**
@@ -98,21 +105,10 @@ export async function handleStripeEvent(event: Stripe.Event, stripeClient: Strip
 
     try {
         switch (event.type) {
-            // Checkout events
-            case "checkout.session.completed":
-                await handleCheckoutCompleted(ctx);
-                break;
-            case "checkout.session.expired":
-                await handleCheckoutExpired(ctx);
-                break;
-
-            // Subscription events
-            case "customer.subscription.created":
-            case "customer.subscription.updated":
-                await handleSubscriptionUpdated(ctx);
-                break;
-            case "customer.subscription.deleted":
-                await handleSubscriptionDeleted(ctx);
+            // NOTE: Better Auth Stripe plugin already handles checkout + subscription state sync.
+            // We only handle additional side-effects here (credits, emails, analytics).
+            case "customer.subscription.trial_will_end":
+                await handleTrialWillEnd(ctx);
                 break;
 
             // Invoice events
@@ -122,10 +118,17 @@ export async function handleStripeEvent(event: Stripe.Event, stripeClient: Strip
             case "invoice.payment_failed":
                 await handleInvoicePaymentFailed(ctx);
                 break;
+            case "invoice.upcoming":
+                await handleInvoiceUpcoming(ctx);
+                break;
+
+            // Customer events
+            case "customer.updated":
+                await handleCustomerUpdated(ctx);
+                break;
 
             // Payment risk events
             case "charge.refunded":
-            case "refund.created":
             case "charge.dispute.created":
                 await handlePaymentRiskEvent(ctx);
                 break;
@@ -141,171 +144,99 @@ export async function handleStripeEvent(event: Stripe.Event, stripeClient: Strip
     log.info("Event processing complete", eventContext);
 }
 
-async function handleCheckoutCompleted(ctx: WebhookContext) {
-    if (!isCheckoutSessionEvent(ctx.event)) return;
-    const session = ctx.event.data.object;
-    void session;
-}
-
-async function handleCheckoutExpired(ctx: WebhookContext) {
-    if (!isCheckoutSessionEvent(ctx.event)) return;
-    const session = ctx.event.data.object;
-
-    trackServerEvent(
-        session.metadata?.userId || "stripe_webhook",
-        "checkout_session_expired",
-        session.metadata?.referenceId || session.client_reference_id || undefined,
-        { plan: session.metadata?.plan, stripe_checkout_session_id: session.id }
-    );
-}
-
-async function handleSubscriptionUpdated(ctx: WebhookContext) {
+async function handleTrialWillEnd(ctx: WebhookContext) {
     if (!isSubscriptionEvent(ctx.event)) return;
     const sub = ctx.event.data.object;
-    const eventContext = { eventId: ctx.event.id, subscriptionId: sub.id, status: sub.status };
 
-    log.info("Processing subscription update", eventContext);
-
-    const existing = await db.query.subscription.findFirst({
-        where: eq(subscriptionTable.stripeCustomerId, sub.customer as string),
-    });
-
-    if (!existing) {
-        log.warn("No subscription found to update", eventContext);
+    if (await isStripeEventProcessed(ctx.event.id)) {
+        log.info("trial_will_end already processed", { eventId: ctx.event.id });
         return;
     }
 
-    const newPlan = getPlanNameFromStripeSubscription(sub);
-
-    const result = await db
-        .update(subscriptionTable)
-        .set({
-            stripeSubscriptionId: sub.id,
-            status: sub.status,
-            plan: newPlan,
-            periodStart: sub.current_period_start ? new Date(sub.current_period_start * 1000) : null,
-            periodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000) : null,
-            trialStart: sub.trial_start ? new Date(sub.trial_start * 1000) : null,
-            trialEnd: sub.trial_end ? new Date(sub.trial_end * 1000) : null,
-            cancelAtPeriodEnd: sub.cancel_at_period_end || false,
-        })
-        .where(eq(subscriptionTable.stripeCustomerId, sub.customer as string))
-        .returning();
-
-    log.info("Subscription updated", { ...eventContext, internalId: result[0].id });
-
-    if (sub.status === "trialing" && newPlan === "starter") {
-        if (!(await isEventProcessed(ctx.event.id))) {
-            const ownerId = await getOrgOwnerId(result[0].referenceId);
-            if (ownerId) {
-                await grantPlanCreditsWithTransaction(
-                    result[0].referenceId,
-                    ownerId,
-                    newPlan,
-                    result[0].id,
-                    ctx.event
-                );
-
-                trackServerEvent(ownerId, "trial_started", result[0].referenceId, {
-                    internal_subscription_id: result[0].id,
-                    stripe_subscription_id: sub.id,
-                });
-            }
-        }
+    const referenceId = requireReferenceIdFromMetadata(sub.metadata);
+    if (!referenceId) {
+        log.warn("trial_will_end missing referenceId", { eventId: ctx.event.id, stripeSubscriptionId: sub.id });
+        return;
     }
 
-    if (existing.plan && existing.plan !== newPlan) {
-        try {
-            const ownerId = await getOrgOwnerId(result[0].referenceId);
-            if (ownerId) {
-                const ownerUser = await db.query.user.findFirst({
-                    where: eq(user.id, ownerId),
-                    columns: { email: true },
-                });
-
-                if (ownerUser?.email) {
-                    const orgRecord = await db.query.organization.findFirst({
-                        where: eq(organization.id, result[0].referenceId),
-                        columns: { name: true },
-                    });
-
-                    const emailContent = SubscriptionPlanChangedEmail({
-                        organizationName: orgRecord?.name || result[0].referenceId,
-                        previousPlanName: existing.plan,
-                        newPlanName: newPlan,
-                        ctaUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/billing`,
-                    });
-
-                    await resend.emails.send({
-                        from: process.env.EMAIL_FROM as string,
-                        to: ownerUser.email,
-                        subject: "Your Heyhire plan was updated",
-                        react: emailContent,
-                    });
-                }
-            }
-        } catch (e) {
-            log.warn("Failed to send subscription plan changed email", { eventId: ctx.event.id, error: String(e) });
-        }
-    }
-
-    // Revoke credits if subscription became inactive
-    if (shouldRevokeCredits(sub.status as SubscriptionStatus)) {
-        await revokeCreditsForSubscription(result[0], ctx.event);
-    }
-
-    trackServerEvent("stripe_webhook", "subscription_updated", result[0].referenceId, {
-        internal_subscription_id: result[0].id,
-        status: sub.status,
+    const ownerId = await getOrgOwnerId(referenceId);
+    trackServerEvent(ownerId || "stripe_webhook", "trial_will_end", referenceId, {
         stripe_subscription_id: sub.id,
+        trial_end: sub.trial_end,
+    });
+
+    try {
+        if (!ownerId) return;
+        const ownerUser = await db.query.user.findFirst({
+            where: eq(user.id, ownerId),
+            columns: { email: true },
+        });
+        if (!ownerUser?.email) return;
+
+        const trialEndDate = sub.trial_end ? new Date(sub.trial_end * 1000) : null;
+        const trialEndsAtLabel = trialEndDate ? trialEndDate.toLocaleDateString() : "soon";
+
+        const orgRecord = await db.query.organization.findFirst({
+            where: eq(organization.id, referenceId),
+            columns: { name: true },
+        });
+
+        const emailContent = TrialEndingSoonEmail({
+            organizationName: orgRecord?.name || referenceId,
+            trialEndsAtLabel,
+            ctaUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/billing`,
+        });
+
+        await resend.emails.send({
+            from: process.env.EMAIL_FROM as string,
+            to: ownerUser.email,
+            subject: "Your Heyhire trial is ending soon",
+            react: emailContent,
+        });
+
+        await markStripeEventProcessed({
+            event: ctx.event,
+            referenceId,
+            stripeCustomerId: sub.customer as string,
+            stripeSubscriptionId: sub.id,
+        });
+    } catch (e) {
+        log.warn("Failed to send trial_will_end email", { eventId: ctx.event.id, error: String(e) });
+    }
+}
+
+async function handleInvoiceUpcoming(ctx: WebhookContext) {
+    if (!isInvoiceEvent(ctx.event)) return;
+    const invoice = ctx.event.data.object;
+
+    const invoiceSubscriptionId = typeof (invoice as any).subscription === "string" ? (invoice as any).subscription : null;
+    if (!invoiceSubscriptionId) {
+        log.warn("invoice.upcoming missing subscription id", { eventId: ctx.event.id, invoiceId: invoice.id });
+        return;
+    }
+
+    const stripeSub = await ctx.stripeClient.subscriptions.retrieve(invoiceSubscriptionId);
+    const referenceId = requireReferenceIdFromMetadata(stripeSub.metadata);
+    if (!referenceId) {
+        log.warn("invoice.upcoming subscription missing referenceId", { eventId: ctx.event.id, invoiceId: invoice.id, stripeSubscriptionId: invoiceSubscriptionId });
+        return;
+    }
+
+    trackServerEvent("stripe_webhook", "invoice_upcoming", referenceId, {
+        stripe_invoice_id: invoice.id,
+        stripe_customer_id: invoice.customer as string,
+        amount_due: (invoice as any).amount_due,
+        next_payment_attempt: (invoice as any).next_payment_attempt,
     });
 }
 
-async function handleSubscriptionDeleted(ctx: WebhookContext) {
-    if (!isSubscriptionEvent(ctx.event)) return;
-    const sub = ctx.event.data.object;
-    const eventContext = { eventId: ctx.event.id, subscriptionId: sub.id };
+async function handleCustomerUpdated(ctx: WebhookContext) {
+    const customer = ctx.event.data.object as Stripe.Customer;
 
-    log.info("Processing subscription deletion", eventContext);
-
-    const result = await db
-        .update(subscriptionTable)
-        .set({ status: "canceled", cancelAtPeriodEnd: false })
-        .where(eq(subscriptionTable.stripeSubscriptionId, sub.id))
-        .returning();
-
-    if (result[0]) {
-        await revokeCreditsForSubscription(result[0], ctx.event);
-        log.info("Subscription canceled", { ...eventContext, internalId: result[0].id });
-
-        try {
-            const ownerId = await getOrgOwnerId(result[0].referenceId);
-            if (ownerId) {
-                const ownerUser = await db.query.user.findFirst({
-                    where: eq(user.id, ownerId),
-                    columns: { email: true },
-                });
-                if (ownerUser?.email) {
-                    const orgRecord = await db.query.organization.findFirst({
-                        where: eq(organization.id, result[0].referenceId),
-                        columns: { name: true },
-                    });
-                    const emailContent = SubscriptionCanceledEmail({
-                        organizationName: orgRecord?.name || result[0].referenceId,
-                        ctaUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/billing`,
-                    });
-                    await resend.emails.send({
-                        from: process.env.EMAIL_FROM as string,
-                        to: ownerUser.email,
-                        subject: "Your Heyhire subscription was canceled",
-                        react: emailContent,
-                    });
-                }
-            }
-        } catch (e) {
-            log.warn("Failed to send subscription canceled email", { eventId: ctx.event.id, error: String(e) });
-        }
-    }
+    trackServerEvent("stripe_webhook", "customer_updated", undefined, {
+        stripe_customer_id: customer.id,
+        email: customer.email,
+    });
 }
 
 async function handleInvoicePaymentSucceeded(ctx: WebhookContext) {
@@ -314,25 +245,37 @@ async function handleInvoicePaymentSucceeded(ctx: WebhookContext) {
     const eventContext = { eventId: ctx.event.id, invoiceId: invoice.id };
 
     // Idempotency check
-    if (await isEventProcessed(ctx.event.id)) {
+    if (await isStripeEventProcessed(ctx.event.id)) {
         log.info("Invoice event already processed", eventContext);
         return;
     }
 
     log.info("Processing successful payment", eventContext);
 
-    const result = await db
-        .update(subscriptionTable)
-        .set({ status: "active" })
-        .where(eq(subscriptionTable.stripeCustomerId, invoice.customer as string))
-        .returning();
-
-    if (!result[0]) {
-        log.warn("No subscription found for invoice", eventContext);
+    const invoiceSubscriptionId = typeof (invoice as any).subscription === "string" ? (invoice as any).subscription : null;
+    if (!invoiceSubscriptionId) {
+        log.warn("Invoice missing subscription id; cannot map to internal subscription", {
+            ...eventContext,
+            stripeCustomerId: invoice.customer as string,
+        });
         return;
     }
 
-    const subscriptionRecord = result[0];
+    const stripeSub = await ctx.stripeClient.subscriptions.retrieve(invoiceSubscriptionId);
+    const referenceId = requireReferenceIdFromMetadata(stripeSub.metadata);
+    if (!referenceId) {
+        log.warn("Invoice subscription missing referenceId metadata", { ...eventContext, stripeSubscriptionId: invoiceSubscriptionId });
+        return;
+    }
+
+    const subscriptionRecord = await db.query.subscription.findFirst({
+        where: eq(subscriptionTable.referenceId, referenceId),
+    });
+
+    if (!subscriptionRecord) {
+        log.warn("No internal subscription found for invoice payment_succeeded", { ...eventContext, referenceId });
+        return;
+    }
     const ownerId = await getOrgOwnerId(subscriptionRecord.referenceId);
 
     if (ownerId) {
@@ -353,35 +296,12 @@ async function handleInvoicePaymentSucceeded(ctx: WebhookContext) {
 
     log.info("Invoice processed", { ...eventContext, internalId: subscriptionRecord.id });
 
-    try {
-        const ownerUser = ownerId
-            ? await db.query.user.findFirst({
-                  where: eq(user.id, ownerId),
-                  columns: { email: true },
-              })
-            : null;
-
-        if (ownerUser?.email) {
-            const orgRecord = await db.query.organization.findFirst({
-                where: eq(organization.id, subscriptionRecord.referenceId),
-                columns: { name: true },
-            });
-
-            const emailContent = SubscriptionActivatedEmail({
-                organizationName: orgRecord?.name || subscriptionRecord.referenceId,
-                planName: subscriptionRecord.plan,
-                ctaUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/billing`,
-            });
-            await resend.emails.send({
-                from: process.env.EMAIL_FROM as string,
-                to: ownerUser.email,
-                subject: "Your Heyhire subscription is active",
-                react: emailContent,
-            });
-        }
-    } catch (e) {
-        log.warn("Failed to send subscription activated email", { eventId: ctx.event.id, error: String(e) });
-    }
+    await markStripeEventProcessed({
+        event: ctx.event,
+        referenceId,
+        stripeCustomerId: stripeSub.customer as string,
+        stripeSubscriptionId: stripeSub.id,
+    });
 }
 
 async function handleInvoicePaymentFailed(ctx: WebhookContext) {
@@ -389,20 +309,38 @@ async function handleInvoicePaymentFailed(ctx: WebhookContext) {
     const invoice = ctx.event.data.object;
     const eventContext = { eventId: ctx.event.id, invoiceId: invoice.id };
 
+    if (await isStripeEventProcessed(ctx.event.id)) {
+        log.info("Invoice payment_failed already processed", eventContext);
+        return;
+    }
+
     log.warn("Processing failed payment", eventContext);
 
-    const result = await db
-        .update(subscriptionTable)
-        .set({ status: "past_due" })
-        .where(eq(subscriptionTable.stripeCustomerId, invoice.customer as string))
-        .returning();
+    const invoiceSubscriptionId = typeof (invoice as any).subscription === "string" ? (invoice as any).subscription : null;
+    if (!invoiceSubscriptionId) {
+        log.warn("Invoice missing subscription id; cannot map to internal subscription", {
+            ...eventContext,
+            stripeCustomerId: invoice.customer as string,
+        });
+        return;
+    }
 
-    if (result[0]) {
-        await revokeCreditsForSubscription(result[0], ctx.event);
-        log.info("Subscription marked past_due", { ...eventContext, internalId: result[0].id });
+    const stripeSub = await ctx.stripeClient.subscriptions.retrieve(invoiceSubscriptionId);
+    const referenceId = requireReferenceIdFromMetadata(stripeSub.metadata);
+    if (!referenceId) {
+        log.warn("Invoice subscription missing referenceId metadata", { ...eventContext, stripeSubscriptionId: invoiceSubscriptionId });
+        return;
+    }
+
+    const subscriptionRecord = await db.query.subscription.findFirst({
+        where: eq(subscriptionTable.referenceId, referenceId),
+    });
+
+    if (subscriptionRecord) {
+        log.info("Subscription marked past_due", { ...eventContext, internalId: subscriptionRecord.id });
 
         try {
-            const ownerId = await getOrgOwnerId(result[0].referenceId);
+            const ownerId = await getOrgOwnerId(subscriptionRecord.referenceId);
             if (ownerId) {
                 const ownerUser = await db.query.user.findFirst({
                     where: eq(user.id, ownerId),
@@ -410,11 +348,11 @@ async function handleInvoicePaymentFailed(ctx: WebhookContext) {
                 });
                 if (ownerUser?.email) {
                     const orgRecord = await db.query.organization.findFirst({
-                        where: eq(organization.id, result[0].referenceId),
+                        where: eq(organization.id, subscriptionRecord.referenceId),
                         columns: { name: true },
                     });
                     const emailContent = PaymentFailedEmail({
-                        organizationName: orgRecord?.name || result[0].referenceId,
+                        organizationName: orgRecord?.name || subscriptionRecord.referenceId,
                         ctaUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/billing`,
                     });
                     await resend.emails.send({
@@ -429,6 +367,13 @@ async function handleInvoicePaymentFailed(ctx: WebhookContext) {
             log.warn("Failed to send payment failed email", { eventId: ctx.event.id, error: String(e) });
         }
     }
+
+    await markStripeEventProcessed({
+        event: ctx.event,
+        referenceId,
+        stripeCustomerId: stripeSub.customer as string,
+        stripeSubscriptionId: stripeSub.id,
+    });
 }
 
 async function handlePaymentRiskEvent(ctx: WebhookContext) {
@@ -447,59 +392,6 @@ async function handlePaymentRiskEvent(ctx: WebhookContext) {
         amount: obj?.amount,
         reason: obj?.reason,
     });
-
-    // Revoke trial for refund/dispute
-    await handleTrialRevocation(ctx, obj);
-}
-
-async function handleTrialRevocation(ctx: WebhookContext, obj: Record<string, unknown>) {
-    const chargeId = (obj?.charge as string) || (ctx.event.type === "charge.refunded" ? obj?.id as string : undefined);
-    if (!chargeId) return;
-
-    try {
-        const sessions = await ctx.stripeClient.checkout.sessions.list({
-            payment_intent: chargeId,
-            limit: 1,
-        });
-
-        const session = sessions?.data?.[0];
-        if (!session || session.mode !== "payment") return;
-
-        const referenceId = session.metadata?.referenceId || session.client_reference_id;
-        if (!referenceId) return;
-
-        const trialSub = await db.query.subscription.findFirst({
-            where: eq(subscriptionTable.stripeSubscriptionId, session.id),
-        });
-
-        if (!trialSub) return;
-
-        await db.transaction(async (tx) => {
-            // Cancel subscription
-            await tx
-                .update(subscriptionTable)
-                .set({ status: "canceled", cancelAtPeriodEnd: false, periodEnd: new Date() })
-                .where(eq(subscriptionTable.id, trialSub.id));
-
-            // Revoke credits
-            const ownerId = await getOrgOwnerId(referenceId);
-            if (ownerId) {
-                await setCreditsToZero(tx, referenceId, ownerId, trialSub.id, ctx.event, "Trial revoked due to " + ctx.event.type);
-            }
-        });
-
-        log.info("Trial revoked", { eventId: ctx.event.id, subscriptionId: trialSub.id });
-
-        const ownerId = await getOrgOwnerId(referenceId);
-        if (ownerId) {
-            trackServerEvent(ownerId, "trial_revoked", referenceId, {
-                internal_subscription_id: trialSub.id,
-                stripe_checkout_session_id: session.id,
-            });
-        }
-    } catch (error) {
-        log.error("Trial revocation failed", { eventId: ctx.event.id, error: String(error) });
-    }
 }
 
 /**
@@ -513,15 +405,7 @@ async function getOrgOwnerId(organizationId: string): Promise<string | null> {
         ),
     });
 
-    // Fallback to first member if no owner found (legacy data)
-    if (!owner) {
-        const firstMember = await db.query.member.findFirst({
-            where: eq(member.organizationId, organizationId),
-        });
-        return firstMember?.userId || null;
-    }
-
-    return owner.userId;
+    return owner?.userId || null;
 }
 
 /**
@@ -532,9 +416,10 @@ async function grantPlanCreditsWithTransaction(
     userId: string,
     plan: string,
     subscriptionId: string,
-    event: Stripe.Event
+    event: Stripe.Event,
+    creditsOverride?: number
 ) {
-    const creditsToGrant = getPlanCreditAllocation(plan, CREDIT_TYPES.CONTACT_LOOKUP);
+    const creditsToGrant = creditsOverride ?? getPlanCreditAllocation(plan, CREDIT_TYPES.CONTACT_LOOKUP);
     if (creditsToGrant <= 0) return;
 
     await db.transaction(async (tx) => {

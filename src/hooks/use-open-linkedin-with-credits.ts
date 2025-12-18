@@ -7,12 +7,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { creditsKeys } from "@/lib/credits";
 import { useRouter } from "next/navigation";
+import { usePlansModal } from "@/providers/plans-modal-provider";
 
 export function useOpenLinkedInWithCredits() {
   const [isLoading, setIsLoading] = useState(false);
   const queryClient = useQueryClient();
   const { data: activeOrg } = useActiveOrganization();
   const router = useRouter();
+  const { openPlansModal } = usePlansModal();
 
   const openLinkedIn = useCallback(
     async (params: { candidateId: string; linkedinUrl?: string | null }) => {
@@ -28,6 +30,10 @@ export function useOpenLinkedInWithCredits() {
         if (!result.success) {
           toast.error("Not enough credits", {
             description: result.error || "Please upgrade your plan",
+            action: {
+              label: "Upgrade",
+              onClick: () => openPlansModal(),
+            },
           });
           return;
         }
@@ -47,7 +53,7 @@ export function useOpenLinkedInWithCredits() {
         setIsLoading(false);
       }
     },
-    [activeOrg?.id, queryClient, router, toast]
+    [activeOrg?.id, openPlansModal, queryClient, router]
   );
 
   return { openLinkedIn, isLoading };

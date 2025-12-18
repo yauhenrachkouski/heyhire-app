@@ -107,5 +107,5 @@ export function shouldGrantCredits(status: SubscriptionStatus): boolean {
  * Determine if credits should be revoked for this status
  */
 export function shouldRevokeCredits(status: SubscriptionStatus): boolean {
-    return isInactive(status) || status === "past_due";
+    return isInactive(status);
 }

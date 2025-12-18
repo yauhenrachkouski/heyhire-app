@@ -4,6 +4,12 @@
 
 This document explains how subscriptions work in HeyHire, following the better-auth Stripe plugin patterns.
 
+## Plans
+
+- **pro**
+  - Price: **$69/month**
+  - Trial: **3 days**
+
 ## Important: Subscriptions are NOT Automatically Created
 
 **Subscriptions are NOT created automatically when an organization is created.**
@@ -15,7 +21,8 @@ This is by design, according to better-auth Stripe plugin documentation. The sub
 ### 1. User Sign-Up and Authentication
 - User signs in via Google OAuth or Magic Link
 - User session is created
-- Stripe customer is created automatically (via `createCustomerOnSignUp: true`)
+- No Stripe customer is created on sign-up
+- Stripe customers are created/attached during subscription checkout for the organization
 
 ### 2. Onboarding (Organization Creation)
 **File**: `src/app/onboarding/page.tsx`, `src/components/auth/onboarding-form.tsx`
@@ -31,9 +38,9 @@ This is by design, according to better-auth Stripe plugin documentation. The sub
 **File**: `src/app/paywall/page.tsx`, `src/components/subscribe/subscribe-cards.tsx`
 
 - User is redirected to `/paywall` page
-- User sees available plans (Starter, Pro, Enterprise)
+- User sees available plans (Pro)
 - Trial eligibility is checked via `hasUsedTrial()` action
-  - Trial is marked as "used" when any subscription reaches `trialing`, `active`, or `past_due` status
+  - In code, trial is treated as "used" once the organization has any subscription record in the database
   - Users can only use trial once per organization
 
 ### 4. Checkout Initiation
@@ -42,7 +49,7 @@ This is by design, according to better-auth Stripe plugin documentation. The sub
 When user clicks "Start Trial" or "Get Started":
 ```typescript
 await subscription.upgrade({
-  plan: "starter" | "pro",
+  plan: "pro",
   referenceId: activeOrganizationId, // Links subscription to organization
   successUrl: `${window.location.origin}/paywall/success`,
   cancelUrl: `${window.location.origin}/paywall`,
@@ -52,7 +59,7 @@ await subscription.upgrade({
 - `subscription.upgrade()` is called with the **organizationId as referenceId**
 - better-auth creates a Stripe Checkout Session
 - User is redirected to Stripe Checkout
-- For trial plans: 3-day trial with immediate $3 charge
+- For `pro`: 3-day trial (if the organization is eligible)
 
 ### 5. Stripe Checkout
 - User enters payment details on Stripe's hosted page
@@ -60,7 +67,9 @@ await subscription.upgrade({
 - On success, user is redirected to `successUrl`
 
 ### 6. Webhook Processing
-**File**: `src/lib/auth.ts` (onEvent handler)
+**Endpoint**: `POST /api/auth/stripe/webhook` (better-auth Stripe plugin)
+
+**File**: `src/lib/auth.ts` (stripe plugin `onEvent` handler)
 
 When Stripe sends webhooks:
 
@@ -93,7 +102,7 @@ const subscription = await db.query.subscription.findFirst({
 ```typescript
 {
   id: string
-  plan: string                    // "starter" | "pro"
+  plan: string                    // "pro"
   referenceId: string            // Organization ID (NOT user ID)
   stripeCustomerId: string       // Stripe customer ID
   stripeSubscriptionId: string   // Stripe subscription ID
@@ -114,14 +123,14 @@ const subscription = await db.query.subscription.findFirst({
 - `referenceId` = organizationId (not userId)
 - This allows organization-level subscriptions for team plans
 
-### Fallback for Legacy Subscriptions
-If a subscription isn't found by organizationId, the system falls back to checking by `stripeCustomerId` from the user record. This handles legacy user-level subscriptions.
+### Org-Only Billing (No User Ownership)
+- There is no personal/user subscription ownership in the app
+- Subscription state is always resolved using the active organization ID from the session
+- Billing actions (upgrade/cancel/restore/portal) are restricted to organization `owner` and `admin`
 
 ### Trial Management
-- Trial is 3 days for both Starter and Pro plans
-- Users pay $3 to start the trial
-- After trial ends, regular monthly billing begins
-- Trial is marked as "used" for an organization once any subscription reaches active/trialing status
+- Trial is **3 days** for the **Pro** plan
+- Trial is treated as "used" for an organization once a subscription record exists for that org
 - Users cannot start a new trial for the same organization
 
 ### Subscription Gates
@@ -135,7 +144,7 @@ Protected routes check subscription status:
 ## Server Actions
 
 ### `getUserSubscription()`
-Fetches subscription for the active organization, with fallback to user's Stripe customer.
+Fetches subscription for the active organization (by `subscription.referenceId = activeOrgId`).
 
 ### `requireActiveSubscription()`
 Gate that redirects users without active subscriptions to `/paywall`.
@@ -155,7 +164,6 @@ Per better-auth configuration (`authorizeReference` in `auth.ts`):
 ```env
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
-STRIPE_STARTER_PRICE_ID=price_...
 STRIPE_PRO_PRICE_ID=price_...
 ```
 
@@ -176,4 +184,5 @@ STRIPE_PRO_PRICE_ID=price_...
 - Check `hasUsedTrial()` logic and subscription status history
 - Verify Stripe checkout includes trial_period_days
 - Check webhook processed `customer.subscription.created` event
+
 

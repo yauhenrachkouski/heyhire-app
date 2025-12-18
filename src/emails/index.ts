@@ -14,6 +14,8 @@ export { SubscriptionCanceledEmail } from "./templates/subscription-canceled-ema
 export type { SubscriptionCanceledEmailProps } from "./templates/subscription-canceled-email";
 export { TrialStartedEmail } from "./templates/trial-started-email";
 export type { TrialStartedEmailProps } from "./templates/trial-started-email";
+export { TrialEndingSoonEmail } from "./templates/trial-ending-soon-email";
+export type { TrialEndingSoonEmailProps } from "./templates/trial-ending-soon-email";
 export { MemberRemovedEmail } from "./templates/member-removed-email";
 export type { MemberRemovedEmailProps } from "./templates/member-removed-email";
 export { SubscriptionPlanChangedEmail } from "./templates/subscription-plan-changed-email";

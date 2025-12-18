@@ -9,6 +9,7 @@ import { triggerSourcingWorkflow } from "@/actions/jobs";
 import type { ParsedQuery, SourcingCriteria } from "@/types/search";
 import { useSession, useActiveOrganization } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface SearchClientProps {
   viewMode?: "table" | "cards"; // Kept for compatibility but unused
@@ -27,6 +28,7 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
   const { data: session } = useSession();
   const { data: activeOrg } = useActiveOrganization();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   // Auto-trigger search when initial query is provided
   useEffect(() => {
@@ -82,6 +84,9 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
 
       const searchId = saveResult.data.id;
       console.log("[Search Client] Search saved with ID:", searchId);
+
+      // Ensure sidebar recent searches list updates immediately
+      queryClient.invalidateQueries({ queryKey: ["recentSearches", activeOrg.id] });
 
       if (source === "autorun") {
         posthog.capture('search_autorun_triggered', {
