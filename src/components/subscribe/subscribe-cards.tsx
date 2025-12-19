@@ -5,6 +5,7 @@ import { IconCheck, IconInfoCircle, IconLock } from "@tabler/icons-react";
 import { SubscribeFAQ } from "@/components/subscribe/subscribe-faq";
 import { SubscribeSupport } from "@/components/subscribe/subscribe-support";
 import { SubscribeCheckoutButton } from "@/components/subscribe/subscribe-checkout-button";
+import { PricingUnlockButton } from "@/components/subscribe/pricing-unlock-button";
 import {
   Tooltip,
   TooltipContent,
@@ -49,6 +50,7 @@ interface SubscribeCardsServerProps {
   isTrialEligible?: boolean;
   showSupportSections?: boolean;
   currentPlan?: PlanId | null;
+  isTrialing?: boolean;
 }
 
 interface SubscribeHeaderProps {
@@ -77,6 +79,7 @@ export function SubscribeCardsServer({
   isTrialEligible = true,
   showSupportSections = true,
   currentPlan,
+  isTrialing = false,
 }: SubscribeCardsServerProps) {
   void isRequired;
   void isTrialEligible;
@@ -91,8 +94,10 @@ export function SubscribeCardsServer({
           const periodLabel = plan.billingLabel;
 
           const isCurrent = !!currentPlan && currentPlan === plan.planId;
+          const isTrialUserForPro = isCurrent && isTrialing;
 
           const ctaText = (() => {
+            if (isTrialUserForPro) return "Unlock full Pro now";
             if (isCurrent) return "Current plan";
             return plan.ctaText;
           })();
@@ -109,7 +114,12 @@ export function SubscribeCardsServer({
               <CardHeader>
                 <CardTitle className="text-2xl">{plan.name}</CardTitle>
                 <CardDescription>{plan.description}</CardDescription>
-                {isCurrent && (
+                {isTrialUserForPro && (
+                  <div className="pt-2">
+                    <Badge variant="secondary">Trial · 100 reveals</Badge>
+                  </div>
+                )}
+                {!isTrialUserForPro && isCurrent && (
                   <div className="pt-2">
                     <Badge variant="secondary">Current plan</Badge>
                   </div>
@@ -166,8 +176,17 @@ export function SubscribeCardsServer({
                 </ul>
               </CardContent>
 
-              <CardFooter>
-                {isCurrent ? (
+              <CardFooter className="flex flex-col gap-2">
+                {isTrialUserForPro ? (
+                  <>
+                    <PricingUnlockButton className="w-full" variant="default">
+                      Unlock full Pro now
+                    </PricingUnlockButton>
+                    <p className="text-xs text-muted-foreground text-center">
+                      Charged today • Trial ends now
+                    </p>
+                  </>
+                ) : isCurrent ? (
                   <Button className="w-full" size="lg" variant="outline" disabled>
                     Current plan
                   </Button>

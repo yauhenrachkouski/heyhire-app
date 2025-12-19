@@ -9,6 +9,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { SubscribeCardsServer, SubscribeHeader } from "@/components/subscribe/subscribe-cards";
+import { useSubscription } from "@/hooks/use-subscription";
 import type { PlanId } from "@/types/plans";
 
 interface PlansModalProps {
@@ -21,12 +22,14 @@ interface PlansModalProps {
 
 export function PlansModal({ children, currentPlan, isTrialEligible, open, onOpenChange }: PlansModalProps) {
   const [internalOpen, setInternalOpen] = useState(false);
+  const { subscription } = useSubscription();
 
   const isControlled = open !== undefined && onOpenChange !== undefined;
   const isOpen = isControlled ? open : internalOpen;
   const setIsOpen = isControlled ? onOpenChange : setInternalOpen;
 
   const trialEligible = isTrialEligible ?? !currentPlan;
+  const isTrialing = subscription?.status === "trialing";
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -46,6 +49,7 @@ export function PlansModal({ children, currentPlan, isTrialEligible, open, onOpe
           isTrialEligible={trialEligible}
           showSupportSections
           currentPlan={currentPlan}
+          isTrialing={isTrialing}
         />
       </DialogContent>
     </Dialog>

@@ -5,9 +5,15 @@ import { CurrentSubscriptionRow } from "@/components/account/current-subscriptio
 
 interface BillingSectionProps {
   subscription: typeof subscriptionSchema.$inferSelect | null;
+  nextBillingLabel?: string | null;
+  nextBillingAmountLabel?: string | null;
 }
 
-export function BillingSection({ subscription: initialSubscription }: BillingSectionProps) {
-  return <CurrentSubscriptionRow subscription={initialSubscription} />;
+export function BillingSection({ subscription, nextBillingLabel, nextBillingAmountLabel }: BillingSectionProps) {
+  return <CurrentSubscriptionRow
+    subscription={subscription}
+    nextBillingLabel={nextBillingLabel}
+    nextBillingAmountLabel={nextBillingAmountLabel}
+  />;
 }
 

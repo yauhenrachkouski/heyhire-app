@@ -7,6 +7,9 @@ import { CancellationSection } from '@/components/account/cancellation-section'
 import { getUserSubscription } from '@/actions/stripe'
 import { redirect } from 'next/navigation'
 import { Icon } from '@/components/ui/icon'
+import { Button } from '@/components/ui/button'
+import { TrialBanner } from '@/components/account/trial-banner'
+import { getOrganizationMembership } from '@/actions/account'
 
 export default async function BillingPage() {
   // Fetch session data on the server
@@ -20,6 +23,18 @@ export default async function BillingPage() {
 
   // Fetch subscription
   const { subscription } = await getUserSubscription()
+  const activeOrgId = session.session?.activeOrganizationId ?? null
+
+  const membershipResult = activeOrgId
+    ? await getOrganizationMembership(activeOrgId)
+    : ({ success: false, error: 'No active organization' } as const)
+
+  let userRole: string | null = null
+  if (membershipResult.success && membershipResult.data) {
+    userRole = membershipResult.data.role?.toLowerCase() ?? null
+  }
+
+  const canManageBilling = userRole ? ["owner", "admin"].includes(userRole) : false
 
   const isTrialing = subscription?.status === 'trialing'
   const trialEndLabel = subscription?.trialEnd
@@ -43,38 +58,17 @@ export default async function BillingPage() {
     <>
       {/* Billing & Subscription */}
       {isTrialing && (
-        <div className="rounded-lg border p-4 sm:p-6">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-base font-semibold">
-              <Icon name="sparkles" className="h-4 w-4 text-muted-foreground" />
-              <span>Trial</span>
-            </div>
-            <div className="text-sm text-muted-foreground">
-              {trialEndLabel ? (
-                <>
-                  Your trial ends on {trialEndLabel}.{' '}
-                  {nextBillingLabel
-                    ? `Next billing will charge you${nextBillingAmountLabel ? ` ${nextBillingAmountLabel}` : ''} on ${nextBillingLabel}.`
-                    : `Next billing will charge you${nextBillingAmountLabel ? ` ${nextBillingAmountLabel}` : ''} when your trial ends.`}
-                </>
-              ) : (
-                <>
-                  Your trial is active.{' '}
-                  {nextBillingLabel
-                    ? `Next billing will charge you${nextBillingAmountLabel ? ` ${nextBillingAmountLabel}` : ''} on ${nextBillingLabel}.`
-                    : `Next billing will charge you${nextBillingAmountLabel ? ` ${nextBillingAmountLabel}` : ''} when your trial ends.`}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+        <TrialBanner
+          trialEndLabel={trialEndLabel}
+          nextBillingLabel={nextBillingLabel}
+          nextBillingAmountLabel={nextBillingAmountLabel}
+        />
       )}
 
       <BillingSection subscription={subscription} />
-      <PaymentMethodBlock />
+      {canManageBilling && <PaymentMethodBlock />}
       <InvoicesCard subscription={subscription} />
-      {subscription && <CancellationSection subscription={subscription} />}
+      {subscription && canManageBilling && <CancellationSection subscription={subscription} />}
     </>
   )
 }
-

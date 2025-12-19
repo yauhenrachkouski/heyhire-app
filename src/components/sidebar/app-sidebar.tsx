@@ -99,6 +99,7 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   activeOrganization?: Organization | null
   user?: User | null
   recentSearches?: RecentSearch[]
+  trialWarning?: { used: number; limit: number } | null
 }
 
 // Navigation data for Heyhire recruitment platform
@@ -155,7 +156,7 @@ function isPathActive(currentPathname: string, itemUrl: string): boolean {
   return currentPathname === itemUrl || currentPathname.startsWith(`${itemUrl}/`)
 }
 
-export function AppSidebar({ subscription, organizations, activeOrganization, user, recentSearches = [], ...props }: AppSidebarProps) {
+export function AppSidebar({ subscription, organizations, activeOrganization, user, recentSearches = [], trialWarning, ...props }: AppSidebarProps) {
   const pathname = usePathname()
   const [supportModalOpen, setSupportModalOpen] = React.useState(false)
 
@@ -360,7 +361,11 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
       </SidebarContent>
       <SidebarFooter>
         {activeOrganization && credits !== undefined && (
-          <CreditBalance credits={credits} currentPlan={subscription?.plan as PlanId | null | undefined} />
+          <CreditBalance 
+            credits={credits} 
+            currentPlan={subscription?.plan as PlanId | null | undefined}
+            trialWarning={trialWarning}
+          />
         )}
         <SidebarMenu>
           <SidebarMenuItem>

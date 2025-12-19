@@ -13,6 +13,7 @@ import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { getRecentSearches } from "@/actions/search"
 import { getOrganizationCredits } from "@/actions/credits"
+import { getTrialWarning } from "@/lib/trial-warnings"
 
 export default async function DashboardLayout({
   children,
@@ -55,9 +56,14 @@ export default async function DashboardLayout({
 
   // Fetch credits for active organization and create extended type
   let activeOrgWithCredits: (typeof activeOrganization & { credits?: number }) | null = activeOrganization;
+  let trialWarning: { used: number; limit: number } | null = null;
+  
   if (activeOrganization) {
     const credits = await getOrganizationCredits(activeOrganization.id);
     activeOrgWithCredits = { ...activeOrganization, credits } as typeof activeOrganization & { credits: number };
+
+    // Check trial usage for warnings
+    trialWarning = await getTrialWarning(subscription, activeOrganization.id);
   }
 
   return (
@@ -70,6 +76,7 @@ export default async function DashboardLayout({
             activeOrganization={activeOrgWithCredits}
             user={activeMember?.user ?? null}
             recentSearches={recentSearches ?? []}
+            trialWarning={trialWarning}
           />
           <SidebarInset>
             <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear bg-background border-b">

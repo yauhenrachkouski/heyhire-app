@@ -1,5 +1,3 @@
-"use client"
-
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -12,6 +10,7 @@ import { PLAN_LIMITS } from "@/types/plans"
 import { useActiveOrganization } from "@/lib/auth-client"
 import { useEffect } from "react"
 import { getCreditsUsageForPeriod } from "@/actions/credits"
+import { UnlockProNowButton } from "@/components/account/unlock-pro-now-button"
 
 interface PricingPlan {
   name: string;
@@ -38,9 +37,11 @@ const plans: PricingPlan[] = [
 
 interface CurrentSubscriptionRowProps {
   subscription: typeof subscriptionSchema.$inferSelect | null;
+  nextBillingLabel?: string | null;
+  nextBillingAmountLabel?: string | null;
 }
 
-export function CurrentSubscriptionRow({ subscription: initialSubscription }: CurrentSubscriptionRowProps) {
+export function CurrentSubscriptionRow({ subscription: initialSubscription, nextBillingLabel, nextBillingAmountLabel }: CurrentSubscriptionRowProps) {
   const [subscription, setSubscription] = useState(initialSubscription);
   const [isLoading, setIsLoading] = useState(false);
   const { data: activeOrg } = useActiveOrganization();
