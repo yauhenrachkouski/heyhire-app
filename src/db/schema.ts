@@ -79,6 +79,7 @@ export const organization = pgTable("organization", {
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   logo: text("logo"),
+  googleLink: text("google_link"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   metadata: text("metadata"),
   credits: integer("credits").default(0).notNull(),

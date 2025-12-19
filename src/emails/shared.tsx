@@ -30,6 +30,11 @@ export const emailStyles = {
     lineHeight: "22px",
     margin: "0 0 16px",
   } satisfies React.CSSProperties,
+  signatureText: {
+    fontSize: "14px",
+    lineHeight: "18px",
+    margin: 0,
+  } satisfies React.CSSProperties,
   button: {
     display: "inline-block",
     padding: "8px 18px",
@@ -67,12 +72,12 @@ export function EmailLogo({ appUrl }: EmailLogoProps) {
 export function EmailSignature() {
   return (
     <div style={emailStyles.footer}>
-      <Text style={{ ...emailStyles.text, margin: 0 }}>Yauhen Rachkouski</Text>
-      <Text style={{ ...emailStyles.text, margin: "6px 0 0" }}>Co-founder @ Heyhire</Text>
-      <Text style={{ ...emailStyles.text, margin: "6px 0 0" }}>360 NW 27th St, Miami, FL 33127</Text>
+      <Text style={emailStyles.signatureText}>Yauhen Rachkouski</Text>
+      <Text style={{ ...emailStyles.signatureText, marginTop: "6px" }}>Co-founder @ Heyhire</Text>
+      <Text style={{ ...emailStyles.signatureText, marginTop: "6px" }}>360 NW 27th St, Miami, FL 33127</Text>
       <div style={{ height: "10px", lineHeight: "10px" }} />
       <div style={{ width: "100%", borderTop: "1px solid #eaeaea", height: 0, lineHeight: 0 }} />
-      <div style={{ height: "10px", lineHeight: "10px" }} />
+      <div style={{ height: "20px", lineHeight: "20px" }} />
       <Text style={{ ...emailStyles.footerText, marginTop: 0 }}>
         You are receiving this email because you opted in via our site.
       </Text>

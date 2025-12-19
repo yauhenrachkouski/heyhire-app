@@ -144,6 +144,17 @@ export const auth = betterAuth({
       // Organization plugin
       organization({
          invitationExpiresIn: invitationExpiresInSeconds,
+         schema: {
+            organization: {
+               additionalFields: {
+                  googleLink: {
+                     type: "string",
+                     input: true,
+                     required: false,
+                  }
+               }
+            }
+         },
          async sendInvitationEmail(data) {
             const inviteLink = `${appUrl}/auth/accept-invitation/${data.id}`;
             const emailContent = InvitationEmail({

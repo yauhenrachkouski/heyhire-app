@@ -356,6 +356,70 @@ export async function getCustomerPortalSession() {
 }
 
 /**
+ * Immediately end the trial and start paid billing
+ */
+export async function startProBillingNow() {
+  try {
+    const { activeOrgId, userId } = await getSessionWithOrg();
+    await requireBillingAdmin(activeOrgId, userId);
+    const { subscription: orgSubscription } = await getUserSubscription();
+
+    if (!orgSubscription) {
+      return {
+        success: false,
+        error: "No subscription found",
+      };
+    }
+
+    if (orgSubscription.status !== "trialing") {
+      return {
+        success: false,
+        error: "Only trial subscriptions can be unlocked early",
+      };
+    }
+
+    if (!orgSubscription.stripeSubscriptionId) {
+      return {
+        success: false,
+        error: "Missing Stripe subscription",
+      };
+    }
+
+    const { stripeClient } = await import("@/lib/auth");
+
+    const updatedSubscription = await stripeClient.subscriptions.update(
+      orgSubscription.stripeSubscriptionId,
+      {
+        trial_end: "now",
+        billing_cycle_anchor: "now",
+        cancel_at_period_end: false,
+        proration_behavior: "always_invoice",
+      }
+    );
+
+    trackServerEvent(userId, "trial_unlocked_now", activeOrgId, {
+      stripe_subscription_id: orgSubscription.stripeSubscriptionId,
+    });
+
+    const nextBillingDate = updatedSubscription.current_period_end
+      ? new Date(updatedSubscription.current_period_end * 1000)
+      : null;
+
+    return {
+      success: true,
+      nextBillingDate,
+      error: null,
+    };
+  } catch (error) {
+    console.error("Error unlocking trial:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to unlock trial",
+    };
+  }
+}
+
+/**
  * Cancel organization subscription at period end
  */
 export async function cancelSubscription() {

@@ -26,6 +26,16 @@ const fetchCompanySuggestions = async (domain: string): Promise<string | null> =
   }
 }
 
+const validateFavicon = async (url: string): Promise<boolean> => {
+  try {
+    const response = await fetch(url, { method: 'HEAD' })
+    return response.ok
+  } catch (e) {
+    console.error('Failed to validate favicon:', e)
+    return false
+  }
+}
+
 export default async function OnboardingPage() {
   const session = await auth.api.getSession({
     headers: await headers()
@@ -46,10 +56,18 @@ export default async function OnboardingPage() {
   // Fetch initial organization name suggestion
   let initialOrganizationName = ''
   let initialLogo = ''
+  let googleLink = ''
+  let initialUserName = session.user?.name || ''
+  
   if (session.user?.email) {
     const emailDomain = session.user.email.split('@')[1]
     if (emailDomain) {
-      initialLogo = `https://www.google.com/s2/favicons?domain=${emailDomain}&sz=32`
+      const faviconUrl = `https://www.google.com/s2/favicons?domain=${emailDomain}&sz=256`
+      const isValid = await validateFavicon(faviconUrl)
+      if (isValid) {
+        initialLogo = faviconUrl
+        googleLink = emailDomain
+      }
       const suggestion = await fetchCompanySuggestions(emailDomain)
       if (suggestion) {
         initialOrganizationName = suggestion
@@ -66,18 +84,23 @@ export default async function OnboardingPage() {
         <a href="/" className="flex items-center gap-2 font-medium">
           <Image
             src={heyhireLogo}
-            alt="HeyHire"
+            alt="Heyhire"
             width={100}
             height={25}
           />
+         
         </a>
       </div>
       <div className="flex flex-1 items-center justify-center">
         <div className="w-full max-w-lg">
-          <OnboardingForm initialOrganizationName={initialOrganizationName} initialLogo={initialLogo} />
+          <OnboardingForm 
+            initialOrganizationName={initialOrganizationName} 
+            initialLogo={initialLogo} 
+            googleLink={googleLink}
+            initialUserName={initialUserName}
+          />
         </div>
       </div>
     </div>
   )
 }
-

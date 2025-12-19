@@ -28,11 +28,21 @@ const ORGANIZATION_SIZES = [
   { value: '200+', label: '200+ people' },
 ]
 
-export function OnboardingForm({ initialOrganizationName, initialLogo }: { initialOrganizationName: string; initialLogo?: string }) {
+export function OnboardingForm({ 
+  initialOrganizationName, 
+  initialLogo, 
+  googleLink,
+  initialUserName = ''
+}: { 
+  initialOrganizationName: string; 
+  initialLogo?: string; 
+  googleLink?: string;
+  initialUserName?: string;
+}) {
   const router = useRouter()
   const { data: session } = useSession()
   
-  const [userName, setUserName] = useState(session?.user?.name || '')
+  const [userName, setUserName] = useState(initialUserName)
   const [organizationName, setOrganizationName] = useState(initialOrganizationName || '')
   const [organizationSize, setOrganizationSize] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -42,7 +52,7 @@ export function OnboardingForm({ initialOrganizationName, initialLogo }: { initi
     e.preventDefault()
     setError('')
 
-    if (!userName) {
+    if (!userName.trim()) {
       setError('Please enter your name')
       return
     }
@@ -52,12 +62,14 @@ export function OnboardingForm({ initialOrganizationName, initialLogo }: { initi
     try {
       const orgName = organizationName.trim() || 'Default Organization'
       
-      console.log('[OnboardingForm] Submitting organization creation:', { orgName, size: organizationSize })
+      console.log('[OnboardingForm] Submitting organization creation:', { orgName, size: organizationSize, logo: initialLogo })
       
       // Use server-side organization creation
       const result = await createOrganizationWithSetup({
         name: orgName,
         size: organizationSize,
+        logo: initialLogo,
+        googleLink: googleLink,
       })
 
       console.log('[OnboardingForm] Organization creation result:', result)
@@ -120,7 +132,7 @@ export function OnboardingForm({ initialOrganizationName, initialLogo }: { initi
             </Alert>
           )}
 
-          {!session?.user?.name && (
+          {!initialUserName && (
             <div className="space-y-2">
               <Label htmlFor="userName">Full Name</Label>
               <Input

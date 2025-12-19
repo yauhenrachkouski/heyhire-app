@@ -316,9 +316,11 @@ export async function softDeleteAccount() {
 export async function createOrganizationWithSetup(data: {
   name: string
   size?: string
+  logo?: string
+  googleLink?: string
 }) {
   try {
-    console.log('[createOrganizationWithSetup] Starting organization creation:', { name: data.name, size: data.size })
+    console.log('[createOrganizationWithSetup] Starting organization creation:', { name: data.name, size: data.size, logo: data.logo, googleLink: data.googleLink })
     
     const session = await auth.api.getSession({
       headers: await headers()
@@ -361,6 +363,8 @@ export async function createOrganizationWithSetup(data: {
       body: {
         name: organizationName,
         slug: slug,
+        logo: data.logo,
+        googleLink: data.googleLink,
         metadata: data.size ? { size: data.size } : undefined
       }
     })
