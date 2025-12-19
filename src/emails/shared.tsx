@@ -26,23 +26,24 @@ export const emailStyles = {
     margin: "0 0 16px",
   } satisfies React.CSSProperties,
   text: {
-    fontSize: "14px",
-    lineHeight: "20px",
+    fontSize: "15px",
+    lineHeight: "22px",
     margin: "0 0 16px",
   } satisfies React.CSSProperties,
   button: {
     display: "inline-block",
-    padding: "12px 24px",
+    padding: "8px 18px",
     backgroundColor: "#000000",
     color: "#ffffff",
-    fontSize: "14px",
-    fontWeight: 600,
-    lineHeight: "16px",
+    fontSize: "13px",
+    fontWeight: 500,
+    lineHeight: "18px",
     textDecoration: "none",
     textAlign: "center",
     borderRadius: "5px",
     border: "1px solid #000000",
-    margin: "12px 0 20px",
+    margin: "10px 0 16px",
+    
   } satisfies React.CSSProperties,
   footer: {
     margin: "40px 0 0",
@@ -60,8 +61,7 @@ export type EmailLogoProps = {
 };
 
 export function EmailLogo({ appUrl }: EmailLogoProps) {
-  const resolvedAppUrl = appUrl || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  return <Img alt="Heyhire" src={`${resolvedAppUrl}/favicon.png`} style={emailStyles.logo} />;
+  return <Img alt="Heyhire" src="https://heyhire.ai/favicon.png" style={emailStyles.logo} />;
 }
 
 export function EmailSignature() {

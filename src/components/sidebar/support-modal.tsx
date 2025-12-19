@@ -38,7 +38,7 @@ export function SupportModal({ open, onOpenChange }: SupportModalProps) {
               </div>
               <div className="flex flex-col gap-1">
                 <div className="text-sm">
-                  Write our founder{" "}
+                  Write our co-founder{" "}
                   <Link
                     href="https://linkedin.com/in/yauhenrachkouski"
                     target="_blank"

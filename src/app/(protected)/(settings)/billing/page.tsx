@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { BillingSection } from '@/components/account/billing-section'
 import { PaymentMethodBlock } from '@/components/account/payment-method-block'
 import { InvoicesCard } from '@/components/account/invoices-card'
+import { CancellationSection } from '@/components/account/cancellation-section'
 import { getUserSubscription } from '@/actions/stripe'
 import { redirect } from 'next/navigation'
 import { Icon } from '@/components/ui/icon'
@@ -72,6 +73,7 @@ export default async function BillingPage() {
       <BillingSection subscription={subscription} />
       <PaymentMethodBlock />
       <InvoicesCard subscription={subscription} />
+      {subscription && <CancellationSection subscription={subscription} />}
     </>
   )
 }

@@ -14,6 +14,10 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "cdn.brandfetch.io",
       },
+      {
+        protocol: "https",
+        hostname: "www.google.com",
+      },
     ],
   },
   // Rewrites for PostHog ingestion endpoints

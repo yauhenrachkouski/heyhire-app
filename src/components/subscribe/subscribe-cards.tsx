@@ -85,11 +85,7 @@ export function SubscribeCardsServer({
 
   return (
     <div className="container mx-auto px-4">
-      <div
-        className={`grid grid-cols-1 gap-8 max-w-4xl mx-auto ${
-          visiblePlans.length === 1 ? "md:grid-cols-1" : "md:grid-cols-2"
-        }`}
-      >
+      <div className="grid grid-cols-1 gap-8 max-w-4xl mx-auto md:grid-cols-2">
         {visiblePlans.map((plan) => {
           const displayPrice = plan.price;
           const periodLabel = plan.billingLabel;
@@ -104,7 +100,7 @@ export function SubscribeCardsServer({
           return (
             <Card
               key={plan.planId}
-              className={`relative flex flex-col ${
+              className={`relative flex flex-col max-w-md w-full mx-auto ${
                 plan.popular ? "border-primary shadow-lg scale-105" : ""
               } overflow-visible`}
             >
@@ -188,6 +184,43 @@ export function SubscribeCardsServer({
             </Card>
           );
         })}
+
+        <Card className="relative flex flex-col border-dashed border-primary/40">
+          <CardHeader>
+            <Badge className="w-fit mb-2" variant="secondary">
+              Need more?
+            </Badge>
+            <CardTitle className="text-2xl">Custom volume plans</CardTitle>
+            <CardDescription>
+              Go beyond 1,000 reveals per month with a package built for your team.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="flex-1 flex flex-col justify-between">
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li className="flex items-start gap-2">
+                <IconCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                Flexible reveal blocks
+              </li>
+              <li className="flex items-start gap-2">
+                <IconCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                Priority support & onboarding
+              </li>
+              <li className="flex items-start gap-2">
+                <IconCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                Consolidated billing
+              </li>
+            </ul>
+          </CardContent>
+
+          <CardFooter>
+            <Button asChild className="w-full" size="lg">
+              <a href="https://cal.com/yauhenrachkouski" target="_blank" rel="noreferrer">
+                Book a call
+              </a>
+            </Button>
+          </CardFooter>
+        </Card>
       </div>
 
       {showSupportSections && (

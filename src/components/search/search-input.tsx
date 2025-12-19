@@ -893,20 +893,20 @@ export function SearchInput({
       {/* Gradient Tongue Element */}
       <div className="absolute -top-8 left-0 z-0 w-full h-9">
         <div 
-          className="w-full h-full bg-gradient-to-r from-black to-black animate-gradient-x flex items-center"
+          className="w-full h-full bg-linear-to-r from-black to-black animate-gradient-x flex items-center"
           style={{ 
             clipPath: "inset(0 calc(100% - 220px) 0 0 round 16px 16px 0 0)" 
           }}
         >
            <div className="px-4 flex items-center justify-center w-[220px]">
-             <span className="text-sm font-medium text-white relative z-10">Who are you sourcing for?</span>
+             <span className="text-sm font-medium text-white relative z-10 select-none">Who are you sourcing for?</span>
            </div>
         </div>
       </div>
 
       {/* Gradient Border Wrapper */}
-      <div className="relative rounded-2xl rounded-tl-none p-[2px] bg-gradient-to-r from-black to-black animate-gradient-x z-10">
-        <div className="relative bg-background rounded-xl overflow-hidden flex flex-col">
+      <div className="relative rounded-lg rounded-tl-none p-[2px] bg-linear-to-r from-black to-black animate-gradient-x z-10">
+        <div className="relative bg-background rounded-md overflow-hidden flex flex-col">
           {/* Input Area Wrapper */}
           <div className="flex flex-col">
             <textarea

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Icon } from '@/components/ui/icon'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import Image from 'next/image'
 import {
   Select,
   SelectContent,
@@ -27,12 +28,12 @@ const ORGANIZATION_SIZES = [
   { value: '200+', label: '200+ people' },
 ]
 
-export function OnboardingForm() {
+export function OnboardingForm({ initialOrganizationName, initialLogo }: { initialOrganizationName: string; initialLogo?: string }) {
   const router = useRouter()
   const { data: session } = useSession()
   
   const [userName, setUserName] = useState(session?.user?.name || '')
-  const [organizationName, setOrganizationName] = useState('')
+  const [organizationName, setOrganizationName] = useState(initialOrganizationName || '')
   const [organizationSize, setOrganizationSize] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -49,7 +50,7 @@ export function OnboardingForm() {
     setIsLoading(true)
 
     try {
-      const orgName = organizationName.trim() || 'Default Workspace'
+      const orgName = organizationName.trim() || 'Default Organization'
       
       console.log('[OnboardingForm] Submitting organization creation:', { orgName, size: organizationSize })
       
@@ -82,22 +83,24 @@ export function OnboardingForm() {
   const handleSkip = async () => {
     setIsLoading(true)
     try {
-      console.log('[OnboardingForm] Skipping - creating default organization')
-      const result = await createDefaultOrganization()
+      console.log('[OnboardingForm] Creating organization with predefined name:', initialOrganizationName)
+      const result = await createOrganizationWithSetup({
+        name: initialOrganizationName,
+      })
       
-      console.log('[OnboardingForm] Default organization result:', result)
+      console.log('[OnboardingForm] Organization creation result:', result)
       
       if (result.error) {
         throw new Error(result.error)
       }
 
-      toast.success('Default workspace created!')
-      console.log('[OnboardingForm] Redirecting to /subscribe')
+      toast.success('Organization created!')
+      console.log('[OnboardingForm] Redirecting to /paywall')
       router.refresh()
       router.push('/paywall')
     } catch (err: any) {
-      console.error('[OnboardingForm] Failed to create default organization:', err)
-      toast.error('Failed to create workspace. Please try again.')
+      console.error('[OnboardingForm] Failed to create organization:', err)
+      toast.error('Failed to create organization. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -107,7 +110,7 @@ export function OnboardingForm() {
     <Card className="w-full shadow-none ring-0">
       <CardHeader className="text-left">
         <CardTitle className="text-2xl font-bold">Welcome to Heyhire! 👋</CardTitle>
-        <CardDescription className="text-muted-foreground text-base">Let's set up your workspace to get started</CardDescription>
+        <CardDescription className="text-muted-foreground text-base">Let's set up your organization to get started</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -117,33 +120,46 @@ export function OnboardingForm() {
             </Alert>
           )}
 
-          <div className="space-y-2">
-            <Label htmlFor="userName">Your Name</Label>
-            <Input
-              id="userName"
-              name="userName"
-              type="text"
-              placeholder="John Doe"
-              value={userName}
-              onChange={(e) => setUserName(e.target.value)}
-              disabled={isLoading}
-            />
-          </div>
+          {!session?.user?.name && (
+            <div className="space-y-2">
+              <Label htmlFor="userName">Full Name</Label>
+              <Input
+                id="userName"
+                name="userName"
+                type="text"
+                placeholder="John Doe"
+                value={userName}
+                onChange={(e) => setUserName(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="organizationName">
               Organization Name <span className="text-muted-foreground text-sm">(optional)</span>
             </Label>
-            <Input
-              id="organizationName"
-              name="organizationName"
-              type="text"
-              placeholder="Default Workspace"
-              value={organizationName}
-              onChange={(e) => setOrganizationName(e.target.value)}
-              disabled={isLoading}
-            />
-           
+            <div className="relative">
+              <Input
+                id="organizationName"
+                name="organizationName"
+                type="text"
+                placeholder="Default Organization"
+                value={organizationName}
+                onChange={(e) => setOrganizationName(e.target.value)}
+                disabled={isLoading}
+                className="pl-8"
+              />
+              {initialLogo && (
+                <Image
+                  src={initialLogo}
+                  alt="Organization logo"
+                  width={20}
+                  height={20}
+                  className="absolute left-2 top-1/2 transform -translate-y-1/2 rounded"
+                />
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -176,7 +192,7 @@ export function OnboardingForm() {
             {isLoading ? (
               <>
                 <Icon name="loader" size={16} className="animate-spin" />
-                Creating workspace...
+                Creating organization...
               </>
             ) : (
               <>

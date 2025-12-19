@@ -144,7 +144,9 @@ export function OrganizationSwitcher({
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <div className="truncate font-semibold">{displayOrg.name}</div>
-                <div className="truncate">{getPlanDisplay()}</div>
+                <span className="mt-0.5 truncate rounded-full text-xs font-medium text-muted-foreground">
+                  {getPlanDisplay()}
+                </span>
               </div>
               <Icon name="selector" className="ml-auto" />
             </SidebarMenuButton>

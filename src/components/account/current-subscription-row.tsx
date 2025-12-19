@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
-import { cancelSubscription, resumeSubscription, getCustomerPortalSession } from "@/actions/stripe"
 import { toast } from "sonner"
 import { subscription as subscriptionSchema } from "@/db/schema"
 import type { PlanId } from "@/types/plans"
@@ -48,6 +47,10 @@ export function CurrentSubscriptionRow({ subscription: initialSubscription }: Cu
   const [periodUsed, setPeriodUsed] = useState<number | null>(null);
   const [periodUsageError, setPeriodUsageError] = useState<string | null>(null);
 
+  useEffect(() => {
+    setSubscription(initialSubscription);
+  }, [initialSubscription]);
+
   const getStatusBadge = () => {
     if (!subscription) {
       return <Badge variant="secondary">No Subscription</Badge>;
@@ -68,72 +71,6 @@ export function CurrentSubscriptionRow({ subscription: initialSubscription }: Cu
         return <Badge variant="destructive">Canceled</Badge>;
       default:
         return <Badge variant="secondary">{subscription.status}</Badge>;
-    }
-  };
-
-  const handleCancel = async () => {
-    setIsLoading(true);
-    try {
-      const result = await cancelSubscription();
-      if (result.success) {
-        toast.success("Subscription Canceled", {
-          description: result.message,
-        });
-        setSubscription((prev) => (prev ? { ...prev, cancelAtPeriodEnd: true } : null));
-      } else {
-        toast.error("Failed to Cancel", {
-          description: result.error || "Only organization owners/admins can manage billing",
-        });
-      }
-    } catch (error) {
-      toast.error("Error", {
-        description: "An unexpected error occurred",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleResume = async () => {
-    setIsLoading(true);
-    try {
-      const result = await resumeSubscription();
-      if (result.success) {
-        toast.success("Subscription Resumed", {
-          description: result.message,
-        });
-        setSubscription((prev) => (prev ? { ...prev, cancelAtPeriodEnd: false } : null));
-      } else {
-        toast.error("Failed to Resume", {
-          description: result.error || "Only organization owners/admins can manage billing",
-        });
-      }
-    } catch (error) {
-      toast.error("Error", {
-        description: "An unexpected error occurred",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleManageBilling = async () => {
-    setIsLoading(true);
-    try {
-      const result = await getCustomerPortalSession();
-      if (result.url) {
-        window.location.href = result.url;
-      } else {
-        toast.error("Failed to Open Portal", {
-          description: result.error || "Only organization owners/admins can manage billing",
-        });
-        setIsLoading(false);
-      }
-    } catch (error) {
-      toast.error("Error", {
-        description: "An unexpected error occurred",
-      });
-      setIsLoading(false);
     }
   };
 
@@ -196,30 +133,6 @@ export function CurrentSubscriptionRow({ subscription: initialSubscription }: Cu
             Manage your organization's billing and subscription settings
           </div>
         </div>
-
-        <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
-          <Button disabled={isLoading} onClick={handleManageBilling}>
-            Manage Billing
-          </Button>
-
-          {subscription?.cancelAtPeriodEnd ? (
-            <Button
-              onClick={handleResume}
-              disabled={isLoading}
-              variant="default"
-            >
-              Resume Subscription
-            </Button>
-          ) : (
-            <Button
-              onClick={handleCancel}
-              disabled={isLoading}
-              variant="outline"
-            >
-              Cancel Subscription
-            </Button>
-          )}
-        </div>
       </div>
 
       <div className="mt-6 space-y-6">
@@ -248,7 +161,7 @@ export function CurrentSubscriptionRow({ subscription: initialSubscription }: Cu
           </div>
 
             {allocation && periodLabel && (
-              <div className="space-y-2">
+              <div className="rounded-lg border p-4 space-y-2">
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-sm font-medium">Usage</div>
                   <div className="text-xs text-muted-foreground">{periodLabel}</div>
@@ -267,16 +180,11 @@ export function CurrentSubscriptionRow({ subscription: initialSubscription }: Cu
 
             <div className="space-y-3">
               <div className="text-base font-semibold">Billing Information</div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {subscription.periodEnd && (
-                  <div className="rounded-lg border p-4">
-                    <p className="text-sm text-muted-foreground mb-1">
-                      {subscription.cancelAtPeriodEnd ? "Cancels on" : "Next billing date"}
-                    </p>
-                    <p className="font-medium">{formatDate(subscription.periodEnd)}</p>
-                  </div>
-                )}
-              </div>
+              {subscription.periodEnd && (
+                <p className="text-sm">
+                  {subscription.cancelAtPeriodEnd ? "Cancels on" : "Next billing date"}: <span className="font-medium">{formatDate(subscription.periodEnd)}</span>
+                </p>
+              )}
             </div>
 
             {subscription.cancelAtPeriodEnd && (

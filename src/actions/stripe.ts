@@ -10,6 +10,7 @@ import { getSessionWithOrg } from "@/lib/auth-helpers";
 import { trackServerEvent } from "@/lib/posthog/track";
 import { Resend } from "resend";
 import { SubscriptionCanceledEmail, SubscriptionActivatedEmail } from "@/emails";
+import { formatDate } from "@/lib/format";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -51,6 +52,15 @@ export async function getCustomerPortalPaymentMethodSession() {
     const portalSession = await stripeClient.billingPortal.sessions.create({
       customer: orgSubscription.stripeCustomerId,
       return_url: `${baseUrl}/billing`,
+      flow_data: {
+        type: "payment_method_update",
+        after_completion: {
+          type: "redirect",
+          redirect: {
+            return_url: `${baseUrl}/billing`,
+          },
+        },
+      },
     });
 
     trackServerEvent(userId, "billing_portal_payment_method_session_created", activeOrgId, {
@@ -375,7 +385,10 @@ export async function cancelSubscription() {
       stripe_subscription_id: orgSubscription.stripeSubscriptionId,
     })
 
-    const endDate = new Date((canceledSubscription as any).current_period_end * 1000);
+    const cancelAt = (canceledSubscription as any).cancel_at;
+    const formattedCancelDate = cancelAt
+      ? formatDate(cancelAt * 1000, { month: "long", day: "numeric", year: "2-digit" })
+      : "Unknown date";
 
     try {
       const orgRecord = await db.query.organization.findFirst({
@@ -396,7 +409,7 @@ export async function cancelSubscription() {
         await resend.emails.send({
           from: process.env.EMAIL_FROM as string,
           to: userRecord.email,
-          subject: `Subscription will cancel on ${endDate.toLocaleDateString()}`,
+          subject: `Subscription will cancel on ${formattedCancelDate}`,
           react: emailContent,
         });
       }
@@ -406,7 +419,7 @@ export async function cancelSubscription() {
 
     return {
       success: true,
-      message: `Your subscription will be canceled at the end of your billing period on ${endDate.toLocaleDateString()}`,
+      message: `Your subscription will be canceled at the end of your billing period on ${formattedCancelDate}`,
       error: null,
     };
   } catch (error) {
@@ -496,3 +509,94 @@ export async function resumeSubscription() {
   }
 }
 
+/**
+ * Set a payment method as the default for the customer
+ */
+export async function setDefaultPaymentMethod(paymentMethodId: string) {
+  try {
+    const { activeOrgId, userId } = await getSessionWithOrg();
+    await requireBillingAdmin(activeOrgId, userId);
+    const { subscription: orgSubscription } = await getUserSubscription();
+
+    if (!orgSubscription?.stripeCustomerId) {
+      return {
+        success: false,
+        error: "No Stripe customer found for this organization",
+      };
+    }
+
+    const { stripeClient } = await import("@/lib/auth");
+
+    // Update the customer's default payment method
+    await stripeClient.customers.update(orgSubscription.stripeCustomerId, {
+      invoice_settings: {
+        default_payment_method: paymentMethodId,
+      },
+    });
+
+    trackServerEvent(userId, "payment_method_set_default", activeOrgId, {
+      stripe_customer_id: orgSubscription.stripeCustomerId,
+      payment_method_id: paymentMethodId,
+    });
+
+    return {
+      success: true,
+      error: null,
+    };
+  } catch (error) {
+    console.error("Error setting default payment method:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to set default payment method",
+    };
+  }
+}
+
+/**
+ * Remove a payment method from the customer
+ */
+export async function removePaymentMethod(paymentMethodId: string) {
+  try {
+    const { activeOrgId, userId } = await getSessionWithOrg();
+    await requireBillingAdmin(activeOrgId, userId);
+    const { subscription: orgSubscription } = await getUserSubscription();
+
+    if (!orgSubscription?.stripeCustomerId) {
+      return {
+        success: false,
+        error: "No Stripe customer found for this organization",
+      };
+    }
+
+    const { stripeClient } = await import("@/lib/auth");
+
+    // Get the current default payment method
+    const customer = await stripeClient.customers.retrieve(orgSubscription.stripeCustomerId);
+    const currentDefaultId = customer.deleted
+      ? null
+      : ((customer.invoice_settings?.default_payment_method as string | null | undefined) ?? null);
+
+    // Detach the payment method from the customer
+    await stripeClient.paymentMethods.detach(paymentMethodId);
+
+    // If this was the default payment method, we might need to handle this
+    // Stripe will automatically handle setting a new default if available
+
+    trackServerEvent(userId, "payment_method_removed", activeOrgId, {
+      stripe_customer_id: orgSubscription.stripeCustomerId,
+      payment_method_id: paymentMethodId,
+      was_default: currentDefaultId === paymentMethodId,
+    });
+
+    return {
+      success: true,
+      error: null,
+    };
+  } catch (error) {
+    console.error("Error removing payment method:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to remove payment method",
+    };
+  }
+}

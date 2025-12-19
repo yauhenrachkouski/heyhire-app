@@ -43,15 +43,14 @@ export function SearchSearches({ organizationId }: SearchSearchesProps) {
         const response = await searchSearchesByTitle(organizationId, query);
         if (response.success && response.data) {
           setResults(response.data);
-          setIsOpen(response.data.length > 0);
         } else {
           setResults([]);
-          setIsOpen(false);
         }
+        setIsOpen(true);
       } catch (error) {
         console.error("Error searching:", error);
         setResults([]);
-        setIsOpen(false);
+        setIsOpen(true);
       } finally {
         setIsLoading(false);
       }
@@ -105,7 +104,7 @@ export function SearchSearches({ organizationId }: SearchSearchesProps) {
           placeholder="Search..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => results.length > 0 && setIsOpen(true)}
+          onFocus={() => query.trim() && setIsOpen(true)}
           onKeyDown={handleKeyDown}
           className="h-8 pl-8 pr-8 text-sm"
         />
@@ -119,31 +118,30 @@ export function SearchSearches({ organizationId }: SearchSearchesProps) {
       </div>
 
       {/* Dropdown Results */}
-      {isOpen && results.length > 0 && (
+      {isOpen && query.trim() && (
         <div className="absolute left-2 right-2 top-full z-50 mt-1 max-h-[300px] overflow-auto rounded-md border bg-popover p-1 shadow-md">
-          {results.map((result) => (
-            <button
-              key={result.id}
-              onClick={() => handleSelect(result.id)}
-              className={cn(
-                "w-full rounded-sm px-2 py-1.5 text-left text-sm",
-                "hover:bg-accent hover:text-accent-foreground",
-                "focus:bg-accent focus:text-accent-foreground focus:outline-none"
-              )}
-            >
-              <div className="truncate font-medium">{result.name}</div>
-              <div className="truncate text-xs text-muted-foreground">
-                {result.query}
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* No results message */}
-      {isOpen && query.trim() && results.length === 0 && !isLoading && (
-        <div className="absolute left-2 right-2 top-full z-50 mt-1 rounded-md border bg-popover p-3 text-center text-sm text-muted-foreground shadow-md">
-          No searches found
+          {results.length > 0 ? (
+            results.map((result) => (
+              <button
+                key={result.id}
+                onClick={() => handleSelect(result.id)}
+                className={cn(
+                  "w-full rounded-sm px-2 py-1.5 text-left text-sm",
+                  "hover:bg-accent hover:text-accent-foreground",
+                  "focus:bg-accent focus:text-accent-foreground focus:outline-none"
+                )}
+              >
+                <div className="truncate font-medium">{result.name}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {result.query}
+                </div>
+              </button>
+            ))
+          ) : (
+            <div className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-muted-foreground">
+              Nothing found
+            </div>
+          )}
         </div>
       )}
     </div>
