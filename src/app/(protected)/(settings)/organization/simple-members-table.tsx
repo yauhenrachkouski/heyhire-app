@@ -31,6 +31,8 @@ export function SimpleMembersTable({ members, organizationId, currentUserId }: S
   const router = useRouter()
   const [showInviteDialog, setShowInviteDialog] = React.useState(false)
   const [actioningId, setActioningId] = React.useState<string | null>(null)
+
+  const currentMember = members.find(m => m.userId === currentUserId)
   
   const handleCancelInvitation = async (invitationId: string) => {
     setActioningId(invitationId)
@@ -214,8 +216,21 @@ export function SimpleMembersTable({ members, organizationId, currentUserId }: S
                             variant="ghost"
                             size="sm"
                             onClick={() => handleRemoveMember(member.id, memberEmail)}
-                            disabled={actioningId === member.id || isCurrentUser}
-                            title={isCurrentUser ? "You cannot remove yourself" : "Remove member"}
+                            disabled={
+                              actioningId === member.id ||
+                              isCurrentUser ||
+                              (member.role.toLowerCase() === 'admin' && currentMember?.role?.toLowerCase() !== 'admin' && currentMember?.role?.toLowerCase() !== 'owner') ||
+                              (member.role.toLowerCase() === 'owner' && currentMember?.role?.toLowerCase() !== 'owner')
+                            }
+                            title={
+                              isCurrentUser
+                                ? "You cannot remove yourself"
+                                : (member.role.toLowerCase() === 'admin' && currentMember?.role?.toLowerCase() !== 'admin' && currentMember?.role?.toLowerCase() !== 'owner')
+                                ? "Only admins and owners can remove admins"
+                                : (member.role.toLowerCase() === 'owner' && currentMember?.role?.toLowerCase() !== 'owner')
+                                ? "Only owners can remove owners"
+                                : "Remove member"
+                            }
                           >
                             {actioningId === member.id ? (
                               <Icon name="loader" className="h-4 w-4 animate-spin" />

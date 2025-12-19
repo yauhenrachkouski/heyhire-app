@@ -120,14 +120,6 @@ export function LoginForm({ initialError }: { initialError?: string }) {
   return (
     <Card className="w-full shadow-none ring-0">
       <CardHeader className="text-left space-y-6">
-        <a href="/" className="flex items-center gap-2 font-medium">
-          <Image
-            src={heyhireLogo}
-            alt="HeyHire"
-            width={100}
-            height={25}
-          />
-        </a>
         <div className="space-y-2">
           <CardTitle className="text-2xl font-bold">Welcome to HeyHire</CardTitle>
           <CardDescription className="text-muted-foreground text-base">Start your journey to finding the perfect candidates</CardDescription>   
