@@ -9,7 +9,7 @@ import {
   Preview,
   Text,
 } from "@react-email/components";
-import { EmailLogo, emailStyles } from "../shared";
+import { EmailLogo, EmailSignature, emailStyles } from "../shared";
 
 export type MemberRemovedEmailProps = {
   removedUserNameOrEmail: string;
@@ -46,8 +46,11 @@ export function MemberRemovedEmail({
           <Button href={url} style={emailStyles.button}>
             Sign in
           </Button>
+          <EmailSignature />
         </Container>
       </Body>
     </Html>
   );
 }
+
+export default MemberRemovedEmail;

@@ -9,7 +9,7 @@ import {
   Preview,
   Text,
 } from "@react-email/components";
-import { EmailLogo, emailStyles } from "../shared";
+import { EmailLogo, EmailSignature, emailStyles } from "../shared";
 
 export type MagicLinkEmailProps = {
   url: string;
@@ -32,8 +32,11 @@ export function MagicLinkEmail({ url }: MagicLinkEmailProps) {
           <Text style={emailStyles.text}>
             If you didn&apos;t request this email, you can safely ignore it.
           </Text>
+          <EmailSignature />
         </Container>
       </Body>
     </Html>
   );
 }
+
+export default MagicLinkEmail;

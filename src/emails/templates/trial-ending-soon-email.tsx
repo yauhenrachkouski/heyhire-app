@@ -9,7 +9,7 @@ import {
   Preview,
   Text,
 } from "@react-email/components";
-import { EmailLogo, emailStyles } from "../shared";
+import { EmailLogo, EmailSignature, emailStyles } from "../shared";
 
 export type TrialEndingSoonEmailProps = {
   organizationName: string;
@@ -38,8 +38,11 @@ export function TrialEndingSoonEmail({ organizationName, trialEndsAtLabel, ctaUr
           <Button href={url} style={emailStyles.button}>
             Manage billing
           </Button>
+          <EmailSignature />
         </Container>
       </Body>
     </Html>
   );
 }
+
+export default TrialEndingSoonEmail;

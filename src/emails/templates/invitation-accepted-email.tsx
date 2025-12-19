@@ -9,7 +9,7 @@ import {
   Preview,
   Text,
 } from "@react-email/components";
-import { EmailLogo, emailStyles } from "../shared";
+import { EmailLogo, EmailSignature, emailStyles } from "../shared";
 
 export type InvitationAcceptedEmailProps = {
   inviterNameOrEmail: string;
@@ -43,8 +43,11 @@ export function InvitationAcceptedEmail({
           <Button href={url} style={emailStyles.button}>
             View team
           </Button>
+          <EmailSignature />
         </Container>
       </Body>
     </Html>
   );
 }
+
+export default InvitationAcceptedEmail;

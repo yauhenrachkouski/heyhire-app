@@ -9,7 +9,7 @@ import {
   Preview,
   Text,
 } from "@react-email/components";
-import { EmailLogo, emailStyles } from "../shared";
+import { EmailLogo, EmailSignature, emailStyles } from "../shared";
 
 export type InvitationEmailProps = {
   inviterNameOrEmail: string;
@@ -44,8 +44,11 @@ export function InvitationEmail({
           <Text style={emailStyles.text}>
             If you didn&apos;t expect this invitation, you can safely ignore this email.
           </Text>
+          <EmailSignature />
         </Container>
       </Body>
     </Html>
   );
 }
+
+export default InvitationEmail;

@@ -58,3 +58,7 @@ Basic usage of better-auth auth, sign in, sign up, sign out, user profile, etc:
 https://raw.githubusercontent.com/better-auth/better-auth/refs/heads/main/docs/content/docs/basic-usage.mdx
 https://raw.githubusercontent.com/better-auth/better-auth/refs/heads/main/docs/content/docs/integrations/next.mdx
 
+
+UI rules
+Always use sahdcn components with default style untill I will not  give you another styling instruction.
+Never add mr-2 to button component when icon exist inside button

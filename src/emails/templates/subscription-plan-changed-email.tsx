@@ -9,7 +9,7 @@ import {
   Preview,
   Text,
 } from "@react-email/components";
-import { EmailLogo, emailStyles } from "../shared";
+import { EmailLogo, EmailSignature, emailStyles } from "../shared";
 
 export type SubscriptionPlanChangedEmailProps = {
   organizationName: string;
@@ -47,8 +47,11 @@ export function SubscriptionPlanChangedEmail({
           <Button href={url} style={emailStyles.button}>
             Manage billing
           </Button>
+          <EmailSignature />
         </Container>
       </Body>
     </Html>
   );
 }
+
+export default SubscriptionPlanChangedEmail;

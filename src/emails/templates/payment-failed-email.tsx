@@ -9,7 +9,7 @@ import {
   Preview,
   Text,
 } from "@react-email/components";
-import { EmailLogo, emailStyles } from "../shared";
+import { EmailLogo, EmailSignature, emailStyles } from "../shared";
 
 export type PaymentFailedEmailProps = {
   organizationName: string;
@@ -35,8 +35,11 @@ export function PaymentFailedEmail({ organizationName, ctaUrl }: PaymentFailedEm
           <Button href={url} style={emailStyles.button}>
             Update payment method
           </Button>
+          <EmailSignature />
         </Container>
       </Body>
     </Html>
   );
 }
+
+export default PaymentFailedEmail;

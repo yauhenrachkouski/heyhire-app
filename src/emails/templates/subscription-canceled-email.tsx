@@ -9,7 +9,7 @@ import {
   Preview,
   Text,
 } from "@react-email/components";
-import { EmailLogo, emailStyles } from "../shared";
+import { EmailLogo, EmailSignature, emailStyles } from "../shared";
 
 export type SubscriptionCanceledEmailProps = {
   organizationName: string;
@@ -34,8 +34,11 @@ export function SubscriptionCanceledEmail({ organizationName, ctaUrl }: Subscrip
           <Button href={url} style={emailStyles.button}>
             Review billing
           </Button>
+          <EmailSignature />
         </Container>
       </Body>
     </Html>
   );
 }
+
+export default SubscriptionCanceledEmail;

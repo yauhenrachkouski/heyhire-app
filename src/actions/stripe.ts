@@ -28,6 +28,145 @@ async function requireBillingAdmin(activeOrgId: string, userId: string) {
   }
 }
 
+export async function getCustomerPortalPaymentMethodSession() {
+  try {
+    const { activeOrgId, userId } = await getSessionWithOrg();
+    await requireBillingAdmin(activeOrgId, userId);
+    const { subscription: orgSubscription } = await getUserSubscription();
+
+    if (!orgSubscription?.stripeCustomerId) {
+      return {
+        url: null,
+        error: "No Stripe customer found for this organization",
+      };
+    }
+
+    const { stripeClient } = await import("@/lib/auth");
+
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+      "http://localhost:3000";
+
+    const portalSession = await stripeClient.billingPortal.sessions.create({
+      customer: orgSubscription.stripeCustomerId,
+      return_url: `${baseUrl}/billing`,
+    });
+
+    trackServerEvent(userId, "billing_portal_payment_method_session_created", activeOrgId, {
+      stripe_customer_id: orgSubscription.stripeCustomerId,
+    })
+
+    return {
+      url: portalSession.url,
+      error: null,
+    };
+  } catch (error) {
+    console.error("Error creating payment method portal session:", error);
+    return {
+      url: null,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to create billing portal session",
+    };
+  }
+}
+
+export async function getCustomerInvoices(params?: { limit?: number }) {
+  try {
+    const { activeOrgId, userId } = await getSessionWithOrg();
+    await requireBillingAdmin(activeOrgId, userId);
+
+    const { subscription: orgSubscription } = await getUserSubscription();
+
+    if (!orgSubscription?.stripeCustomerId) {
+      return {
+        invoices: [],
+        error: "No Stripe customer found for this organization",
+      };
+    }
+
+    const { stripeClient } = await import("@/lib/auth");
+
+    const invoices = await stripeClient.invoices.list({
+      customer: orgSubscription.stripeCustomerId,
+      limit: params?.limit ?? 10,
+    });
+
+    return {
+      invoices: invoices.data.map((invoice) => ({
+        id: invoice.id,
+        number: invoice.number,
+        created: invoice.created,
+        status: (invoice.status ?? null) as string | null,
+        currency: invoice.currency,
+        total: invoice.total,
+        hostedInvoiceUrl: invoice.hosted_invoice_url ?? null,
+        invoicePdf: invoice.invoice_pdf ?? null,
+      })),
+      error: null,
+    };
+  } catch (error) {
+    console.error("Error listing invoices:", error);
+    return {
+      invoices: [],
+      error:
+        error instanceof Error ? error.message : "Failed to list invoices",
+    };
+  }
+}
+
+export async function getCustomerPaymentMethods(params?: { limit?: number }) {
+  try {
+    const { activeOrgId, userId } = await getSessionWithOrg();
+    await requireBillingAdmin(activeOrgId, userId);
+
+    const { subscription: orgSubscription } = await getUserSubscription();
+
+    if (!orgSubscription?.stripeCustomerId) {
+      return {
+        paymentMethods: [],
+        defaultPaymentMethodId: null,
+        error: "No Stripe customer found for this organization",
+      };
+    }
+
+    const { stripeClient } = await import("@/lib/auth");
+
+    const customer = await stripeClient.customers.retrieve(orgSubscription.stripeCustomerId);
+    const defaultPaymentMethodId = customer.deleted
+      ? null
+      : ((customer.invoice_settings?.default_payment_method as string | null | undefined) ?? null);
+
+    const paymentMethods = await stripeClient.paymentMethods.list({
+      customer: orgSubscription.stripeCustomerId,
+      type: "card",
+      limit: params?.limit ?? 10,
+    });
+
+    return {
+      paymentMethods: paymentMethods.data.map((pm) => ({
+        id: pm.id,
+        type: pm.type,
+        brand: pm.card?.brand ?? null,
+        last4: pm.card?.last4 ?? null,
+        expMonth: pm.card?.exp_month ?? null,
+        expYear: pm.card?.exp_year ?? null,
+      })),
+      defaultPaymentMethodId,
+      error: null,
+    };
+  } catch (error) {
+    console.error("Error listing payment methods:", error);
+    return {
+      paymentMethods: [],
+      defaultPaymentMethodId: null,
+      error: error instanceof Error ? error.message : "Failed to list payment methods",
+    };
+  }
+}
+
 /**
  * Get the active organization's subscription
  */

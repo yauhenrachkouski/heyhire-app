@@ -51,6 +51,41 @@ export async function getOrganizationCredits(organizationId: string): Promise<nu
   return org?.credits ?? 0;
 }
 
+export async function getCreditsUsageForPeriod(params: {
+  organizationId: string;
+  startDate: Date;
+  endDate: Date;
+  creditType?: CreditType;
+}): Promise<{ used: number; error: string | null }> {
+  try {
+    const { organizationId, startDate, endDate, creditType } = params;
+
+    const whereConditions = [
+      eq(creditTransactions.organizationId, organizationId),
+      gte(creditTransactions.createdAt, startDate),
+      lte(creditTransactions.createdAt, endDate),
+      eq(creditTransactions.type, "consumption"),
+    ];
+
+    if (creditType) {
+      whereConditions.push(eq(creditTransactions.creditType, creditType));
+    }
+
+    const result = await db
+      .select({ used: sql<number>`COALESCE(SUM(ABS(${creditTransactions.amount})), 0)` })
+      .from(creditTransactions)
+      .where(and(...whereConditions));
+
+    return { used: Number(result[0]?.used ?? 0), error: null };
+  } catch (error) {
+    console.error("[Credits] Error calculating period usage:", error);
+    return {
+      used: 0,
+      error: error instanceof Error ? error.message : "Failed to calculate usage",
+    };
+  }
+}
+
 /**
  * Get credit balance (total or by type)
  * Note: Currently we track total credits. Type-specific tracking can be added

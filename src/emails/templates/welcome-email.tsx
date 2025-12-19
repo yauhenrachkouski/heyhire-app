@@ -9,7 +9,7 @@ import {
   Preview,
   Text,
 } from "@react-email/components";
-import { EmailLogo, emailStyles } from "../shared";
+import { EmailLogo, EmailSignature, emailStyles } from "../shared";
 
 export type WelcomeEmailProps = {
   userNameOrEmail: string;
@@ -36,8 +36,11 @@ export function WelcomeEmail({ userNameOrEmail, organizationName, ctaUrl }: Welc
           <Button href={url} style={emailStyles.button}>
             Continue
           </Button>
+          <EmailSignature />
         </Container>
       </Body>
     </Html>
   );
 }
+
+export default WelcomeEmail;

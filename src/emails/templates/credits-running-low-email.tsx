@@ -9,7 +9,7 @@ import {
   Preview,
   Text,
 } from "@react-email/components";
-import { EmailLogo, emailStyles } from "../shared";
+import { EmailLogo, EmailSignature, emailStyles } from "../shared";
 
 export type CreditsRunningLowEmailProps = {
   organizationName: string;
@@ -42,8 +42,11 @@ export function CreditsRunningLowEmail({
           <Button href={url} style={emailStyles.button}>
             Review billing
           </Button>
+          <EmailSignature />
         </Container>
       </Body>
     </Html>
   );
 }
+
+export default CreditsRunningLowEmail;

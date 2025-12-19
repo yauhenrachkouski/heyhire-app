@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Body, Container, Head, Heading, Html, Preview, Text } from "@react-email/components";
-import { EmailLogo, emailStyles } from "../shared";
+import { EmailLogo, EmailSignature, emailStyles } from "../shared";
 
 export type AccountDeletedEmailProps = {
   userNameOrEmail: string;
@@ -10,7 +10,7 @@ export function AccountDeletedEmail({ userNameOrEmail }: AccountDeletedEmailProp
   return (
     <Html>
       <Head />
-      <Preview>Your Heyhire account was deleted</Preview>
+      <Preview>Account deleted</Preview>
       <Body style={emailStyles.body}>
         <Container style={emailStyles.container}>
           <EmailLogo />
@@ -20,8 +20,11 @@ export function AccountDeletedEmail({ userNameOrEmail }: AccountDeletedEmailProp
             This confirms that your Heyhire account was deleted. If you did not request this change, please contact
             support.
           </Text>
+          <EmailSignature />
         </Container>
       </Body>
     </Html>
   );
 }
+
+export default AccountDeletedEmail;
