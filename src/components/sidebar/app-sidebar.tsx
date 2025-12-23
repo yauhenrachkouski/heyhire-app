@@ -1,10 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { useQuery } from "@tanstack/react-query"
 import { OrganizationSwitcher } from "@/components/sidebar/organization-switcher"
 import { RecentSearches } from "@/components/sidebar/recent-searches"
-import { SearchSearches } from "@/components/sidebar/search-searches"
 import {
   Sidebar,
   SidebarContent,
@@ -37,10 +35,6 @@ import { Icon, IconName } from "@/components/ui/icon"
 import { NavUser } from "@/components/sidebar/nav-user"
 import { SupportModal } from "@/components/sidebar/support-modal"
 import { CreditBalance } from "@/components/sidebar/credit-balance"
-import { getOrganizationCredits } from "@/actions/credits"
-import { getRecentSearches } from "@/actions/search"
-import { creditsKeys } from "@/lib/credits"
-import type { PlanId } from "@/types/plans"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import type { subscription } from "@/db/schema"
@@ -99,7 +93,6 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   activeOrganization?: Organization | null
   user?: User | null
   recentSearches?: RecentSearch[]
-  trialWarning?: { used: number; limit: number } | null
 }
 
 // Navigation data for Heyhire recruitment platform
@@ -156,36 +149,9 @@ function isPathActive(currentPathname: string, itemUrl: string): boolean {
   return currentPathname === itemUrl || currentPathname.startsWith(`${itemUrl}/`)
 }
 
-export function AppSidebar({ subscription, organizations, activeOrganization, user, recentSearches = [], trialWarning, ...props }: AppSidebarProps) {
+export function AppSidebar({ subscription, organizations, activeOrganization, user, recentSearches = [], ...props }: AppSidebarProps) {
   const pathname = usePathname()
   const [supportModalOpen, setSupportModalOpen] = React.useState(false)
-
-  const organizationId = activeOrganization?.id
-  const { data: credits } = useQuery({
-    queryKey: organizationId ? creditsKeys.organization(organizationId) : creditsKeys.all,
-    queryFn: () => getOrganizationCredits(organizationId!),
-    enabled: !!organizationId,
-    initialData: activeOrganization?.credits,
-  })
-
-  const { data: recentSearchesData } = useQuery({
-    queryKey: organizationId ? ["recentSearches", organizationId] : ["recentSearches"],
-    queryFn: async () => {
-      if (!organizationId) return []
-
-      const res = await getRecentSearches(organizationId, 10)
-      if (!res.success || !res.data) return []
-
-      return res.data.map((s) => ({
-        id: s.id,
-        name: s.name,
-        query: s.query,
-        createdAt: s.createdAt,
-      }))
-    },
-    enabled: !!organizationId,
-    initialData: recentSearches,
-  })
 
   // Generate dynamic navigation data with recent job
 
@@ -198,9 +164,6 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
           organizations={organizations}
           activeOrganization={activeOrganization}
         />
-        {activeOrganization && (
-          <SearchSearches organizationId={activeOrganization.id} />
-        )}
       </SidebarHeader>
       <SidebarContent>
         {/* We create a SidebarGroup for each parent. */}
@@ -209,42 +172,117 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
           <SidebarGroup key={data.navMain[0].title || 'group-0'}>
             {data.navMain[0].title && <SidebarGroupLabel>{data.navMain[0].title}</SidebarGroupLabel>}
             <SidebarGroupContent>
-              {data.navMain[0].items.map((navItem) => {
-                const active = !navItem.disabled && isPathActive(pathname, navItem.url)
-                const isNewTalentSearch = navItem.title === "New Talent Search"
-                
-                return (
-                  <SidebarMenu key={navItem.title}>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton
-                        asChild
-                        tooltip={navItem.title}
-                        isActive={active}
-                        className={
-                          "h-9 !bg-black !text-white shadow-md transition-all active:scale-95 hover:!bg-black/90 data-[active=true]:!bg-black data-[active=true]:!text-white" +
-                          (isNewTalentSearch ? " hh-new-talent-search-border !rounded-lg" : "")
-                        }
-                      >
-                        <Link href={navItem.url} aria-current={active ? "page" : undefined} prefetch>
-                          <Icon name="plus" />
-                          <span className="group-data-[collapsible=icon]:sr-only">{navItem.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  </SidebarMenu>
-                )
-              })}
+              <SidebarMenu>
+                {data.navMain[0].items.map((navItem) => {
+                  const active = !navItem.disabled && isPathActive(pathname, navItem.url)
+                  const hasSubItems = navItem.items && navItem.items.length > 0
+                  
+                  return (
+                    <Collapsible key={navItem.title} asChild defaultOpen={hasSubItems}>
+                      <SidebarMenuItem>
+                        <SidebarMenuButton 
+                          asChild={!navItem.disabled}
+                          isActive={active}
+                          disabled={navItem.disabled}
+                          tooltip={navItem.title}
+                          className={navItem.disabled ? "opacity-50 cursor-not-allowed" : ""}
+                        >
+                          {navItem.disabled ? (
+                            <>
+                              {navItem.icon && <Icon name={navItem.icon} />}
+                              <span>{navItem.title}</span>
+                            </>
+                          ) : (
+                            <Link href={navItem.url} aria-current={active ? "page" : undefined} prefetch>
+                              {navItem.icon && <Icon name={navItem.icon} />}
+                              <span>{navItem.title}</span>
+                            </Link>
+                          )}
+                        </SidebarMenuButton>
+                        
+                        {/* Render collapsible sub-items */}
+                        {hasSubItems && (
+                          <>
+                            <CollapsibleTrigger asChild>
+                              <SidebarMenuAction className="data-[state=open]:rotate-90">
+                                <Icon name="chevron-right" />
+                                <span className="sr-only">Toggle {navItem.title}</span>
+                              </SidebarMenuAction>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <SidebarMenuSub>
+                                {navItem.items?.map((subItem) => {
+                                  const subActive = !subItem.disabled && isPathActive(pathname, subItem.url)
+                                  const isAllJobs = subItem.title === "All Jobs"
+                                  return (
+                                    <SidebarMenuSubItem key={subItem.title}>
+                                      {subItem.fullTitle ? (
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <SidebarMenuSubButton 
+                                              asChild={!subItem.disabled}
+                                              isActive={subActive}
+                                              className={(subItem.disabled ? "opacity-50 cursor-not-allowed" : "") + (isAllJobs ? " text-muted-foreground" : "")}
+                                            >
+                                              {subItem.disabled ? (
+                                                <>
+                                                  {subItem.icon && <Icon name={subItem.icon} />}
+                                                  <span>{subItem.title}</span>
+                                                </>
+                                              ) : (
+                                                <Link href={subItem.url} aria-current={subActive ? "page" : undefined} prefetch className={isAllJobs ? "text-muted-foreground" : undefined}>
+                                                  {subItem.icon && <Icon name={subItem.icon} /> }
+                                                  <span>{subItem.title}</span>
+                                                </Link>
+                                              )}
+                                            </SidebarMenuSubButton>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="right">
+                                            <p>{subItem.fullTitle}</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      ) : (
+                                        <SidebarMenuSubButton 
+                                          asChild={!subItem.disabled}
+                                          isActive={subActive}
+                                          className={(subItem.disabled ? "opacity-50 cursor-not-allowed" : "") + (isAllJobs ? " text-muted-foreground" : "")}
+                                        >
+                                          {subItem.disabled ? (
+                                            <>
+                                              {subItem.icon && <Icon name={subItem.icon} />}
+                                              <span>{subItem.title}</span>
+                                            </>
+                                          ) : (
+                                            <Link href={subItem.url} aria-current={subActive ? "page" : undefined} prefetch className={isAllJobs ? "text-muted-foreground" : undefined}>
+                                              {subItem.icon && <Icon name={subItem.icon} /> }
+                                              <span>{subItem.title}</span>
+                                            </Link>
+                                          )}
+                                        </SidebarMenuSubButton>
+                                      )}
+                                    </SidebarMenuSubItem>
+                                  )
+                                })}
+                              </SidebarMenuSub>
+                            </CollapsibleContent>
+                          </>
+                        )}
+                      </SidebarMenuItem>
+                    </Collapsible>
+                  )
+                })}
+              </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}
         
         {/* Recent Searches Section */}
-        {recentSearchesData && recentSearchesData.length > 0 && (
+        {recentSearches && recentSearches.length > 0 && (
           <SidebarGroup>
             <SidebarGroupLabel className="flex-shrink-0">Recent</SidebarGroupLabel>
             <SidebarGroupContent className="overflow-auto">
               <SidebarMenu>
-                <RecentSearches searches={recentSearchesData} currentPath={pathname} />
+                <RecentSearches searches={recentSearches} currentPath={pathname} />
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -360,12 +398,8 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
         ))}
       </SidebarContent>
       <SidebarFooter>
-        {activeOrganization && credits !== undefined && (
-          <CreditBalance 
-            credits={credits} 
-            currentPlan={subscription?.plan as PlanId | null | undefined}
-            trialWarning={trialWarning}
-          />
+        {activeOrganization && activeOrganization.credits !== undefined && (
+          <CreditBalance credits={activeOrganization.credits} currentPlan={subscription?.plan as "starter" | "pro" | "enterprise" | null | undefined} />
         )}
         <SidebarMenu>
           <SidebarMenuItem>
