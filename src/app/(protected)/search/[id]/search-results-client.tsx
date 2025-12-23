@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { useSearchRealtime } from "@/hooks/use-search-realtime";
 import posthog from 'posthog-js';
 import { useActiveOrganization } from "@/lib/auth-client";
+import { useIsReadOnly } from "@/hooks/use-is-read-only";
 
 interface SearchResultsClientProps {
   search: {
@@ -33,6 +34,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
   const queryClient = useQueryClient();
 
   const { data: activeOrg } = useActiveOrganization();
+  const isReadOnly = useIsReadOnly();
 
   const [currentParsedQuery, setCurrentParsedQuery] = useState<ParsedQuery>(search.params);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -228,6 +230,13 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
   };
 
   const handleSaveName = async () => {
+    if (isReadOnly) {
+      if (titleRef.current) {
+        titleRef.current.innerText = search.name;
+      }
+      setIsEditingName(false);
+      return;
+    }
     const newName = titleRef.current?.innerText.trim() || search.name;
     const prevName = searchName;
 
@@ -298,7 +307,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
             <h1 
               ref={titleRef}
               className="text-3xl font-bold max-w-[calc(100%-40px)] truncate"
-              contentEditable={isEditingName}
+              contentEditable={isEditingName && !isReadOnly}
               suppressContentEditableWarning={true} // Suppress React warning for contentEditable
               onBlur={handleSaveName}
               onKeyDown={(e) => {
@@ -317,14 +326,16 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
             >
               {searchName}
             </h1>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsEditingName(true)}
-              className="opacity-0 group-hover:opacity-100 transition-opacity" // Show on hover
-            >
-              <IconPencil className="h-4 w-4" />
-            </Button>
+            {!isReadOnly && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsEditingName(true)}
+                className="opacity-0 group-hover:opacity-100 transition-opacity" // Show on hover
+              >
+                <IconPencil className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
         

@@ -11,6 +11,7 @@ import { search } from "@/db/schema";
 import { eq, desc, ilike, and } from "drizzle-orm";
 import { generateId } from "@/lib/id";
 import { auth } from "@/lib/auth";
+import { assertNotReadOnlyForOrganization, getSignedInUser, requireOrganizationReadAccess, requireSearchReadAccess } from "@/lib/request-access";
 
 const MAX_SEARCH_NAME_LENGTH = 50;
 
@@ -65,6 +66,9 @@ export async function updateSearchName(
   newName: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const searchRow = await requireSearchReadAccess(searchId);
+    await assertNotReadOnlyForOrganization(searchRow.organizationId);
+
     const trimmed = newName.trim();
     if (!trimmed) {
       return { success: false, error: "Search name cannot be empty" };
@@ -98,6 +102,17 @@ export async function saveSearch(
   organizationId: string
 ): Promise<{ success: boolean; data?: { id: string }; error?: string }> {
   try {
+    const signedIn = await getSignedInUser();
+    if (!signedIn) {
+      return { success: false, error: "Not authenticated" };
+    }
+    if (signedIn.id !== userId) {
+      return { success: false, error: "Not authorized" };
+    }
+
+    await requireOrganizationReadAccess(organizationId);
+    await assertNotReadOnlyForOrganization(organizationId);
+
     console.log("[Search] Saving search for user:", userId, "org:", organizationId);
     
     const name = generateSearchName(parsedQuery);
@@ -147,6 +162,8 @@ export async function getRecentSearches(
   error?: string;
 }> {
   try {
+    await requireOrganizationReadAccess(organizationId);
+
     console.log("[Search] Fetching recent searches for org:", organizationId);
     
     const searches = await db
@@ -198,6 +215,8 @@ export async function searchSearchesByTitle(
   error?: string;
 }> {
   try {
+    await requireOrganizationReadAccess(organizationId);
+
     if (!query.trim()) {
       return { success: true, data: [] };
     }
@@ -257,6 +276,8 @@ export async function getSearchById(
 }> {
   try {
     console.log("[Search] Fetching search by ID:", id);
+
+    await requireSearchReadAccess(id);
     
     const result = await db
       .select()

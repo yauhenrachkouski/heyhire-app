@@ -4,6 +4,8 @@ import { OrganizationForm } from '@/components/account/organization-form'
 import { redirect } from 'next/navigation'
 import { SimpleMembersTable } from './simple-members-table'
 import { getMembers } from '@/actions/members'
+import { SharingSection } from '@/components/organization/sharing-section'
+import { listShareLinks } from '@/actions/share-links'
 
 export default async function OrganizationSettingsPage() {
   // Fetch session data on the server
@@ -24,6 +26,8 @@ export default async function OrganizationSettingsPage() {
   const organizations = await auth.api.listOrganizations({
     headers: await headers()
   })
+
+  const activeMember = await auth.api.getActiveMember({ headers: await headers() })
 
   // Use active organization or first organization as fallback
   const currentOrganization = activeOrganization || (organizations && organizations.length > 0 ? organizations[0] : null)
@@ -56,6 +60,11 @@ export default async function OrganizationSettingsPage() {
     offset: 0,
   })
 
+  const shareLinks =
+    currentOrganization && (activeMember?.role === 'owner' || activeMember?.role === 'admin')
+      ? await listShareLinks(currentOrganization.id)
+      : []
+
   return (
     <>
       {/* Organization Name Section */}
@@ -70,6 +79,10 @@ export default async function OrganizationSettingsPage() {
           organizationId={currentOrganization.id}
           currentUserId={session.user.id}
         />
+      )}
+
+      {currentOrganization && (activeMember?.role === 'owner' || activeMember?.role === 'admin') && (
+        <SharingSection organizationId={currentOrganization.id} initialLinks={shareLinks} />
       )}
     </>
   )

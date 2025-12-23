@@ -16,6 +16,7 @@ import { InvitationAcceptedEmail, InvitationEmail, MagicLinkEmail, WelcomeEmail 
 import { generateId } from "@/lib/id";
 import { CREDIT_TYPES, getTrialCreditAllocation } from "@/lib/credits";
 import { PLAN_LIMITS } from "@/types/plans";
+import { ensureDemoOrganization } from "@/lib/demo";
 
 
 
@@ -482,6 +483,35 @@ export const auth = betterAuth({
                   }
                }
                return { data: user };
+            },
+            after: async (createdUser) => {
+               try {
+                  await db.transaction(async (tx) => {
+                     const demoOrgId = await ensureDemoOrganization(tx);
+
+                     const existingMember = await tx.query.member.findFirst({
+                        where: and(
+                           eq(schema.member.userId, createdUser.id),
+                           eq(schema.member.organizationId, demoOrgId)
+                        ),
+                        columns: { id: true },
+                     });
+
+                     if (existingMember?.id) return;
+
+                     await tx.insert(schema.member).values({
+                        id: generateId(),
+                        organizationId: demoOrgId,
+                        userId: createdUser.id,
+                        role: "viewer",
+                     });
+                  });
+               } catch (error) {
+                  log.error("Failed to add demo org membership on signup", {
+                     userId: createdUser.id,
+                     error,
+                  });
+               }
             },
          },
       },

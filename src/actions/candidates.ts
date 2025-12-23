@@ -6,6 +6,7 @@ import { eq, and, gte, lte, or, isNull, inArray, count, desc, asc } from "drizzl
 import { generateId } from "@/lib/id";
 import type { CandidateProfile, ParsedQuery } from "@/types/search";
 import { scoreCandidateMatch, prepareCandidateForScoring } from "@/actions/scoring";
+import { assertNotReadOnlyForOrganization, requireSearchReadAccess } from "@/lib/request-access";
 
 /**
  * Transform API CandidateProfile to database candidate format
@@ -382,6 +383,8 @@ export async function getCandidatesForSearch(
 ) {
   console.log("[Candidates] Fetching candidates for search:", searchId, "with options:", options);
 
+  await requireSearchReadAccess(searchId);
+
   const conditions = [eq(searchCandidates.searchId, searchId)];
   
   if (options?.scoreMin !== undefined || options?.scoreMax !== undefined) {
@@ -516,6 +519,15 @@ export async function updateMatchScore(
 ) {
   console.log("[Candidates] Updating match score:", searchCandidateId, score);
 
+  const sc = await db.query.searchCandidates.findFirst({
+    where: eq(searchCandidates.id, searchCandidateId),
+    with: { search: { columns: { organizationId: true } } },
+    columns: { id: true },
+  });
+  if (sc?.search?.organizationId) {
+    await assertNotReadOnlyForOrganization(sc.search.organizationId);
+  }
+
   await db
     .update(searchCandidates)
     .set({
@@ -538,6 +550,15 @@ export async function updateCandidateStatus(
 ) {
   console.log("[Candidates] Updating candidate status:", searchCandidateId, status);
 
+  const sc = await db.query.searchCandidates.findFirst({
+    where: eq(searchCandidates.id, searchCandidateId),
+    with: { search: { columns: { organizationId: true } } },
+    columns: { id: true },
+  });
+  if (sc?.search?.organizationId) {
+    await assertNotReadOnlyForOrganization(sc.search.organizationId);
+  }
+
   await db
     .update(searchCandidates)
     .set({
@@ -554,6 +575,7 @@ export async function updateCandidateStatus(
  * Get candidate progress stats for a search
  */
 export async function getSearchProgress(searchId: string) {
+  await requireSearchReadAccess(searchId);
   const results = await db.query.searchCandidates.findMany({
     where: eq(searchCandidates.searchId, searchId),
   });

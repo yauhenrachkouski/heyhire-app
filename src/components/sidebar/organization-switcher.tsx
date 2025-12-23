@@ -8,6 +8,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu"
@@ -21,6 +22,7 @@ import { useRouter } from "next/navigation"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { subscription } from "@/db/schema"
 import Image from "next/image"
+import { removeDemoWorkspaceForCurrentUser } from "@/actions/demo"
 
 type SubscriptionType = typeof subscription.$inferSelect
 
@@ -40,6 +42,8 @@ interface OrganizationSwitcherProps {
   activeOrganization?: Organization | null
 }
 
+const DEMO_ORG_SLUG = "heyhire-demo"
+
 export function OrganizationSwitcher({ 
   subscription, 
   organizations: serverOrganizations,
@@ -47,16 +51,6 @@ export function OrganizationSwitcher({
 }: OrganizationSwitcherProps) {
   const router = useRouter()
   const { isMobile } = useSidebar()
-
-  // Debug: Log what props we received
-  console.log('[OrgSwitcher] Received props:', {
-    hasSubscription: !!subscription,
-    organizationsCount: serverOrganizations?.length ?? 0,
-    organizationsList: serverOrganizations?.map(o => ({ id: o.id, name: o.name })) ?? [],
-    hasActiveOrg: !!serverActiveOrganization,
-    activeOrgId: serverActiveOrganization?.id,
-    activeOrgName: serverActiveOrganization?.name
-  })
 
   // Use server-provided data directly (no loading state needed)
   // If organizations list is empty but we have an activeOrganization, use it as fallback
@@ -123,6 +117,15 @@ export function OrganizationSwitcher({
     await organization.setActive({ organizationId: orgId })
     router.push("/")
   }
+
+  const handleRemoveDemo = async () => {
+    try {
+      await removeDemoWorkspaceForCurrentUser()
+      router.refresh()
+    } catch (e) {
+      console.error("[OrgSwitcher] Failed to remove demo workspace", e)
+    }
+  }
   
   return (
     <SidebarMenu>
@@ -186,6 +189,16 @@ export function OrganizationSwitcher({
                 </DropdownMenuItem>
               ))}
             </DropdownMenuGroup>
+
+            {displayOrg.slug === DEMO_ORG_SLUG && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleRemoveDemo} className="gap-2 p-2 text-destructive">
+                  <Icon name="trash" className="size-4" />
+                  Remove demo workspace
+                </DropdownMenuItem>
+              </>
+            )}
             
           </DropdownMenuContent>
         </DropdownMenu>

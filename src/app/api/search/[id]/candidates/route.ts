@@ -57,10 +57,16 @@ export async function GET(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error("[API] Error fetching candidates:", errorMessage);
-    
-    return Response.json(
-      { error: errorMessage },
-      { status: 500 }
-    );
+
+    const status =
+      errorMessage === "Not authenticated"
+        ? 401
+        : errorMessage === "Not authorized"
+          ? 403
+          : errorMessage === "Search not found"
+            ? 404
+            : 500;
+
+    return Response.json({ error: errorMessage }, { status });
   }
 }
