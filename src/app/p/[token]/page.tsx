@@ -1,11 +1,17 @@
 import Link from "next/link"
+import { eq, desc } from "drizzle-orm"
 
 import { db } from "@/db/drizzle"
 import * as schema from "@/db/schema"
 import { hashShareToken } from "@/lib/demo"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { desc, eq } from "drizzle-orm"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 
 export default async function PreviewHome({
   params,
@@ -39,7 +45,8 @@ export default async function PreviewHome({
         <div>
           <h1 className="text-2xl font-semibold">Searches</h1>
           <p className="text-sm text-muted-foreground">
-            This workspace is in preview mode. Create an account to request access.
+            This workspace is in preview mode. Create an account to request
+            access.
           </p>
         </div>
       </div>
@@ -49,7 +56,7 @@ export default async function PreviewHome({
           <CardHeader>
             <CardTitle>No searches yet</CardTitle>
             <CardDescription>
-              This shared workspace doesn’t have any saved searches.
+              This shared workspace doesn't have any saved searches.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -76,5 +83,3 @@ export default async function PreviewHome({
     </div>
   )
 }
-
-

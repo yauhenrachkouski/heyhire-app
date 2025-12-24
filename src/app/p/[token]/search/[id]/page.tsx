@@ -1,17 +1,19 @@
 import { notFound } from "next/navigation"
+import { eq } from "drizzle-orm"
 
 import { db } from "@/db/drizzle"
 import * as schema from "@/db/schema"
 import { hashShareToken } from "@/lib/demo"
 import { SearchResultsClient } from "@/app/(protected)/search/[id]/search-results-client"
-import { eq } from "drizzle-orm"
 import type { ParsedQuery } from "@/types/search"
 
 interface PreviewSearchPageProps {
   params: Promise<{ token: string; id: string }>
 }
 
-export default async function PreviewSearchPage({ params }: PreviewSearchPageProps) {
+export default async function PreviewSearchPage({
+  params,
+}: PreviewSearchPageProps) {
   const { token, id } = await params
   // Layout already validated the token, just get org ID via lightweight lookup
   const tokenHash = hashShareToken(token)
@@ -41,20 +43,24 @@ export default async function PreviewSearchPage({ params }: PreviewSearchPagePro
   if (row.organizationId !== organizationId) notFound()
 
   return (
-    <div className="container mx-auto">
-      <SearchResultsClient
-        search={{
-          id: row.id,
-          name: row.name,
-          query: row.query,
-          params: JSON.parse(row.params) as ParsedQuery,
-          createdAt: row.createdAt,
-          status: row.status,
-          progress: row.progress,
-        }}
-      />
-    </div>
+    <>
+      {/* Match protected search page background */}
+      <div className="fixed inset-0 bg-sidebar -z-10" />
+      <div className="container mx-auto">
+        {/* Key ensures component remounts when navigating between searches */}
+        <SearchResultsClient
+          key={row.id}
+          search={{
+            id: row.id,
+            name: row.name,
+            query: row.query,
+            params: JSON.parse(row.params) as ParsedQuery,
+            createdAt: row.createdAt,
+            status: row.status,
+            progress: row.progress,
+          }}
+        />
+      </div>
+    </>
   )
 }
-
-
