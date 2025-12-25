@@ -50,6 +50,13 @@ Migration flow rule (Drizzle)
 
 Do not create fallback. Always resolve the issues and make sure flow works.
 
+TanStack Query
+- Use initialData only when query params match server-rendered state
+- Always use placeholderData: keepPreviousData to prevent UI flicker during refetch
+- Pass reactive data to components - never mutate table.options or query cache directly
+- Let query data flow: Server → Query (with initialData) → Memoized data → Component props
+- Use queryClient.setQueryData for optimistic updates, not direct mutations
+
 Documentation
 For better-auth and stripe documentation related to subscriptions, stripe use this link:
 https://raw.githubusercontent.com/better-auth/better-auth/refs/heads/main/docs/content/docs/plugins/organization.mdx

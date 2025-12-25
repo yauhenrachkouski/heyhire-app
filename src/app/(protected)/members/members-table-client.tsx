@@ -87,7 +87,13 @@ export function MembersTableClient({ initialData }: MembersTableClientProps) {
     const prevParams = prevQueryParamsRef.current;
     const currentParams = newQueryParams;
 
-    if (JSON.stringify(prevParams) === JSON.stringify(currentParams)) {
+    if (
+      prevParams.page === currentParams.page &&
+      prevParams.perPage === currentParams.perPage &&
+      prevParams.sort === currentParams.sort &&
+      prevParams.filters === currentParams.filters &&
+      prevParams.joinOperator === currentParams.joinOperator
+    ) {
       return;
     }
 
