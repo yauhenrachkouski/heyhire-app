@@ -401,8 +401,8 @@ export async function startProBillingNow() {
       stripe_subscription_id: orgSubscription.stripeSubscriptionId,
     });
 
-    const nextBillingDate = updatedSubscription.current_period_end
-      ? new Date(updatedSubscription.current_period_end * 1000)
+    const nextBillingDate = (updatedSubscription as any).current_period_end
+      ? new Date((updatedSubscription as any).current_period_end * 1000)
       : null;
 
     return {
