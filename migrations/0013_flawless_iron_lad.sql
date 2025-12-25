@@ -9,6 +9,6 @@ CREATE TABLE "stripe_webhook_events" (
 	CONSTRAINT "stripe_webhook_events_stripe_event_id_unique" UNIQUE("stripe_event_id")
 );
 --> statement-breakpoint
-DROP INDEX "embedding_idx";--> statement-breakpoint
-DROP INDEX "search_name_idx";--> statement-breakpoint
-ALTER TABLE "candidates" DROP COLUMN "embedding";
+DROP INDEX IF EXISTS "embedding_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "search_name_idx";--> statement-breakpoint
+ALTER TABLE "candidates" DROP COLUMN IF EXISTS "embedding";
