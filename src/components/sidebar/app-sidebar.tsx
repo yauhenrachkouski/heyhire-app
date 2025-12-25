@@ -35,6 +35,7 @@ import { Icon, IconName } from "@/components/ui/icon"
 import { NavUser } from "@/components/sidebar/nav-user"
 import { SupportModal } from "@/components/sidebar/support-modal"
 import { CreditBalance } from "@/components/sidebar/credit-balance"
+import { isPlanId } from "@/types/plans"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import type { subscription } from "@/db/schema"
@@ -153,6 +154,7 @@ function isPathActive(currentPathname: string, itemUrl: string): boolean {
 export function AppSidebar({ subscription, organizations, activeOrganization, user, recentSearches = [], ...props }: AppSidebarProps) {
   const pathname = usePathname()
   const [supportModalOpen, setSupportModalOpen] = React.useState(false)
+  const currentPlan = isPlanId(subscription?.plan) ? subscription.plan : null
 
   // Generate dynamic navigation data with recent job
 
@@ -280,7 +282,7 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
         {/* Recent Searches Section */}
         {recentSearches && recentSearches.length > 0 && (
           <SidebarGroup>
-            <SidebarGroupLabel className="flex-shrink-0">Recent</SidebarGroupLabel>
+            <SidebarGroupLabel className="shrink-0">Recent</SidebarGroupLabel>
             <SidebarGroupContent className="overflow-auto">
               <SidebarMenu>
                 <RecentSearches searches={recentSearches} currentPath={pathname} />
@@ -400,7 +402,7 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
       </SidebarContent>
       <SidebarFooter>
         {activeOrganization && activeOrganization.credits !== undefined && (
-          <CreditBalance credits={activeOrganization.credits} currentPlan={subscription?.plan as "starter" | "pro" | "enterprise" | null | undefined} />
+          <CreditBalance credits={activeOrganization.credits} currentPlan={currentPlan} />
         )}
         <SidebarMenu>
           <SidebarMenuItem>

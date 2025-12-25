@@ -1,6 +1,5 @@
 import Link from "next/link"
 import { IconFolderCode } from "@tabler/icons-react"
-import { ArrowUpRightIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -33,15 +32,10 @@ export default function NotFound() {
               <Button asChild>
                 <Link href="/">Go Home</Link>
               </Button>
-              
             </div>
           </EmptyContent>
-
-          
         </Empty>
       </div>
     </div>
   )
 }
-
-

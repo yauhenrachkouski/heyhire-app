@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress"
 import { toast } from "sonner"
 import { subscription as subscriptionSchema } from "@/db/schema"
 import type { PlanId } from "@/types/plans"
+import { isPlanId } from "@/types/plans"
 import { PLAN_LIMITS } from "@/types/plans"
 import { useActiveOrganization } from "@/lib/auth-client"
 import { useEffect } from "react"
@@ -114,7 +115,7 @@ export function CurrentSubscriptionRow({ subscription: initialSubscription, next
     };
   }, [activeOrg?.id, subscription?.periodStart, subscription?.periodEnd]);
 
-  const currentPlan = (subscription?.plan as PlanId | null) || null;
+  const currentPlan: PlanId | null = isPlanId(subscription?.plan) ? subscription.plan : null
   const currentPlanData = plans.find((p) => p.planId === currentPlan);
 
   const isTrialing = subscription?.status === "trialing";

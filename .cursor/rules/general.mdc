@@ -56,6 +56,7 @@ TanStack Query
 - Pass reactive data to components - never mutate table.options or query cache directly
 - Let query data flow: Server → Query (with initialData) → Memoized data → Component props
 - Use queryClient.setQueryData for optimistic updates, not direct mutations
+Doc: https://tanstack.com/llms.txt
 
 Documentation
 For better-auth and stripe documentation related to subscriptions, stripe use this link:

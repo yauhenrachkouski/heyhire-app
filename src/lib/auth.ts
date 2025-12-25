@@ -24,6 +24,7 @@ const log = logger.with({ service: "auth" });
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+
 const invitationExpiresInSeconds = 60 * 60 * 48;
 
 const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, {
