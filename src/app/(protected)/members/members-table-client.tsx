@@ -21,11 +21,37 @@ export function MembersTableClient({ initialData }: MembersTableClientProps) {
   const { data: activeOrg } = useActiveOrganization();
   const columns = React.useMemo(() => getMembersTableColumns(), []);
 
-  // Calculate pageCount from total (default 10 items per page)
-  const pageCount = Math.ceil(initialData.total / 10) || 1;
+  // Start with a default query state that will be updated by table interactions
+  const [queryParams, setQueryParams] = React.useState({
+    page: "1",
+    perPage: "10",
+    sort: "",
+    filters: "",
+    joinOperator: "and" as const,
+  });
 
+  // Fetch data with TanStack Query using proper initialData pattern
+  const { data, isLoading, isFetching } = useMembersQuery(queryParams, {
+    // Only use initialData when query params match the initial server-rendered state
+    initialData:
+      queryParams.page === "1" &&
+      queryParams.perPage === "10" &&
+      queryParams.filters === "" &&
+      queryParams.sort === ""
+        ? initialData
+        : undefined,
+    refetchOnMount: false,
+    // Keep previous data visible during refetch to prevent UI flicker
+    placeholderData: keepPreviousData,
+  });
+
+  // Use query data (or fallback to initialData) for table
+  const tableData = data?.data || initialData.data;
+  const pageCount = Math.ceil((data?.total || initialData.total) / 10) || 1;
+
+  // Create table with reactive data from query
   const { table, advancedFilters } = useDataTable({
-    data: initialData.data,
+    data: tableData,
     columns,
     pageCount,
     enableAdvancedFilter: true,
@@ -36,7 +62,7 @@ export function MembersTableClient({ initialData }: MembersTableClientProps) {
 
   // Build query params from table state for server query
   const tableState = table.getState();
-  const queryParams = React.useMemo(() => {
+  const newQueryParams = React.useMemo(() => {
     return {
       page: (tableState.pagination.pageIndex + 1).toString(),
       perPage: tableState.pagination.pageSize.toString(),
@@ -54,13 +80,14 @@ export function MembersTableClient({ initialData }: MembersTableClientProps) {
     advancedFilters.completeFilters,
   ]);
 
-  const prevQueryParamsRef = React.useRef(queryParams);
+  const prevQueryParamsRef = React.useRef(newQueryParams);
 
+  // Update query params when table state changes
   React.useEffect(() => {
     const prevParams = prevQueryParamsRef.current;
-    const currentParams = queryParams;
+    const currentParams = newQueryParams;
 
-    if (prevParams === currentParams) {
+    if (JSON.stringify(prevParams) === JSON.stringify(currentParams)) {
       return;
     }
 
@@ -85,24 +112,8 @@ export function MembersTableClient({ initialData }: MembersTableClientProps) {
     }
 
     prevQueryParamsRef.current = currentParams;
-  }, [queryParams, advancedFilters.completeFilters, tableState.sorting, activeOrg?.id]);
-
-  const { data, isLoading, isFetching } = useMembersQuery(queryParams, {
-    initialData:
-      queryParams.filters === "" && queryParams.sort === ""
-        ? initialData
-        : undefined,
-    refetchOnMount: false,
-    placeholderData: keepPreviousData,
-  });
-
-  // Update table data when query returns new data
-  React.useEffect(() => {
-    if (data) {
-      table.options.data = data.data;
-      table.options.pageCount = Math.ceil(data.total / 10) || 1;
-    }
-  }, [data, table]);
+    setQueryParams(currentParams);
+  }, [newQueryParams, advancedFilters.completeFilters, tableState.sorting, activeOrg?.id]);
 
   if (isLoading) {
     return <DataTableSkeleton columnCount={5} rowCount={10} />;

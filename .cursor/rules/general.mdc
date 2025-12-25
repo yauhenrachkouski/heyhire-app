@@ -1,6 +1,8 @@
 ---
 alwaysApply: true
 ---
+Always try to find simpliest solution. less code, faster execution, without overcomlicating. Smart, simple approach.
+
 #Stack 
 Bun
 Next.js 16

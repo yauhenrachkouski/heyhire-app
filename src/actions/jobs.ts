@@ -248,7 +248,7 @@ export async function parseJob(message: string): Promise<ParseQueryResponse & { 
           detail = (parsed as { detail: string }).detail;
         }
       } catch {
-        
+        // Error parsing error details, will be handled below
       }
       console.error("[Search] Parse API error:", response.status, rawBody);
       throw new Error(`Parse API error: ${response.status} ${detail ? `- ${detail}` : ""}`.trim());

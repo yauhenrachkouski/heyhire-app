@@ -41,6 +41,16 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
   const [searchName, setSearchName] = useState(search.name);
   const titleRef = useRef<HTMLHeadingElement>(null);
 
+  // Score filter state - default to All candidates (0+)
+  const [scoreRange, setScoreRange] = useState<[number, number]>([0, 100]);
+  
+  // Pagination state
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+  
+  // Sort state - default to newest first
+  const [sortBy, setSortBy] = useState<string>("date-desc");
+
   // Reset all state when search changes (backup for key prop)
   useEffect(() => {
     console.log("[SearchResultsClient] Search changed to:", search.id);
@@ -55,16 +65,6 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
       titleRef.current.focus();
     }
   }, [isEditingName]);
-
-  // Score filter state - default to All candidates (0+)
-  const [scoreRange, setScoreRange] = useState<[number, number]>([0, 100]);
-  
-  // Pagination state
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
-  
-  // Sort state - default to newest first
-  const [sortBy, setSortBy] = useState<string>("date-desc");
 
   // Poll for candidates with server-side filtering
   const { data, isLoading, isFetching, error, refetch } = useQuery({

@@ -93,6 +93,7 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   activeOrganization?: Organization | null
   user?: User | null
   recentSearches?: RecentSearch[]
+  trialWarning?: { used: number; limit: number } | null
 }
 
 // Navigation data for Heyhire recruitment platform
