@@ -27,8 +27,28 @@ type ScoringReasoning = {
   title_analysis?: string | null;
   skills_analysis?: string | null;
   location_analysis?: string | null;
+  experience_analysis?: string | null;
 } | null;
-type ScoringData = { verdict?: string | null; reasoning?: ScoringReasoning } | null;
+
+type ScoringCriterion = {
+  criterion: string;
+  importance: string;
+  found: boolean;
+  evidence: string | null;
+  penalty: number;
+  reasoning: string;
+};
+
+type ScoringResult = {
+  match_score?: number;
+  verdict?: string;
+  primary_issue?: string;
+  high_importance_missing?: string[];
+  criteria_scores?: ScoringCriterion[];
+  reasoning?: ScoringReasoning;
+};
+
+type ScoringData = ScoringResult | null;
 
 function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
   if (!raw) return fallback;
@@ -156,9 +176,25 @@ export function CandidateCard({
   const skills = useMemo(() => safeJsonParse<Skill[]>(candidate.skills, []), [candidate.skills]);
   const location = useMemo(() => safeJsonParse<LocationData>(candidate.location, null), [candidate.location]);
   const scoringData = useMemo<ScoringData>(() => {
-    void notes;
-    return null;
+    return safeJsonParse<ScoringData>(notes, null);
   }, [notes]);
+
+  const {
+    match_score,
+    verdict,
+    primary_issue,
+    high_importance_missing,
+    criteria_scores,
+    reasoning,
+  } = scoringData || {};
+
+  // Suppress unused variable warnings until UI is implemented
+  void match_score;
+  void verdict;
+  void primary_issue;
+  void high_importance_missing;
+  void criteria_scores;
+  void reasoning;
 
   const fullName = candidate.fullName || "Unknown";
   
