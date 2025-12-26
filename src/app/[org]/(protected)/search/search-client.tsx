@@ -10,6 +10,8 @@ import type { ParsedQuery, SourcingCriteria } from "@/types/search";
 import { useSession, useActiveOrganization } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
+import { recentSearchesKeys } from "@/lib/search-query-keys";
+import { generateSearchName } from "@/lib/search-name";
 
 interface SearchClientProps {
   viewMode?: "table" | "cards"; // Kept for compatibility but unused
@@ -86,7 +88,32 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
       console.log("[Search Client] Search saved with ID:", searchId);
 
       // Ensure sidebar recent searches list updates immediately
-      queryClient.invalidateQueries({ queryKey: ["recentSearches", activeOrg.id] });
+      const optimisticName = generateSearchName(parsedQuery);
+
+      if (activeOrg?.id) {
+        queryClient.setQueryData(
+          recentSearchesKeys.list(activeOrg.id, 10),
+          (old: Array<{
+            id: string;
+            name: string;
+            query: string;
+            createdAt: string | Date;
+          }> | undefined) => {
+            const next = [
+              {
+                id: searchId,
+                name: optimisticName,
+                query: queryText,
+                createdAt: new Date(),
+              },
+              ...(old ?? []),
+            ];
+            return next.slice(0, 10);
+          }
+        );
+      }
+
+      await queryClient.invalidateQueries({ queryKey: recentSearchesKeys.lists() });
 
       if (source === "autorun") {
         posthog.capture('search_autorun_triggered', {

@@ -48,6 +48,12 @@ export default async function DashboardLayout({
     return redirect(`/${activeOrganization.id}`)
   }
 
+  // Fetch recent searches if we have an active organization
+  const recentSearchesResponse = activeOrganization
+    ? await getRecentSearches(activeOrganization.id, 10)
+    : { success: false, data: [] }
+  const recentSearches = recentSearchesResponse.success ? recentSearchesResponse.data : []
+
   // Debug: Log what we received from better-auth APIs
   console.log('[DashboardLayout] Organizations data:', {
     organizationsCount: organizations?.length ?? 0,
@@ -58,12 +64,6 @@ export default async function DashboardLayout({
     currentUserRole: activeMember?.role,
     hasSubscription: !!subscription
   })
-
-  // Fetch recent searches if we have an active organization
-  const recentSearchesResponse = activeOrganization 
-    ? await getRecentSearches(activeOrganization.id, 10)
-    : { success: false, data: [] };
-  const recentSearches = recentSearchesResponse.success ? recentSearchesResponse.data : [];
 
   // Fetch credits for active organization and create extended type
   let activeOrgWithCredits: (typeof activeOrganization & { credits?: number }) | null = activeOrganization;

@@ -42,7 +42,7 @@ export const { POST } = serve<StrategyWorkflowPayload>(
       status: string;
       strategies_launched: number;
     }>("execute-strategy", {
-      url: `${API_BASE_URL}/api/v2/strategies/execute`,
+      url: `${API_BASE_URL}/api/v3/strategies/execute`,
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: {
@@ -92,7 +92,7 @@ export const { POST } = serve<StrategyWorkflowPayload>(
         results?: unknown[];
         error?: string;
       }>(`poll-results-${pollCount}`, {
-        url: `${API_BASE_URL}/api/v2/strategies/results/${taskId}`,
+        url: `${API_BASE_URL}/api/v3/strategies/results/${taskId}`,
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });
@@ -197,4 +197,3 @@ export const { POST } = serve<StrategyWorkflowPayload>(
     },
   }
 );
-

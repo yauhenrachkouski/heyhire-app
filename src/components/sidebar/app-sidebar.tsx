@@ -39,6 +39,8 @@ import { isPlanId } from "@/types/plans"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import type { subscription } from "@/db/schema"
+import { useQuery } from "@tanstack/react-query"
+import { recentSearchesKeys } from "@/lib/search-query-keys"
 
 type SubscriptionType = typeof subscription.$inferSelect
 
@@ -85,7 +87,7 @@ interface RecentSearch {
   id: string
   name: string
   query: string
-  createdAt: Date
+  createdAt: string | Date
 }
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
@@ -173,7 +175,29 @@ export function AppSidebar({
     return url === "/" ? basePath : `${basePath}${url}`
   }
 
-  // Generate dynamic navigation data with recent job
+  const recentSearchLimit = 10
+  const { data: sidebarRecentSearches = [], isLoading: recentSearchesLoading } = useQuery({
+    queryKey: activeOrganization?.id
+      ? recentSearchesKeys.list(activeOrganization.id, recentSearchLimit)
+      : recentSearchesKeys.all,
+    queryFn: async () => {
+      if (!activeOrganization?.id) return []
+      const url = new URL("/api/search/recent", window.location.origin)
+      url.searchParams.set("organizationId", activeOrganization.id)
+      url.searchParams.set("limit", String(recentSearchLimit))
+      const res = await fetch(url.toString())
+      if (!res.ok) {
+        throw new Error("Failed to load recent searches")
+      }
+      const payload = (await res.json()) as { data?: RecentSearch[] }
+      return payload.data ?? []
+    },
+    enabled: !!activeOrganization?.id,
+    initialData: recentSearches,
+    initialDataUpdatedAt: recentSearches.length > 0 ? Date.now() : 0,
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: true,
+  })
 
   return (
     <TooltipProvider>
@@ -297,16 +321,19 @@ export function AppSidebar({
         )}
         
         {/* Recent Searches Section */}
-        {recentSearches && recentSearches.length > 0 && (
-          <SidebarGroup>
-            <SidebarGroupLabel className="shrink-0">Recent</SidebarGroupLabel>
-            <SidebarGroupContent className="overflow-auto">
-              <SidebarMenu>
-            <RecentSearches searches={recentSearches} currentPath={pathname} basePath={basePath} />
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
+        <SidebarGroup>
+          <SidebarGroupLabel className="shrink-0">Recent</SidebarGroupLabel>
+          <SidebarGroupContent className="overflow-auto">
+            <SidebarMenu>
+              <RecentSearches
+                searches={sidebarRecentSearches}
+                isLoading={recentSearchesLoading}
+                currentPath={pathname}
+                basePath={basePath}
+              />
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
         
         {/* Render remaining groups (Organization, etc.) */}
         {data.navMain.slice(1).map((item, index) => (

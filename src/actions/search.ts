@@ -2,7 +2,7 @@
 
 import "server-only";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { headers } from "next/headers";
 import { getErrorMessage } from "@/lib/handle-error";
 import { parsedQuerySchema, type ParsedQuery } from "@/types/search";
@@ -12,51 +12,10 @@ import { eq, desc, ilike, and } from "drizzle-orm";
 import { generateId } from "@/lib/id";
 import { auth } from "@/lib/auth";
 import { assertNotReadOnlyForOrganization, getSignedInUser, requireOrganizationReadAccess, requireSearchReadAccess } from "@/lib/request-access";
+import { generateSearchName, SEARCH_NAME_MAX_LENGTH } from "@/lib/search-name";
 
-const MAX_SEARCH_NAME_LENGTH = 50;
-
-/**
- * Helper to format a field for search name (handles both single and multi-value)
- */
-function formatFieldForName(field: string | { values: string[]; operator: string } | undefined): string {
-  if (!field) return "";
-  
-  if (typeof field === "string") {
-    return field;
-  }
-  
-  if (typeof field === "object" && "values" in field) {
-    if (field.values.length === 0) return "";
-    if (field.values.length === 1) return field.values[0];
-    
-    const operator = field.operator.toLowerCase();
-    if (field.values.length === 2) {
-      return field.values.join(` ${operator} `);
-    }
-    
-    const last = field.values[field.values.length - 1];
-    const rest = field.values.slice(0, -1);
-    return `${rest.join(", ")}, ${operator} ${last}`;
-  }
-  
-  return "";
-}
-
-/**
- * Generate a human-readable name from a parsed query
- */
-function generateSearchName(query: ParsedQuery): string {
-  const jobTitle = formatFieldForName(query.job_title).trim();
-  if (!jobTitle) return "Untitled Search";
-
-  // Enforce max length for breadcrumbs/headlines and DB safety.
-  // If truncating, keep the string length <= MAX_SEARCH_NAME_LENGTH.
-  if (jobTitle.length > MAX_SEARCH_NAME_LENGTH) {
-    return `${jobTitle.slice(0, MAX_SEARCH_NAME_LENGTH - 1)}…`;
-  }
-
-  return jobTitle;
-}
+const recentSearchesTag = (organizationId: string) =>
+  `recent-searches:${organizationId}`;
 
 /**
  * Update search name
@@ -74,8 +33,8 @@ export async function updateSearchName(
       return { success: false, error: "Search name cannot be empty" };
     }
 
-    const safeName = trimmed.length > MAX_SEARCH_NAME_LENGTH
-      ? `${trimmed.slice(0, MAX_SEARCH_NAME_LENGTH - 1)}…`
+    const safeName = trimmed.length > SEARCH_NAME_MAX_LENGTH
+      ? `${trimmed.slice(0, SEARCH_NAME_MAX_LENGTH - 1)}…`
       : trimmed;
 
     await db.update(search)
@@ -129,6 +88,9 @@ export async function saveSearch(
     });
     
     console.log("[Search] Search saved with ID:", id);
+
+    revalidateTag(recentSearchesTag(organizationId));
+    revalidatePath(`/${organizationId}`, "layout");
     
     return {
       success: true,
@@ -165,21 +127,29 @@ export async function getRecentSearches(
     await requireOrganizationReadAccess(organizationId);
 
     console.log("[Search] Fetching recent searches for org:", organizationId);
-    
-    const searches = await db
-      .select()
-      .from(search)
-      .where(eq(search.organizationId, organizationId))
-      .orderBy(desc(search.createdAt))
-      .limit(limit);
-    
-    const parsedSearches = searches.map((s) => ({
-      id: s.id,
-      name: s.name,
-      query: s.query,
-      params: JSON.parse(s.params) as ParsedQuery,
-      createdAt: s.createdAt,
-    }));
+
+    const fetchRecentSearches = unstable_cache(
+      async () => {
+        const searches = await db
+          .select()
+          .from(search)
+          .where(eq(search.organizationId, organizationId))
+          .orderBy(desc(search.createdAt))
+          .limit(limit);
+
+        return searches.map((s) => ({
+          id: s.id,
+          name: s.name,
+          query: s.query,
+          params: JSON.parse(s.params) as ParsedQuery,
+          createdAt: s.createdAt,
+        }));
+      },
+      ["recent-searches", organizationId, String(limit)],
+      { tags: [recentSearchesTag(organizationId)] }
+    );
+
+    const parsedSearches = await fetchRecentSearches();
     
     console.log("[Search] Found", parsedSearches.length, "recent searches");
     

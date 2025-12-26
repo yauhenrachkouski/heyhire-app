@@ -13,11 +13,12 @@ interface RecentSearch {
   id: string;
   name: string;
   query: string;
-  createdAt: Date;
+  createdAt: string | Date;
 }
 
 interface RecentSearchesProps {
   searches: RecentSearch[];
+  isLoading?: boolean;
   currentPath?: string;
   basePath?: string;
 }
@@ -73,7 +74,20 @@ function RecentSearchItem({
   return button;
 }
 
-export function RecentSearches({ searches, currentPath, basePath = "" }: RecentSearchesProps) {
+export function RecentSearches({
+  searches,
+  isLoading = false,
+  currentPath,
+  basePath = "",
+}: RecentSearchesProps) {
+  if (isLoading) {
+    return (
+      <div className="px-3 py-2 text-xs text-muted-foreground">
+        Loading recent searches...
+      </div>
+    );
+  }
+
   if (!searches || searches.length === 0) {
     return (
       <div className="px-3 py-2 text-xs text-muted-foreground">

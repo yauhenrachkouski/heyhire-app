@@ -29,24 +29,41 @@ interface SourcingWorkflowPayload {
 
 export const { POST } = serve<SourcingWorkflowPayload>(
   async (context: WorkflowContext<SourcingWorkflowPayload>) => {
-    const { searchId, rawText, criteria } = context.requestPayload;
-    
     // Validate required payload inside context.run to avoid breaking Upstash auth
     // This must be the FIRST step to prevent invalid workflows from proceeding
-    const isValid = await context.run("validate-payload", async () => {
-      if (!searchId) {
-        console.error("[Workflow] Missing searchId in payload, workflow will abort");
-        return false;
+    const payload = await context.run("validate-payload", async () => {
+      if (!context.requestPayload) {
+        console.error("[Workflow] Missing request payload, workflow will abort");
+        return null;
       }
+
+      const { searchId, rawText, criteria } = context.requestPayload;
+      console.log("[Workflow] Payload received", {
+        hasSearchId: Boolean(searchId),
+        hasRawText: Boolean(rawText),
+        hasCriteria: Boolean(criteria),
+        rawTextLength: typeof rawText === "string" ? rawText.length : null,
+      });
+      if (!searchId || !rawText || !criteria) {
+        console.error("[Workflow] Invalid payload received", {
+          hasSearchId: Boolean(searchId),
+          hasRawText: Boolean(rawText),
+          hasCriteria: Boolean(criteria),
+        });
+        return null;
+      }
+
       console.log("[Workflow] Starting sourcing workflow for search:", searchId);
-      return true;
+      return { searchId, rawText, criteria };
     });
     
     // If validation failed, stop workflow execution
-    if (!isValid) {
-      return { error: "Missing searchId", aborted: true };
+    if (!payload) {
+      return { error: "Invalid request payload", aborted: true };
     }
     
+    const { searchId, rawText, criteria } = payload;
+    console.log("[Workflow] Using payload searchId:", searchId);
     const channel = `search:${searchId}`;
 
     // Step 1: Update search status to processing
@@ -401,7 +418,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
     
     // Get parsedQuery from search params
     const searchRecord = await context.run("get-search-params", async () => {
-      console.log("[Workflow] Fetching search params for:", searchId);
+      console.log("[Workflow] Fetching search params for:", searchId, "type:", typeof searchId);
       const result = await db.query.search.findFirst({
         where: eq(search.id, searchId),
       });
@@ -536,20 +553,27 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       failHeaders: Record<string, string[]>;
       failStack: string;
     }) => {
-      const { searchId } = failureData.context.requestPayload;
+      const searchId = failureData.context?.requestPayload?.searchId;
+      if (!searchId) {
+        console.error("[Workflow] Failure payload missing searchId", {
+          hasPayload: Boolean(failureData.context?.requestPayload),
+        });
+      }
       const channel = `search:${searchId}`;
-      console.error(`[Workflow] Failed for search ${searchId}:`, failureData.failResponse);
+      console.error(`[Workflow] Failed for search ${searchId ?? "unknown"}:`, failureData.failResponse);
       
       // Update search status to error
       try {
-        await db
-          .update(search)
-          .set({ status: "error", progress: 0 })
-          .where(eq(search.id, searchId));
-        
-        await realtime.channel(channel).emit( "search.failed", {
-          error: `Workflow failed: ${failureData.failResponse}`
-        });
+        if (searchId) {
+          await db
+            .update(search)
+            .set({ status: "error", progress: 0 })
+            .where(eq(search.id, searchId));
+          
+          await realtime.channel(channel).emit( "search.failed", {
+            error: `Workflow failed: ${failureData.failResponse}`
+          });
+        }
       } catch (e) {
         console.error("[Workflow] Failed to update error status:", e);
       }
