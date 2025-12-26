@@ -499,7 +499,16 @@ export async function startBackgroundSearch(
       })
       .where(eq(search.id, searchId));
       
-    revalidatePath(`/search/${searchId}`);
+    const searchRow = await db.query.search.findFirst({
+      where: eq(search.id, searchId),
+      columns: { organizationId: true },
+    })
+
+    if (searchRow?.organizationId) {
+      revalidatePath(`/${searchRow.organizationId}/search/${searchId}`)
+    } else {
+      revalidatePath(`/search/${searchId}`)
+    }
 
     return { success: true };
     
@@ -610,4 +619,3 @@ export async function triggerSourcingWorkflow(
     return { success: false, error: errorMessage };
   }
 }
-

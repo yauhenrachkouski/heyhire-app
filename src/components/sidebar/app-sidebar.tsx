@@ -155,6 +155,15 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
   const pathname = usePathname()
   const [supportModalOpen, setSupportModalOpen] = React.useState(false)
   const currentPlan = isPlanId(subscription?.plan) ? subscription.plan : null
+  const basePath = activeOrganization?.id ? `/${activeOrganization.id}` : ""
+  const relativePath = basePath && pathname?.startsWith(basePath)
+    ? pathname.slice(basePath.length) || "/"
+    : pathname
+
+  const toOrgPath = (url: string) => {
+    if (!basePath || url === "#") return url
+    return url === "/" ? basePath : `${basePath}${url}`
+  }
 
   // Generate dynamic navigation data with recent job
 
@@ -177,7 +186,7 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
             <SidebarGroupContent>
               <SidebarMenu>
                 {data.navMain[0].items.map((navItem) => {
-                  const active = !navItem.disabled && isPathActive(pathname, navItem.url)
+                  const active = !navItem.disabled && isPathActive(relativePath, navItem.url)
                   const hasSubItems = navItem.items && navItem.items.length > 0
                   
                   return (
@@ -196,7 +205,7 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
                               <span>{navItem.title}</span>
                             </>
                           ) : (
-                            <Link href={navItem.url} aria-current={active ? "page" : undefined} prefetch>
+                            <Link href={toOrgPath(navItem.url)} aria-current={active ? "page" : undefined} prefetch>
                               {navItem.icon && <Icon name={navItem.icon} />}
                               <span>{navItem.title}</span>
                             </Link>
@@ -215,7 +224,7 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
                             <CollapsibleContent>
                               <SidebarMenuSub>
                                 {navItem.items?.map((subItem) => {
-                                  const subActive = !subItem.disabled && isPathActive(pathname, subItem.url)
+                                  const subActive = !subItem.disabled && isPathActive(relativePath, subItem.url)
                                   const isAllJobs = subItem.title === "All Jobs"
                                   return (
                                     <SidebarMenuSubItem key={subItem.title}>
@@ -233,7 +242,7 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
                                                   <span>{subItem.title}</span>
                                                 </>
                                               ) : (
-                                                <Link href={subItem.url} aria-current={subActive ? "page" : undefined} prefetch className={isAllJobs ? "text-muted-foreground" : undefined}>
+                                                <Link href={toOrgPath(subItem.url)} aria-current={subActive ? "page" : undefined} prefetch className={isAllJobs ? "text-muted-foreground" : undefined}>
                                                   {subItem.icon && <Icon name={subItem.icon} /> }
                                                   <span>{subItem.title}</span>
                                                 </Link>
@@ -256,7 +265,7 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
                                               <span>{subItem.title}</span>
                                             </>
                                           ) : (
-                                            <Link href={subItem.url} aria-current={subActive ? "page" : undefined} prefetch className={isAllJobs ? "text-muted-foreground" : undefined}>
+                                            <Link href={toOrgPath(subItem.url)} aria-current={subActive ? "page" : undefined} prefetch className={isAllJobs ? "text-muted-foreground" : undefined}>
                                               {subItem.icon && <Icon name={subItem.icon} /> }
                                               <span>{subItem.title}</span>
                                             </Link>
@@ -285,7 +294,7 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
             <SidebarGroupLabel className="shrink-0">Recent</SidebarGroupLabel>
             <SidebarGroupContent className="overflow-auto">
               <SidebarMenu>
-                <RecentSearches searches={recentSearches} currentPath={pathname} />
+            <RecentSearches searches={recentSearches} currentPath={pathname} basePath={basePath} />
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -298,7 +307,7 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
             <SidebarGroupContent>
               <SidebarMenu>
                 {item.items.map((navItem) => {
-                  const active = !navItem.disabled && isPathActive(pathname, navItem.url)
+                  const active = !navItem.disabled && isPathActive(relativePath, navItem.url)
                   const hasSubItems = navItem.items && navItem.items.length > 0
                   
                   return (
@@ -317,7 +326,7 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
                               <span>{navItem.title}</span>
                             </>
                           ) : (
-                            <Link href={navItem.url} aria-current={active ? "page" : undefined} prefetch>
+                            <Link href={toOrgPath(navItem.url)} aria-current={active ? "page" : undefined} prefetch>
                               {navItem.icon && <Icon name={navItem.icon} />}
                               <span>{navItem.title}</span>
                             </Link>
@@ -336,7 +345,7 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
                             <CollapsibleContent>
                               <SidebarMenuSub>
                                 {navItem.items?.map((subItem) => {
-                                  const subActive = !subItem.disabled && isPathActive(pathname, subItem.url)
+                                  const subActive = !subItem.disabled && isPathActive(relativePath, subItem.url)
                                   const isAllJobs = subItem.title === "All Jobs"
                                   return (
                                     <SidebarMenuSubItem key={subItem.title}>
@@ -354,7 +363,7 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
                                                   <span>{subItem.title}</span>
                                                 </>
                                               ) : (
-                                                <Link href={subItem.url} aria-current={subActive ? "page" : undefined} prefetch className={isAllJobs ? "text-muted-foreground" : undefined}>
+                                                <Link href={toOrgPath(subItem.url)} aria-current={subActive ? "page" : undefined} prefetch className={isAllJobs ? "text-muted-foreground" : undefined}>
                                                   {subItem.icon && <Icon name={subItem.icon} /> }
                                                   <span>{subItem.title}</span>
                                                 </Link>
@@ -377,7 +386,7 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
                                               <span>{subItem.title}</span>
                                             </>
                                           ) : (
-                                            <Link href={subItem.url} aria-current={subActive ? "page" : undefined} prefetch className={isAllJobs ? "text-muted-foreground" : undefined}>
+                                            <Link href={toOrgPath(subItem.url)} aria-current={subActive ? "page" : undefined} prefetch className={isAllJobs ? "text-muted-foreground" : undefined}>
                                               {subItem.icon && <Icon name={subItem.icon} /> }
                                               <span>{subItem.title}</span>
                                             </Link>

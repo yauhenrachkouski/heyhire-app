@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Icon } from '@/components/ui/icon'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Checkbox } from '@/components/ui/checkbox'
 import Image from 'next/image'
 import {
   Select,
@@ -18,7 +19,8 @@ import {
 } from '@/components/ui/select'
 import { useSession } from '@/lib/auth-client'
 import { toast } from 'sonner'
-import { createDefaultOrganization, createOrganizationWithSetup } from '@/actions/account'
+import { createOrganizationWithSetup } from '@/actions/account'
+import { addDemoWorkspaceForCurrentUser } from '@/actions/demo'
 
 const ORGANIZATION_SIZES = [
   { value: 'just-me', label: 'Just me' },
@@ -47,6 +49,7 @@ export function OnboardingForm({
   const [organizationSize, setOrganizationSize] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [includeDemoWorkspace, setIncludeDemoWorkspace] = useState(true)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -78,6 +81,14 @@ export function OnboardingForm({
         throw new Error(result.error || 'Failed to create organization')
       }
 
+      if (includeDemoWorkspace) {
+        try {
+          await addDemoWorkspaceForCurrentUser()
+        } catch (demoError) {
+          console.warn('[OnboardingForm] Failed to add demo workspace:', demoError)
+        }
+      }
+
       toast.success('Onboarding completed successfully!')
       console.log('[OnboardingForm] Redirecting to /subscribe')
       await new Promise(resolve => setTimeout(resolve, 500))
@@ -104,6 +115,14 @@ export function OnboardingForm({
       
       if (result.error) {
         throw new Error(result.error)
+      }
+
+      if (includeDemoWorkspace) {
+        try {
+          await addDemoWorkspaceForCurrentUser()
+        } catch (demoError) {
+          console.warn('[OnboardingForm] Failed to add demo workspace:', demoError)
+        }
       }
 
       toast.success('Organization created!')
@@ -196,6 +215,18 @@ export function OnboardingForm({
             </Select>
           </div>
 
+          <div className="flex items-center gap-2 pt-2">
+            <Checkbox
+              id="includeDemoWorkspace"
+              checked={includeDemoWorkspace}
+              onCheckedChange={(checked) => setIncludeDemoWorkspace(checked === true)}
+              disabled={isLoading}
+            />
+            <Label htmlFor="includeDemoWorkspace" className="text-sm font-normal text-muted-foreground">
+              Add a demo workspace with sample data
+            </Label>
+          </div>
+
           <Button 
             type="submit" 
             className="w-full" 
@@ -229,4 +260,3 @@ export function OnboardingForm({
     </Card>
   )
 }
-

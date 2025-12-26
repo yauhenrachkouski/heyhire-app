@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm"
 import { db } from "@/db/drizzle"
 import * as schema from "@/db/schema"
 import { hashShareToken } from "@/lib/demo"
-import { SearchResultsClient } from "@/app/(protected)/search/[id]/search-results-client"
+import { SearchResultsClient } from "@/app/[org]/(protected)/search/[id]/search-results-client"
 import type { ParsedQuery } from "@/types/search"
 
 interface PreviewSearchPageProps {

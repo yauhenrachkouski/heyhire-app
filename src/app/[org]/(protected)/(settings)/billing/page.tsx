@@ -10,6 +10,7 @@ import { Icon } from '@/components/ui/icon'
 import { Button } from '@/components/ui/button'
 import { TrialBanner } from '@/components/account/trial-banner'
 import { getOrganizationMembership } from '@/actions/account'
+import { ADMIN_ROLES } from '@/lib/roles'
 
 export default async function BillingPage() {
   // Fetch session data on the server
@@ -34,7 +35,7 @@ export default async function BillingPage() {
     userRole = membershipResult.data.role?.toLowerCase() ?? null
   }
 
-  const canManageBilling = userRole ? ["owner", "admin"].includes(userRole) : false
+  const canManageBilling = userRole ? ADMIN_ROLES.has(userRole) : false
 
   const isTrialing = subscription?.status === 'trialing'
   const trialEndLabel = subscription?.trialEnd

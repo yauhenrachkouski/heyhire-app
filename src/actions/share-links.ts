@@ -11,8 +11,7 @@ import * as schema from "@/db/schema"
 import { generateId } from "@/lib/id"
 import { auth } from "@/lib/auth"
 import { hashShareToken } from "@/lib/demo"
-
-const ADMIN_ROLES = new Set(["owner", "admin"])
+import { ADMIN_ROLES } from "@/lib/roles"
 
 async function requireSignedInUser() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -224,5 +223,4 @@ export async function validateShareToken(token: string) {
     preset: link.preset ? (JSON.parse(link.preset) as unknown) : null,
   }
 }
-
 

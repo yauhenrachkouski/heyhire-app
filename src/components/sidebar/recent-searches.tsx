@@ -19,9 +19,18 @@ interface RecentSearch {
 interface RecentSearchesProps {
   searches: RecentSearch[];
   currentPath?: string;
+  basePath?: string;
 }
 
-function RecentSearchItem({ search, isActive }: { search: RecentSearch; isActive: boolean }) {
+function RecentSearchItem({
+  search,
+  isActive,
+  basePath,
+}: {
+  search: RecentSearch;
+  isActive: boolean;
+  basePath: string;
+}) {
   const { state } = useSidebar();
   const textRef = useRef<HTMLSpanElement>(null);
   const [isTruncated, setIsTruncated] = useState(false);
@@ -33,7 +42,7 @@ function RecentSearchItem({ search, isActive }: { search: RecentSearch; isActive
     }
   }, [search.name, state]);
 
-  const searchPath = `/search/${search.id}`;
+  const searchPath = `${basePath}/search/${search.id}`;
 
   const button = (
     <SidebarMenuButton 
@@ -64,7 +73,7 @@ function RecentSearchItem({ search, isActive }: { search: RecentSearch; isActive
   return button;
 }
 
-export function RecentSearches({ searches, currentPath }: RecentSearchesProps) {
+export function RecentSearches({ searches, currentPath, basePath = "" }: RecentSearchesProps) {
   if (!searches || searches.length === 0) {
     return (
       <div className="px-3 py-2 text-xs text-muted-foreground">
@@ -76,16 +85,15 @@ export function RecentSearches({ searches, currentPath }: RecentSearchesProps) {
   return (
     <>
       {searches.map((search) => {
-        const searchPath = `/search/${search.id}`;
+        const searchPath = `${basePath}/search/${search.id}`;
         const isActive = currentPath === searchPath;
         
         return (
           <SidebarMenuItem key={search.id}>
-            <RecentSearchItem search={search} isActive={isActive} />
+            <RecentSearchItem search={search} isActive={isActive} basePath={basePath} />
           </SidebarMenuItem>
         );
       })}
     </>
   );
 }
-

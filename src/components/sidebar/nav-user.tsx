@@ -5,7 +5,7 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,8 +43,11 @@ interface NavUserProps {
 
 export function NavUser({ user: serverUser }: NavUserProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const { isMobile } = useSidebar()
   const [isSigningOut, setIsSigningOut] = useState(false)
+  const orgSegment = pathname?.split("/")[1]
+  const basePath = orgSegment ? `/${orgSegment}` : ""
 
   if (!serverUser) {
     return null
@@ -117,7 +120,7 @@ export function NavUser({ user: serverUser }: NavUserProps) {
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem asChild>
-                <Link href="/account">
+                <Link href={`${basePath}/account`}>
                   <Icon name="user" className="h-4 w-4" />
                   Account
                 </Link>

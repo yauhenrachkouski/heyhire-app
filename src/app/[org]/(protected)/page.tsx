@@ -2,7 +2,12 @@ import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { headers } from "next/headers"
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  params,
+}: {
+  params: Promise<{ org: string }>
+}) {
+  const { org } = await params
 
   const session = await auth.api.getSession({
     headers: await headers()
@@ -11,7 +16,7 @@ export default async function DashboardPage() {
  if (!session) {
     return redirect("/auth/signin")
  }
- redirect("/search")
+ redirect(`/${org}/search`)
  
   return (
     <div className="w-full max-w-4xl mx-auto space-y-6">

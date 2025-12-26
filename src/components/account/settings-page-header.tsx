@@ -21,11 +21,13 @@ export function SettingsPageHeader({
   className?: string
 }) {
   const pathname = usePathname()
+  const orgSegment = pathname?.split("/")[1]
+  const basePath = orgSegment ? `/${orgSegment}` : ""
 
   const navItems: Array<{ title: string; href: string }> = [
-    { title: "Account", href: "/account" },
-    { title: "Organization", href: "/organization" },
-    { title: "Billing", href: "/billing" },
+    { title: "Account", href: `${basePath}/account` },
+    { title: "Organization", href: `${basePath}/organization` },
+    { title: "Billing", href: `${basePath}/billing` },
   ]
 
   return (

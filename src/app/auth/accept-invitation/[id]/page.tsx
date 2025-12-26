@@ -142,8 +142,12 @@ export default async function AcceptInvitationPage({
       headers: await headers(),
     });
 
+    const activeOrganization = await auth.api.getFullOrganization({
+      headers: await headers(),
+    })
+
     // Redirect to organization page on success
-    redirect("/organization?invitation=accepted");
+    redirect(activeOrganization ? `/${activeOrganization.id}/organization?invitation=accepted` : "/");
   } catch (error: any) {
     console.error("Error accepting invitation:", error);
 
@@ -187,7 +191,11 @@ export default async function AcceptInvitationPage({
       );
     }
 
+    const activeOrganization = await auth.api.getFullOrganization({
+      headers: await headers(),
+    })
+
     // For other errors, redirect as before
-    redirect("/organization?invitation=error");
+    redirect(activeOrganization ? `/${activeOrganization.id}/organization?invitation=error` : "/");
   }
 }

@@ -21,7 +21,7 @@ export function getDemoOrgSlug() {
  * Get demo organization name from environment.
  */
 export function getDemoOrgName() {
-  return process.env.DEMO_ORG_NAME || "Heyhire Demo"
+  return process.env.DEMO_ORG_NAME || "Demo"
 }
 
 /**
@@ -52,10 +52,10 @@ export async function ensureDemoOrganization(tx: DbOrTx = db) {
     id,
     name,
     slug,
+    logo: null,
+    googleLink: null,
     credits: 0,
   })
 
   return id
 }
-
-

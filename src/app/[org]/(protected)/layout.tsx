@@ -18,10 +18,13 @@ import { getTrialWarning } from "@/lib/trial-warnings"
 export default async function DashboardLayout({
   children,
   breadcrumbs,
+  params,
 }: {
   children: React.ReactNode
   breadcrumbs: React.ReactNode
+  params: Promise<{ org: string }>
 }) {
+  const { org } = await params
   // Check if organization has active subscription
   const { shouldRedirect, redirectTo } = await requireActiveSubscription()
 
@@ -36,6 +39,14 @@ export default async function DashboardLayout({
     auth.api.getFullOrganization({ headers: await headers() }),
     auth.api.getActiveMember({ headers: await headers() })
   ])
+
+  if (!activeOrganization) {
+    return redirect("/onboarding")
+  }
+
+  if (activeOrganization.id !== org) {
+    return redirect(`/${activeOrganization.id}`)
+  }
 
   // Debug: Log what we received from better-auth APIs
   console.log('[DashboardLayout] Organizations data:', {

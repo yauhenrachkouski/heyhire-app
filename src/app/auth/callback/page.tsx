@@ -30,11 +30,10 @@ export default async function AuthCallbackPage() {
     })
     
     // User has organizations, go to dashboard
-    return redirect('/')
+    return redirect(`/${organizations[0].id}`)
   } else {
     // No organizations, go to onboarding
     return redirect('/onboarding')
   }
 }
-
 

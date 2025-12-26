@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { organization } from "@/lib/auth-client"
+import { organization, useActiveOrganization, useListOrganizations } from "@/lib/auth-client"
 import { Icon } from "@/components/ui/icon"
 import {
   DropdownMenu,
@@ -18,11 +18,12 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { subscription } from "@/db/schema"
 import Image from "next/image"
 import { removeDemoWorkspaceForCurrentUser } from "@/actions/demo"
+import { useQueryClient } from "@tanstack/react-query"
 
 type SubscriptionType = typeof subscription.$inferSelect
 
@@ -50,7 +51,11 @@ export function OrganizationSwitcher({
   activeOrganization: serverActiveOrganization 
 }: OrganizationSwitcherProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const { isMobile } = useSidebar()
+  const queryClient = useQueryClient()
+  const { data: clientActiveOrganization, refetch: refetchActiveOrganization } = useActiveOrganization()
+  const { refetch: refetchOrganizations } = useListOrganizations()
 
   // Use server-provided data directly (no loading state needed)
   // If organizations list is empty but we have an activeOrganization, use it as fallback
@@ -60,7 +65,7 @@ export function OrganizationSwitcher({
       ? [serverActiveOrganization]
       : []
   
-  const activeOrganization = serverActiveOrganization
+  const activeOrganization = clientActiveOrganization ?? serverActiveOrganization
 
   const getPlanDisplay = () => {
     if (!subscription) return "No active plan"
@@ -115,7 +120,20 @@ export function OrganizationSwitcher({
   
   const handleOrganizationSwitch = async (orgId: string) => {
     await organization.setActive({ organizationId: orgId })
-    router.push("/")
+    await Promise.all([
+      refetchActiveOrganization(),
+      refetchOrganizations(),
+      queryClient.invalidateQueries(),
+    ])
+
+    const pathSegments = pathname?.split("/") ?? []
+    const restPath = pathSegments.length > 2 ? `/${pathSegments.slice(2).join("/")}` : ""
+    const shouldRedirectToSearchHome = restPath.startsWith("/search/") && restPath.split("/").length > 2
+    const nextPath = shouldRedirectToSearchHome
+      ? `/${orgId}/search`
+      : `/${orgId}${restPath}`
+
+    router.push(nextPath || `/${orgId}`)
   }
 
   const handleRemoveDemo = async () => {
@@ -123,7 +141,7 @@ export function OrganizationSwitcher({
       await removeDemoWorkspaceForCurrentUser()
       router.refresh()
     } catch (e) {
-      console.error("[OrgSwitcher] Failed to remove demo workspace", e)
+      console.error("[OrgSwitcher] Failed to remove demo organization", e)
     }
   }
   
@@ -169,7 +187,7 @@ export function OrganizationSwitcher({
                   key={org.id}
                   onClick={() => handleOrganizationSwitch(org.id)}
                   disabled={org.id === displayOrg.id}
-                  className="gap-2 p-2"
+                  className="gap-2 p-2 cursor-pointer"
                 >
                   <div className="flex size-6 items-center justify-center rounded-sm border">
                     <Image 
@@ -186,19 +204,22 @@ export function OrganizationSwitcher({
                   {org.id === displayOrg.id && (
                     <Icon name="check" className="size-4 text-green-600" />
                   )}
+                  {org.slug === DEMO_ORG_SLUG && (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        void handleRemoveDemo()
+                      }}
+                      className="ml-auto inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      aria-label="Leave demo workspace"
+                    >
+                      <Icon name="trash" className="size-4" />
+                    </button>
+                  )}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuGroup>
-
-            {displayOrg.slug === DEMO_ORG_SLUG && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleRemoveDemo} className="gap-2 p-2 text-destructive">
-                  <Icon name="trash" className="size-4" />
-                  Remove demo workspace
-                </DropdownMenuItem>
-              </>
-            )}
             
           </DropdownMenuContent>
         </DropdownMenu>

@@ -7,6 +7,8 @@ import { subscription, user, organization, member } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { isSubscriptionActive } from "@/lib/subscription";
 import { getSessionWithOrg } from "@/lib/auth-helpers";
+import { getDemoOrgSlug } from "@/lib/demo";
+import { ADMIN_ROLES } from "@/lib/roles";
 import { trackServerEvent } from "@/lib/posthog/track";
 import { Resend } from "resend";
 import { SubscriptionCanceledEmail, SubscriptionActivatedEmail } from "@/emails";
@@ -24,7 +26,7 @@ async function requireBillingAdmin(activeOrgId: string, userId: string) {
   });
 
   const role = memberRecord?.role;
-  if (role !== "owner" && role !== "admin") {
+  if (!role || !ADMIN_ROLES.has(role)) {
     throw new Error("Not authorized");
   }
 }
@@ -231,6 +233,65 @@ export async function getOrganizationSubscription(organizationId: string) {
  * Check if the active organization has a subscription
  */
 export async function requireActiveSubscription() {
+  let activeOrgId: string;
+  let userId: string;
+
+  try {
+    const sessionInfo = await getSessionWithOrg();
+    activeOrgId = sessionInfo.activeOrgId;
+    userId = sessionInfo.userId;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to fetch subscription";
+    if (message.includes("Not authenticated")) {
+      return {
+        hasSubscription: false,
+        shouldRedirect: true,
+        redirectTo: "/auth/signin",
+        error: message,
+      };
+    }
+    return {
+      hasSubscription: false,
+      shouldRedirect: true,
+      redirectTo: message.includes("No active organization") ? "/onboarding" : "/paywall",
+      error: message,
+    };
+  }
+
+  const demoOrg = await db.query.organization.findFirst({
+    where: and(
+      eq(organization.id, activeOrgId),
+      eq(organization.slug, getDemoOrgSlug())
+    ),
+    columns: { id: true },
+  });
+
+  if (demoOrg?.id) {
+    return {
+      hasSubscription: true,
+      shouldRedirect: false,
+      redirectTo: null,
+      error: null,
+    };
+  }
+
+  const activeMember = await db.query.member.findFirst({
+    where: and(
+      eq(member.organizationId, activeOrgId),
+      eq(member.userId, userId)
+    ),
+    columns: { role: true },
+  });
+
+  if (!activeMember?.role || !ADMIN_ROLES.has(activeMember.role)) {
+    return {
+      hasSubscription: true,
+      shouldRedirect: false,
+      redirectTo: null,
+      error: null,
+    };
+  }
+
   const { subscription: orgSubscription, error } = await getUserSubscription();
 
   if (error) {

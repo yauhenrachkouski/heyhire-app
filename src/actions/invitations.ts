@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { getErrorMessage } from "@/lib/handle-error";
 import { revalidatePath } from "next/cache";
+import { getActiveOrgId } from "@/lib/auth-helpers";
 import { z } from "zod";
 import { DISALLOWED_DOMAINS } from "@/lib/constants";
 
@@ -47,8 +48,9 @@ export async function inviteMember(input: InviteMemberInput) {
       headers: await headers(),
     });
 
-    revalidatePath("/organization");
-    revalidatePath("/members");
+    const orgId = validatedInput.organizationId ?? await getActiveOrgId();
+    revalidatePath(`/${orgId}/organization`);
+    revalidatePath(`/${orgId}/members`);
 
     return {
       success: true,
@@ -99,8 +101,9 @@ export async function cancelInvitation(invitationId: string) {
       headers: await headers(),
     });
 
-    revalidatePath("/organization");
-    revalidatePath("/members");
+    const orgId = await getActiveOrgId();
+    revalidatePath(`/${orgId}/organization`);
+    revalidatePath(`/${orgId}/members`);
 
     return {
       success: true,

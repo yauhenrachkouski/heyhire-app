@@ -82,7 +82,7 @@ export async function updateSearchName(
       .set({ name: safeName })
       .where(eq(search.id, searchId));
 
-    revalidatePath("/search");
+    revalidatePath(`/${searchRow.organizationId}/search`);
 
     return { success: true };
   } catch (error) {

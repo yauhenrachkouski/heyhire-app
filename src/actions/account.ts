@@ -188,8 +188,8 @@ export async function updateOrganization(data: {
       })
       .where(eq(orgTable.id, data.organizationId))
 
-    // Revalidate all protected routes to ensure server components get fresh data
-    revalidatePath('/(protected)', 'layout')
+    // Revalidate org layout to ensure server components get fresh data
+    revalidatePath(`/${data.organizationId}`, 'layout')
 
     return { success: true }
   } catch (err) {
@@ -346,7 +346,7 @@ export async function createOrganizationWithSetup(data: {
         body: { organizationId: existingMembership.organizationId }
       })
 
-      revalidatePath('/(protected)', 'layout')
+      revalidatePath(`/${existingMembership.organizationId}`, 'layout')
       revalidatePath('/paywall')
 
       return { success: true, organizationId: existingMembership.organizationId }
@@ -382,7 +382,7 @@ export async function createOrganizationWithSetup(data: {
       body: { organizationId: createResult.id }
     })
 
-    revalidatePath('/(protected)', 'layout')
+    revalidatePath(`/${createResult.id}`, 'layout')
     revalidatePath('/paywall')
 
     console.log('[createOrganizationWithSetup] Organization set as active:', setActiveResult)
@@ -445,7 +445,7 @@ export async function createDefaultOrganization() {
         body: { organizationId: existingMembership.organizationId }
       })
 
-      revalidatePath('/(protected)', 'layout')
+      revalidatePath(`/${existingMembership.organizationId}`, 'layout')
       revalidatePath('/paywall')
 
       return { success: true, organizationId: existingMembership.organizationId }
@@ -478,7 +478,7 @@ export async function createDefaultOrganization() {
       body: { organizationId }
     })
 
-    revalidatePath('/(protected)', 'layout')
+    revalidatePath(`/${organizationId}`, 'layout')
     revalidatePath('/paywall')
 
     return { success: true, organizationId }
@@ -490,4 +490,3 @@ export async function createDefaultOrganization() {
     }
   }
 }
-

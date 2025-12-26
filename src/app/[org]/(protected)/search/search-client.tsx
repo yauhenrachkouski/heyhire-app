@@ -126,8 +126,8 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
 
       // Navigate to results page immediately
       // Don't refresh before push to avoid race conditions
-      console.log("[Search Client] Redirecting to:", `/search/${searchId}`);
-      router.push(`/search/${searchId}`);
+      console.log("[Search Client] Redirecting to:", `/${activeOrg.id}/search/${searchId}`);
+      router.push(`/${activeOrg.id}/search/${searchId}`);
     } catch (error) {
       console.error("[Search Client] Error:", error);
       const errorMessage =

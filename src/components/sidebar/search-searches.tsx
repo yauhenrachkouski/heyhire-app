@@ -72,7 +72,7 @@ export function SearchSearches({ organizationId }: SearchSearchesProps) {
   }, []);
 
   const handleSelect = (searchId: string) => {
-    router.push(`/search/${searchId}`);
+    router.push(`/${organizationId}/search/${searchId}`);
     setQuery("");
     setResults([]);
     setIsOpen(false);
@@ -147,7 +147,6 @@ export function SearchSearches({ organizationId }: SearchSearchesProps) {
     </div>
   );
 }
-
 
 
 

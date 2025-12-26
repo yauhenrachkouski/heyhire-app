@@ -14,9 +14,9 @@ import { handleStripeEvent } from "@/lib/stripe/webhooks";
 import { logger } from "@/lib/axiom/server";
 import { InvitationAcceptedEmail, InvitationEmail, MagicLinkEmail, WelcomeEmail } from "@/emails";
 import { generateId } from "@/lib/id";
+import { ADMIN_ROLES } from "@/lib/roles";
 import { CREDIT_TYPES, getTrialCreditAllocation } from "@/lib/credits";
 import { PLAN_LIMITS } from "@/types/plans";
-import { ensureDemoOrganization } from "@/lib/demo";
 
 
 
@@ -424,7 +424,7 @@ export const auth = betterAuth({
                   ),
                });
 
-               return memberRecord?.role === "owner" || memberRecord?.role === "admin";
+               return memberRecord?.role ? ADMIN_ROLES.has(memberRecord.role) : false;
             },
             onSubscriptionComplete: async ({ subscription, plan }) => {
                log.info("Stripe subscription activated", {
@@ -485,34 +485,8 @@ export const auth = betterAuth({
                }
                return { data: user };
             },
-            after: async (createdUser) => {
-               try {
-                  await db.transaction(async (tx) => {
-                     const demoOrgId = await ensureDemoOrganization(tx);
-
-                     const existingMember = await tx.query.member.findFirst({
-                        where: and(
-                           eq(schema.member.userId, createdUser.id),
-                           eq(schema.member.organizationId, demoOrgId)
-                        ),
-                        columns: { id: true },
-                     });
-
-                     if (existingMember?.id) return;
-
-                     await tx.insert(schema.member).values({
-                        id: generateId(),
-                        organizationId: demoOrgId,
-                        userId: createdUser.id,
-                        role: "viewer",
-                     });
-                  });
-               } catch (error) {
-                  log.error("Failed to add demo org membership on signup", {
-                     userId: createdUser.id,
-                     error,
-                  });
-               }
+            after: async () => {
+               return;
             },
          },
       },

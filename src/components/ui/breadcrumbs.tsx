@@ -2,6 +2,7 @@
 
 import React from "react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -23,6 +24,13 @@ function toTitleCase(str: string): string {
 }
 
 export function Breadcrumbs({ routes = [] }: BreadcrumbsProps) {
+  const pathname = usePathname()
+  const orgSegment = pathname?.split("/")[1]
+  const reservedSegments = new Set(["auth", "onboarding", "paywall", "p", "demo", "api"])
+  const isOrgSegment = orgSegment && !reservedSegments.has(orgSegment)
+  const basePath = isOrgSegment ? `/${orgSegment}` : ""
+  const homePath = isOrgSegment ? basePath : "/"
+
   // If no routes, show Home as current page
   if (routes.length === 0) {
     return (
@@ -44,7 +52,11 @@ export function Breadcrumbs({ routes = [] }: BreadcrumbsProps) {
 
   for (let i = 0; i < routes.length; i++) {
     const route = routes[i]
-    const href = fullHref ? `${fullHref}/${route}` : `/${route}`
+    const href = fullHref
+      ? `${fullHref}/${route}`
+      : basePath
+        ? `${basePath}/${route}`
+        : `/${route}`
     fullHref = href
 
     const label = toTitleCase(route)
@@ -75,7 +87,7 @@ export function Breadcrumbs({ routes = [] }: BreadcrumbsProps) {
         <BreadcrumbList>
           <BreadcrumbItem>
             <BreadcrumbLink asChild>
-              <Link href="/">Home</Link>
+              <Link href={homePath}>Home</Link>
             </BreadcrumbLink>
           </BreadcrumbItem>
           {breadcrumbItems}
@@ -90,4 +102,3 @@ export function Breadcrumbs({ routes = [] }: BreadcrumbsProps) {
     </div>
   )
 }
-
