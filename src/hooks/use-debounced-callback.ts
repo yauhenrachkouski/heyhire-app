@@ -6,10 +6,16 @@ import * as React from "react";
 
 import { useCallbackRef } from "@/hooks/use-callback-ref";
 
+type DebouncedCallback<T extends (...args: never[]) => unknown> = ((
+  ...args: Parameters<T>
+) => void) & {
+  cancel: () => void;
+};
+
 export function useDebouncedCallback<T extends (...args: never[]) => unknown>(
   callback: T,
   delay: number,
-) {
+): DebouncedCallback<T> {
   const handleCallback = useCallbackRef(callback);
   const debounceTimerRef = React.useRef(0);
   React.useEffect(
@@ -28,5 +34,8 @@ export function useDebouncedCallback<T extends (...args: never[]) => unknown>(
     [handleCallback, delay],
   );
 
-  return setValue;
+  const debounced = setValue as DebouncedCallback<T>;
+  debounced.cancel = () => window.clearTimeout(debounceTimerRef.current);
+
+  return debounced;
 }

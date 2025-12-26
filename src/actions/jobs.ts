@@ -233,6 +233,7 @@ export async function parseJob(
 ): Promise<ParseQueryResponse & { criteria?: SourcingCriteria }> {
   try {
     console.log("[Search] Parsing job with message:", message);
+    console.log("[Search] API base URL:", API_BASE_URL || "(empty)");
 
     const response = await fetch(`${API_BASE_URL}/api/v3/jobs/parse`, {
       method: "POST",

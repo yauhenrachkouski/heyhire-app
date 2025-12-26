@@ -103,7 +103,7 @@ function BottomToolbar({
   onGenerateSummary: () => void | Promise<void>;
 }) {
   return (
-    <div className="flex items-center justify-between px-3 pb-3 pt-1 bg-background border-t border-border/10">
+    <div className="flex items-center justify-between px-3 pb-3 pt-1 bg-background border-t border-border/30">
       <div className="flex items-center gap-1">
         <TooltipProvider>
           <Tooltip>
@@ -525,6 +525,8 @@ export function SearchInput({
   const [summaryIsLoading, setSummaryIsLoading] = useState(false);
   const [parsedCriteria, setParsedCriteria] = useState<SourcingCriteria | null>(null);
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
+  const criteriaScrollRef = useRef<HTMLDivElement | null>(null);
+  const activeGroupRef = useRef<string | null>(null);
   const [booleanSearch, setBooleanSearch] = useState("");
   const [activePanel, setActivePanel] = useState<"criteria" | "summary" | null>(null);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
@@ -769,22 +771,33 @@ export function SearchInput({
 
   const debouncedParse = useDebouncedCallback(handleParse, 800);
 
+  const resetParsedState = () => {
+    setBooleanSearch("");
+    setParsedQuery(null);
+    setOriginalParsedQuery(null);
+    setSummaryMarkdown(null);
+    setParsedCriteria(null);
+    setActivePanel(null);
+    setActiveGroup(null);
+    setScenarios([]);
+    setSelectedScenarios([]);
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setQuery(value);
     onQueryTextChange?.(value);
 
+    if (!value.trim()) {
+      debouncedParse.cancel();
+      setIsTooLong(false);
+      resetParsedState();
+      return;
+    }
+
     if (value.length > MAX_QUERY_LENGTH) {
       setIsTooLong(true);
-      setBooleanSearch("");
-      setParsedQuery(null);
-      setOriginalParsedQuery(null);
-      setSummaryMarkdown(null);
-      setParsedCriteria(null);
-      setActivePanel(null);
-      setActiveGroup(null);
-      setScenarios([]);
-      setSelectedScenarios([]);
+      resetParsedState();
       return;
     }
 
@@ -1005,6 +1018,51 @@ export function SearchInput({
   const getGroupId = (groupName: string) =>
     `criteria-group-${groupName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 
+  useEffect(() => {
+    activeGroupRef.current = activeGroup;
+  }, [activeGroup]);
+
+  useEffect(() => {
+    if (activePanel !== "criteria") return;
+    if (!criteriaScrollRef.current) return;
+    if (sortedGroups.length === 0) return;
+
+    const viewport = criteriaScrollRef.current.querySelector(
+      '[data-slot="scroll-area-viewport"]'
+    );
+
+    if (!(viewport instanceof HTMLElement)) return;
+
+    const updateActiveGroup = () => {
+      const viewportRect = viewport.getBoundingClientRect();
+      let nextGroup = activeGroupRef.current ?? sortedGroups[0];
+
+      for (const groupName of sortedGroups) {
+        const element = document.getElementById(getGroupId(groupName));
+        if (!element) continue;
+        const offset = element.getBoundingClientRect().top - viewportRect.top;
+        if (offset <= 12) {
+          nextGroup = groupName;
+        } else {
+          break;
+        }
+      }
+
+      if (nextGroup && nextGroup !== activeGroupRef.current) {
+        setActiveGroup(nextGroup);
+      }
+    };
+
+    updateActiveGroup();
+    viewport.addEventListener("scroll", updateActiveGroup, { passive: true });
+    window.addEventListener("resize", updateActiveGroup);
+
+    return () => {
+      viewport.removeEventListener("scroll", updateActiveGroup);
+      window.removeEventListener("resize", updateActiveGroup);
+    };
+  }, [activePanel, sortedGroups, getGroupId]);
+
   const handleGroupJump = (groupName: string) => {
     setActiveGroup(groupName);
     const element = document.getElementById(getGroupId(groupName));
@@ -1131,7 +1189,7 @@ export function SearchInput({
                   ) : (
                     <div className="grid grid-cols-[180px_1fr] items-stretch gap-4">
                       <div className="h-full border-r border-border/50 pr-3">
-                        <ScrollArea className="max-h-[320px] pr-2">
+                        <ScrollArea className="h-[320px] pr-2">
                           <div className="space-y-2">
                             {sortedGroups.map((groupName) => (
                               <button
@@ -1156,18 +1214,22 @@ export function SearchInput({
                           </div>
                         </ScrollArea>
                       </div>
-                      <ScrollArea className="max-h-[320px] pr-2">
-                        <ScenarioGroupList
-                          sortedGroups={sortedGroups}
-                          groupedScenarios={groupedScenarios}
-                          selectedScenarios={selectedScenarios}
-                          onScenarioToggle={handleScenarioToggle}
-                          onImportanceChange={handleImportanceChange}
-                          getCategoryIcon={getCategoryIcon}
-                          getCategoryDisplayName={getCategoryDisplayName}
-                          getGroupId={getGroupId}
-                        />
-                      </ScrollArea>
+                      <div ref={criteriaScrollRef} className="h-[320px]">
+                        <ScrollArea className="h-[320px] [&_[data-slot=scroll-area-viewport]]:pr-3">
+                          <div className="pr-2">
+                            <ScenarioGroupList
+                              sortedGroups={sortedGroups}
+                              groupedScenarios={groupedScenarios}
+                              selectedScenarios={selectedScenarios}
+                              onScenarioToggle={handleScenarioToggle}
+                              onImportanceChange={handleImportanceChange}
+                              getCategoryIcon={getCategoryIcon}
+                              getCategoryDisplayName={getCategoryDisplayName}
+                              getGroupId={getGroupId}
+                            />
+                          </div>
+                        </ScrollArea>
+                      </div>
                     </div>
                   )}
                 </>

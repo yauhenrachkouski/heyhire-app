@@ -146,11 +146,19 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
     }
   };
 
+  const handleQueryTextChange = (text: string) => {
+    setQueryText(text);
+    if (!text.trim()) {
+      setParsedQuery(null);
+      setSourcingCriteria(null);
+    }
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] w-full max-w-4xl mx-auto px-4 py-12">
+    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] w-full max-w-5xl mx-auto px-4 py-12">
       <div className="w-full flex flex-col items-center gap-8 pb-12">
         {/* Search Box */}
-        <div className="w-full max-w-2xl relative space-y-4">
+        <div className="w-full max-w-3xl relative space-y-4">
           <SearchInput
             onQueryParsed={handleQueryParsed}
             onParsingChange={handleParsingChange}
@@ -158,7 +166,7 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
             isLoading={isSearching}
             hasParsedQuery={!!parsedQuery && !!sourcingCriteria}
             value={queryText}
-            onQueryTextChange={setQueryText}
+            onQueryTextChange={handleQueryTextChange}
             organizationId={activeOrg?.id}
             className="w-full"
           />
