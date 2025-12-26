@@ -1,12 +1,14 @@
 import { db } from "@/db/drizzle";
-import { searchCandidates } from "@/db/schema";
+import { search, searchCandidates } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { realtime } from "@/lib/realtime";
 import type { ParsedQuery } from "@/types/search";
 import { NextResponse } from "next/server";
 import { Receiver } from "@upstash/qstash";
+import { jobParsingResponseV3Schema } from "@/types/search";
 
 const API_BASE_URL = "http://57.131.25.45";
+const USE_V3_SCORING = process.env.SCORING_V3 === "true";
 
 interface CandidateScoringPayload {
   searchId: string;
@@ -59,30 +61,101 @@ export async function POST(request: Request) {
 
     const requestId = `score_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-    // Call the scoring API
-    const response = await fetch(`${API_BASE_URL}/api/v2/candidates/score`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        raw_text: rawText,
-        parsed_with_criteria: parsedQuery,
-        candidate: candidateData,
-        request_id: requestId,
-        candidate_id: candidateId,
-      }),
-    });
+    let result: any;
+    let matchScore: number | undefined;
+    let scoringVersion: string | null = null;
 
-    if (!response.ok) {
-      console.error(`[Scoring] API error for ${candidateId}: ${response.status}`);
-      return NextResponse.json({ success: false, error: `API error: ${response.status}` });
+    if (USE_V3_SCORING) {
+      console.log("[Scoring] Using v3 scoring flow");
+
+      const parseResponse = await fetch(`${API_BASE_URL}/api/v3/jobs/parse`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: rawText }),
+      });
+
+      if (!parseResponse.ok) {
+        console.error(`[Scoring] Parse API error for ${candidateId}: ${parseResponse.status}`);
+        return NextResponse.json({ success: false, error: `Parse API error: ${parseResponse.status}` });
+      }
+
+      const parseData = jobParsingResponseV3Schema.parse(await parseResponse.json());
+
+      await db
+        .update(search)
+        .set({
+          parseResponse: JSON.stringify(parseData),
+          parseSchemaVersion: parseData.schema_version ?? null,
+        })
+        .where(eq(search.id, searchId));
+
+      const calculationResponse = await fetch(`${API_BASE_URL}/api/v3/scoring/scoring/calculation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parseData),
+      });
+
+      if (!calculationResponse.ok) {
+        console.error(`[Scoring] Calculation API error for ${candidateId}: ${calculationResponse.status}`);
+        return NextResponse.json({ success: false, error: `Calculation API error: ${calculationResponse.status}` });
+      }
+
+      const scoringModel = await calculationResponse.json();
+      scoringVersion = scoringModel?.version ?? "v3";
+
+      await db
+        .update(search)
+        .set({
+          scoringModel: JSON.stringify(scoringModel),
+          scoringModelVersion: scoringModel?.version ?? null,
+        })
+        .where(eq(search.id, searchId));
+
+      const evaluateResponse = await fetch(`${API_BASE_URL}/api/v3/scoring/scoring/evaluate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidate_profile: candidateData,
+          scoring_model: scoringModel,
+          strategy_id: null,
+          candidate_id: candidateId,
+        }),
+      });
+
+      if (!evaluateResponse.ok) {
+        console.error(`[Scoring] Evaluate API error for ${candidateId}: ${evaluateResponse.status}`);
+        return NextResponse.json({ success: false, error: `Evaluate API error: ${evaluateResponse.status}` });
+      }
+
+      result = await evaluateResponse.json();
+      matchScore = result?.final_score;
+    } else {
+      // Call the scoring API (v2)
+      const response = await fetch(`${API_BASE_URL}/api/v2/candidates/score`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          raw_text: rawText,
+          parsed_with_criteria: parsedQuery,
+          candidate: candidateData,
+          request_id: requestId,
+          candidate_id: candidateId,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error(`[Scoring] API error for ${candidateId}: ${response.status}`);
+        return NextResponse.json({ success: false, error: `API error: ${response.status}` });
+      }
+
+      result = await response.json();
+      matchScore = result?.match_score;
+      scoringVersion = "v2";
     }
 
-    const result = await response.json();
-    const matchScore = result.match_score;
-
-    if (matchScore === undefined) {
-      console.error(`[Scoring] No match_score in response for ${candidateId}`);
-      return NextResponse.json({ success: false, error: "No match_score in response" });
+    if (matchScore === undefined || matchScore === null) {
+      console.error(`[Scoring] No score in response for ${candidateId}`);
+      return NextResponse.json({ success: false, error: "No score in response" });
     }
 
     // Update database
@@ -91,6 +164,9 @@ export async function POST(request: Request) {
       .set({
         matchScore,
         notes: JSON.stringify(result),
+        scoringResult: JSON.stringify(result),
+        scoringVersion,
+        scoringUpdatedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(searchCandidates.id, searchCandidateId));
@@ -132,8 +208,4 @@ export async function POST(request: Request) {
     );
   }
 }
-
-
-
-
 

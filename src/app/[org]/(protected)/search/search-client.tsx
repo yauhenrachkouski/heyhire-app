@@ -76,6 +76,7 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
       const saveResult = await saveSearch(
         queryText,
         parsedQuery,
+        sourcingCriteria,
         session.user.id,
         activeOrg.id
       );

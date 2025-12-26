@@ -156,6 +156,10 @@ export const search = pgTable("search", {
   name: text("name").notNull(),
   query: text("query").notNull(),
   params: text("params").notNull(),
+  parseResponse: text("parse_response"), // JSON: v3 parse output (criteria + concepts)
+  parseSchemaVersion: integer("parse_schema_version"),
+  scoringModel: text("scoring_model"), // JSON: v3 scoring calculation output
+  scoringModelVersion: text("scoring_model_version"),
   scoringPrompt: text("scoring_prompt"),
   userId: text("user_id")
     .notNull()
@@ -275,6 +279,9 @@ export const searchCandidates = pgTable("search_candidates", {
     .references(() => candidates.id, { onDelete: "cascade" }),
   matchScore: integer("match_score"), // 0-100
   notes: text("notes"), // JSON: { pros: [], cons: [] } or free text
+  scoringResult: text("scoring_result"), // JSON: v3 scoring result
+  scoringVersion: text("scoring_version"),
+  scoringUpdatedAt: timestamp("scoring_updated_at"),
   status: candidateStatusEnum("status").default('new'),
   sourceProvider: text("source_provider"), // strategy name or 'api'
   createdAt: timestamp("created_at").defaultNow().notNull(),

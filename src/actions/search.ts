@@ -5,7 +5,7 @@ import "server-only";
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { headers } from "next/headers";
 import { getErrorMessage } from "@/lib/handle-error";
-import { parsedQuerySchema, type ParsedQuery } from "@/types/search";
+import { parsedQuerySchema, type ParsedQuery, type SourcingCriteria } from "@/types/search";
 import { db } from "@/db/drizzle";
 import { search } from "@/db/schema";
 import { eq, desc, ilike, and } from "drizzle-orm";
@@ -57,6 +57,7 @@ export async function updateSearchName(
 export async function saveSearch(
   queryText: string,
   parsedQuery: ParsedQuery,
+  criteria: SourcingCriteria,
   userId: string,
   organizationId: string
 ): Promise<{ success: boolean; data?: { id: string }; error?: string }> {
@@ -83,6 +84,8 @@ export async function saveSearch(
       name,
       query: queryText,
       params: JSON.stringify(parsedQuery),
+      parseResponse: JSON.stringify(criteria),
+      parseSchemaVersion: criteria.schema_version ?? null,
       userId,
       organizationId,
     });
