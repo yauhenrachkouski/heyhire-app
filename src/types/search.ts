@@ -2,40 +2,66 @@ import { z } from "zod";
 
 // --- Criteria Schemas ---
 
-export const criteriaValueSchema = z.object({
-  val: z.union([z.string(), z.number()]).nullable(),
-  imp: z.enum(["high", "low"]).nullable().optional(),
+export const criterionSchema = z.object({
+  id: z.string(),
+  type: z.enum([
+    "logistics_location",
+    "logistics_work_mode",
+    "language_requirement",
+    "minimum_years_of_experience",
+    "company_constraint",
+    "work_authorization_requirement",
+    "capability_requirement",
+    "domain_requirement",
+    "minimum_relevant_years_of_experience",
+    "tool_requirement",
+    "certification_requirement",
+    "career_signal_constraints",
+  ]),
+  operator: z.enum([
+    "must_include",
+    "must_exclude",
+    "must_be_in_list",
+    "must_not_be_in_list",
+    "greater_than_or_equal",
+    "less_than_or_equal",
+  ]),
+  priority_level: z.enum(["mandatory", "high", "medium", "low"]),
+  value: z.union([
+    z.string(),
+    z.number(),
+    z.array(z.string()),
+    z.record(z.string(), z.any()),
+  ]),
+  concept_id: z.string().nullable().optional(),
 });
 
-export type CriteriaValue = z.infer<typeof criteriaValueSchema>;
+export type Criterion = z.infer<typeof criterionSchema>;
 
-export const sourcingCriteriaSchema = z.object({
-  titles: z.array(criteriaValueSchema).nullable().optional(),
-  seniority: criteriaValueSchema.nullable().optional(),
-  family: criteriaValueSchema.nullable().optional(),
-  empl_type: criteriaValueSchema.nullable().optional(),
-  locs: z.array(criteriaValueSchema).nullable().optional(),
-  inds: z.array(criteriaValueSchema).nullable().optional(),
-  langs: z.array(criteriaValueSchema).nullable().optional(),
-  hard: z.array(criteriaValueSchema).nullable().optional(),
-  tools: z.array(criteriaValueSchema).nullable().optional(),
-  soft: z.array(criteriaValueSchema).nullable().optional(),
-  exp_yrs: criteriaValueSchema.nullable().optional(),
-  edu_lvl: criteriaValueSchema.nullable().optional(),
-  edu_fields: z.array(criteriaValueSchema).nullable().optional(),
-  comp_target: z.array(criteriaValueSchema).nullable().optional(),
-  comp_excl: z.array(criteriaValueSchema).nullable().optional(),
-  univ_target: z.array(criteriaValueSchema).nullable().optional(),
+export const conceptSchema = z.object({
+  display_label: z.string().nullable().optional(),
+  synonyms: z.array(z.string()).optional().default([]),
+  parent_concept_id: z.string().nullable().optional(),
 });
 
-export type SourcingCriteria = z.infer<typeof sourcingCriteriaSchema>;
+export type Concept = z.infer<typeof conceptSchema>;
 
-export const jobParsingResponseSchema = z.object({
+export const jobParsingResponseV3Schema = z.object({
+  schema_version: z.number().optional().default(1),
   project_id: z.string().nullable().optional(),
-  criteria: sourcingCriteriaSchema,
+  criteria: z.array(criterionSchema).default([]),
+  concepts: z.object({}).catchall(conceptSchema).optional().catch({}),
 });
 
-export type JobParsingResponse = z.infer<typeof jobParsingResponseSchema>;
+export type JobParsingResponseV3 = z.infer<typeof jobParsingResponseV3Schema>;
+export type SourcingCriteria = JobParsingResponseV3;
+
+export const jobSummaryResponseSchema = z.object({
+  project_id: z.string().nullable().optional(),
+  summary_markdown: z.string(),
+});
+
+export type JobSummaryResponse = z.infer<typeof jobSummaryResponseSchema>;
 
 // --- Strategy Schemas ---
 

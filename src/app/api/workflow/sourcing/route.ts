@@ -72,7 +72,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       reasoning: unknown;
       strategies: SourcingStrategyItem[];
     }>("generate-strategies", {
-      url: `${API_BASE_URL}/api/v2/strategies/generate`,
+      url: `${API_BASE_URL}/api/v3/strategies/generate`,
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: {
@@ -191,7 +191,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       status: string;
       strategies_launched: number;
     }>("execute-strategies", {
-      url: `${API_BASE_URL}/api/v2/strategies/execute`,
+      url: `${API_BASE_URL}/api/v3/strategies/execute`,
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: {
@@ -296,7 +296,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
         strategies_total?: number;
         error?: string;
       }>(`poll-results-${pollCount}`, {
-        url: `${API_BASE_URL}/api/v2/strategies/results/${taskId}`,
+        url: `${API_BASE_URL}/api/v3/strategies/results/${taskId}`,
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });

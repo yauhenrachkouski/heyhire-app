@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 import posthog from "posthog-js";
 import { Button } from "@/components/ui/button";
 import { 
@@ -32,7 +33,7 @@ import {
   IconTargetArrow,
   IconBan,
 } from "@tabler/icons-react";
-import { parseJob } from "@/actions/jobs";
+import { getJobSummary, parseJob } from "@/actions/jobs";
 import type { ParsedQuery, SourcingCriteria } from "@/types/search";
 import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
 import { cn } from "@/lib/utils";
@@ -48,6 +49,7 @@ import {
 } from "@/components/ui/tooltip";
 import { SearchInterpretation } from "@/components/search/search-interpretation";
 import { toast } from "sonner";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 function RunSearchButton({
   onClick,
@@ -74,8 +76,14 @@ function BottomToolbar({
   showScenarios,
   canToggleScenarios,
   scenariosCount,
+  criteriaCount,
+  canGenerateSummary,
+  summaryIsLoading,
+  isSummaryActive,
+  hasSummary,
   onMicClick,
   onToggleScenarios,
+  onGenerateSummary,
 }: {
   queryLength: number;
   maxQueryLength: number;
@@ -85,8 +93,14 @@ function BottomToolbar({
   showScenarios: boolean;
   canToggleScenarios: boolean;
   scenariosCount: number;
+  criteriaCount: number;
+  canGenerateSummary: boolean;
+  summaryIsLoading: boolean;
+  isSummaryActive: boolean;
+  hasSummary: boolean;
   onMicClick: () => void | Promise<void>;
   onToggleScenarios: () => void;
+  onGenerateSummary: () => void | Promise<void>;
 }) {
   return (
     <div className="flex items-center justify-between px-3 pb-3 pt-1 bg-background border-t border-border/10">
@@ -136,9 +150,44 @@ function BottomToolbar({
           )}
           <span className="font-mono text-sm">Matching criteria</span>
           <Badge className="rounded-full px-1.5 flex items-center justify-center text-[10px] bg-muted text-foreground border border-border">
-            {scenariosCount}
+            {isParsing ? (
+              <IconLoader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              criteriaCount
+            )}
           </Badge>
         </Button>
+
+        {canGenerateSummary || summaryIsLoading || hasSummary ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onGenerateSummary}
+            disabled={!canGenerateSummary || summaryIsLoading}
+            className={cn(
+              "flex items-center gap-2 px-2 py-1.5 h-auto text-sm rounded-md transition-colors",
+              isSummaryActive
+                ? "bg-muted text-foreground font-medium"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted",
+              !canGenerateSummary && "opacity-40 pointer-events-none"
+            )}
+          >
+            {summaryIsLoading ? (
+              <IconLoader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <IconMessage className="h-4 w-4" />
+            )}
+            <span className="font-mono text-sm">Summary</span>
+            {hasSummary ? (
+              <span
+                className="h-2 w-2 rounded-full bg-emerald-500"
+                aria-label="Summary ready"
+                title="Summary ready"
+              />
+            ) : null}
+          </Button>
+        ) : null}
       </div>
 
       <div className="flex items-center gap-3">
@@ -159,6 +208,7 @@ function ScenarioGroupList({
   onImportanceChange,
   getCategoryIcon,
   getCategoryDisplayName,
+  getGroupId,
 }: {
   sortedGroups: string[];
   groupedScenarios: Record<string, Scenario[]>;
@@ -167,13 +217,17 @@ function ScenarioGroupList({
   onImportanceChange: (id: string, importance: "low" | "medium" | "high") => void;
   getCategoryIcon: (category: string) => React.ReactNode;
   getCategoryDisplayName: (category: string) => string;
+  getGroupId: (groupName: string) => string;
 }) {
   return (
-    <div className="space-y-6 overflow-y-auto flex-1 pb-4">
+    <div className="space-y-6 flex-1 pb-4">
       {sortedGroups.map((groupName) => (
-        <div key={groupName} className="space-y-3">
-          <h4 className="text-xs font-bold text-foreground uppercase tracking-wider border-b border-border/30 pb-2">
-            {groupName}
+        <div key={groupName} id={getGroupId(groupName)} className="space-y-3 scroll-mt-4">
+          <h4 className="flex items-center justify-between text-xs font-bold text-foreground uppercase tracking-wider border-b border-border/30 pb-2">
+            <span>{groupName}</span>
+            <span className="rounded-full border border-border/60 bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
+              {groupedScenarios[groupName]?.length ?? 0}
+            </span>
           </h4>
 
           <div className="space-y-2">
@@ -195,7 +249,9 @@ function ScenarioGroupList({
                     <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
                       {getCategoryDisplayName(scenario.category)}
                     </span>
-                    <span className="text-sm font-medium truncate">{scenario.value}</span>
+                    <span className="text-sm font-medium line-clamp-2 break-words">
+                      {scenario.value}
+                    </span>
                   </div>
                 </button>
 
@@ -465,8 +521,12 @@ export function SearchInput({
   const [isTooLong, setIsTooLong] = useState(false);
   const [parsedQuery, setParsedQuery] = useState<ParsedQuery | null>(null);
   const [originalParsedQuery, setOriginalParsedQuery] = useState<ParsedQuery | null>(null);
+  const [summaryMarkdown, setSummaryMarkdown] = useState<string | null>(null);
+  const [summaryIsLoading, setSummaryIsLoading] = useState(false);
+  const [parsedCriteria, setParsedCriteria] = useState<SourcingCriteria | null>(null);
+  const [activeGroup, setActiveGroup] = useState<string | null>(null);
   const [booleanSearch, setBooleanSearch] = useState("");
-  const [showScenarios, setShowScenarios] = useState(false);
+  const [activePanel, setActivePanel] = useState<"criteria" | "summary" | null>(null);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [selectedScenarios, setSelectedScenarios] = useState<string[]>([]);
   const [isTextareaFocused, setIsTextareaFocused] = useState(false);
@@ -634,7 +694,7 @@ export function SearchInput({
     setIsParsing(true);
     onParsingChange?.(true);
     // Close scenarios while parsing
-    setShowScenarios(false);
+    setActivePanel(null);
     
     try {
       const result = await parseJob(searchQuery);
@@ -643,15 +703,18 @@ export function SearchInput({
         onQueryParsed(result.data, searchQuery, result.criteria);
         setParsedQuery(result.data);
         setOriginalParsedQuery(result.data);
+        setSummaryMarkdown(null);
+        setParsedCriteria(result.criteria ?? null);
         
         // Generate scenarios from the parsed query
         const generated = generateScenariosFromQuery(result.data);
         setScenarios(generated);
         setSelectedScenarios(generated.map(s => s.id)); // Select all by default
         
-        // Show scenarios window if we have any
+        // Show criteria panel if we have any
         if (generated.length > 0) {
-          setShowScenarios(true);
+          setActivePanel("criteria");
+          setActiveGroup(generated[0]?.group ?? null);
         }
 
         // Generate boolean search string
@@ -663,6 +726,10 @@ export function SearchInput({
       } else {
         setBooleanSearch("");
         setParsedQuery(null);
+        setSummaryMarkdown(null);
+        setParsedCriteria(null);
+        setActivePanel(null);
+        setActiveGroup(null);
 
         const rawError = result.error || "Failed to parse query";
         console.error("[SearchInput] Parse failed:", rawError);
@@ -687,6 +754,10 @@ export function SearchInput({
     } catch (error) {
       console.error("Search error:", error);
       setBooleanSearch("");
+      setSummaryMarkdown(null);
+      setParsedCriteria(null);
+      setActivePanel(null);
+      setActiveGroup(null);
       toast.error("Error", {
         description: "An unexpected error occurred",
       });
@@ -708,7 +779,10 @@ export function SearchInput({
       setBooleanSearch("");
       setParsedQuery(null);
       setOriginalParsedQuery(null);
-      setShowScenarios(false);
+      setSummaryMarkdown(null);
+      setParsedCriteria(null);
+      setActivePanel(null);
+      setActiveGroup(null);
       setScenarios([]);
       setSelectedScenarios([]);
       return;
@@ -716,6 +790,41 @@ export function SearchInput({
 
     setIsTooLong(false);
     debouncedParse(value);
+  };
+
+  const handleGenerateSummary = async () => {
+    if (!parsedCriteria) {
+      toast.error("Error", {
+        description: "Parse a job description first",
+      });
+      return;
+    }
+
+    setSummaryIsLoading(true);
+    try {
+      const result = await getJobSummary(parsedCriteria, parsedCriteria.project_id ?? null);
+      if (result.success && result.data?.summary_markdown) {
+        setSummaryMarkdown(result.data.summary_markdown);
+        setActivePanel("summary");
+      } else {
+        throw new Error(result.error || "Failed to generate summary");
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to generate summary";
+      toast.error("Summary Error", { description: errorMessage });
+    } finally {
+      setSummaryIsLoading(false);
+    }
+  };
+
+  const handleSummaryClick = async () => {
+    if (summaryMarkdown) {
+      setActivePanel((prev) => (prev === "summary" ? null : "summary"));
+      return;
+    }
+
+    await handleGenerateSummary();
   };
 
   const handleMicClick = async () => {
@@ -791,7 +900,7 @@ export function SearchInput({
         setBooleanSearch("");
         setParsedQuery(null);
         setOriginalParsedQuery(null);
-        setShowScenarios(false);
+        setActivePanel(null);
         setScenarios([]);
         setSelectedScenarios([]);
         return;
@@ -885,10 +994,29 @@ export function SearchInput({
     return indexA - indexB;
   });
 
+  useEffect(() => {
+    if (activePanel !== "criteria") return;
+    if (activeGroup) return;
+    if (sortedGroups.length > 0) {
+      setActiveGroup(sortedGroups[0]);
+    }
+  }, [activePanel, activeGroup, sortedGroups]);
+
+  const getGroupId = (groupName: string) =>
+    `criteria-group-${groupName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+
+  const handleGroupJump = (groupName: string) => {
+    setActiveGroup(groupName);
+    const element = document.getElementById(getGroupId(groupName));
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   return (
     <div
       className={cn("relative group", className)}
-      data-collapsible={showScenarios ? "open" : "icon"}
+      data-collapsible={activePanel ? "open" : "icon"}
     >
       {/* Gradient Tongue Element */}
       <div className="absolute -top-8 left-0 z-0 w-full h-9">
@@ -945,25 +1073,31 @@ export function SearchInput({
 
             
             {/* Bottom Toolbar */}
-            <BottomToolbar
-              queryLength={query.length}
-              maxQueryLength={MAX_QUERY_LENGTH}
-              isTooLong={isTooLong}
-              isRecording={isRecording}
-              isParsing={isParsing}
-              showScenarios={showScenarios}
-              canToggleScenarios={query.trim().length > 0}
-              scenariosCount={scenarios.length}
-              onMicClick={handleMicClick}
-              onToggleScenarios={() => {
-                if (query.trim().length > 0) {
-                  setShowScenarios(!showScenarios);
-                }
-              }}
-            />
+              <BottomToolbar
+                queryLength={query.length}
+                maxQueryLength={MAX_QUERY_LENGTH}
+                isTooLong={isTooLong}
+                isRecording={isRecording}
+                isParsing={isParsing}
+                showScenarios={activePanel === "criteria"}
+                canToggleScenarios={query.trim().length > 0}
+                scenariosCount={scenarios.length}
+                criteriaCount={parsedCriteria?.criteria?.length ?? scenarios.length}
+                canGenerateSummary={!!parsedCriteria}
+                summaryIsLoading={summaryIsLoading}
+                isSummaryActive={activePanel === "summary"}
+                hasSummary={!!summaryMarkdown}
+                onMicClick={handleMicClick}
+                onToggleScenarios={() => {
+                  if (query.trim().length > 0) {
+                    setActivePanel((prev) => (prev === "criteria" ? null : "criteria"));
+                  }
+                }}
+                onGenerateSummary={handleSummaryClick}
+              />
           </div>
 
-          {/* Scenarios List - Grouped */}
+          {/* Scenarios / Summary Panel */}
           <div
             className={cn(
               "bg-muted/10 border-t border-border/50 overflow-hidden",
@@ -973,20 +1107,70 @@ export function SearchInput({
             )}
           >
             <div className="px-4 pb-4 pt-4 flex flex-col max-h-[400px]">
-              {scenarios.length === 0 ? (
-                <div className="flex-1 flex items-center justify-center py-8">
-                  <p className="text-sm text-muted-foreground">There are no job criteria</p>
-                </div>
+              {activePanel === "summary" ? (
+                summaryMarkdown ? (
+                  <div className="rounded-lg border border-border/60 bg-background/70 p-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Summary
+                    </div>
+                    <article className="prose prose-slate max-w-none max-h-[280px] overflow-y-auto pr-2">
+                      <ReactMarkdown>{summaryMarkdown}</ReactMarkdown>
+                    </article>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center py-8">
+                    <p className="text-sm text-muted-foreground">No summary yet</p>
+                  </div>
+                )
               ) : (
-                <ScenarioGroupList
-                  sortedGroups={sortedGroups}
-                  groupedScenarios={groupedScenarios}
-                  selectedScenarios={selectedScenarios}
-                  onScenarioToggle={handleScenarioToggle}
-                  onImportanceChange={handleImportanceChange}
-                  getCategoryIcon={getCategoryIcon}
-                  getCategoryDisplayName={getCategoryDisplayName}
-                />
+                <>
+                  {scenarios.length === 0 ? (
+                    <div className="flex-1 flex items-center justify-center py-8">
+                      <p className="text-sm text-muted-foreground">There are no job criteria</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-[180px_1fr] items-stretch gap-4">
+                      <div className="h-full border-r border-border/50 pr-3">
+                        <ScrollArea className="max-h-[320px] pr-2">
+                          <div className="space-y-2">
+                            {sortedGroups.map((groupName) => (
+                              <button
+                                key={groupName}
+                                type="button"
+                                onClick={() => handleGroupJump(groupName)}
+                                className={cn(
+                                  "w-full text-left text-sm font-medium transition-colors",
+                                  activeGroup === groupName
+                                    ? "text-foreground"
+                                    : "text-muted-foreground hover:text-foreground"
+                                )}
+                              >
+                                <span className="flex items-center justify-between gap-2">
+                                  <span>{groupName}</span>
+                                  <span className="rounded-full border border-border/60 bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
+                                    {groupedScenarios[groupName]?.length ?? 0}
+                                  </span>
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </ScrollArea>
+                      </div>
+                      <ScrollArea className="max-h-[320px] pr-2">
+                        <ScenarioGroupList
+                          sortedGroups={sortedGroups}
+                          groupedScenarios={groupedScenarios}
+                          selectedScenarios={selectedScenarios}
+                          onScenarioToggle={handleScenarioToggle}
+                          onImportanceChange={handleImportanceChange}
+                          getCategoryIcon={getCategoryIcon}
+                          getCategoryDisplayName={getCategoryDisplayName}
+                          getGroupId={getGroupId}
+                        />
+                      </ScrollArea>
+                    </div>
+                  )}
+                </>
               )}
 
               {!hideSearchButton && (
@@ -996,8 +1180,6 @@ export function SearchInput({
           </div>
         </div>
       </div>
-      
-      
     </div>
   );
 }

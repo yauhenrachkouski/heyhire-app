@@ -151,7 +151,15 @@ function isPathActive(currentPathname: string, itemUrl: string): boolean {
   return currentPathname === itemUrl || currentPathname.startsWith(`${itemUrl}/`)
 }
 
-export function AppSidebar({ subscription, organizations, activeOrganization, user, recentSearches = [], ...props }: AppSidebarProps) {
+export function AppSidebar({
+  subscription,
+  organizations,
+  activeOrganization,
+  user,
+  recentSearches = [],
+  trialWarning,
+  ...props
+}: AppSidebarProps) {
   const pathname = usePathname()
   const [supportModalOpen, setSupportModalOpen] = React.useState(false)
   const currentPlan = isPlanId(subscription?.plan) ? subscription.plan : null
@@ -411,7 +419,11 @@ export function AppSidebar({ subscription, organizations, activeOrganization, us
       </SidebarContent>
       <SidebarFooter>
         {activeOrganization && activeOrganization.credits !== undefined && (
-          <CreditBalance credits={activeOrganization.credits} currentPlan={currentPlan} />
+          <CreditBalance
+            credits={activeOrganization.credits}
+            currentPlan={currentPlan}
+            trialWarning={trialWarning}
+          />
         )}
         <SidebarMenu>
           <SidebarMenuItem>

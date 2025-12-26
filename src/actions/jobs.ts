@@ -3,7 +3,8 @@
 import "server-only";
 
 import {
-  jobParsingResponseSchema,
+  jobParsingResponseV3Schema,
+  jobSummaryResponseSchema,
   strategyGenerationResponseSchema,
   strategyExecutionResponseSchema,
   strategyResultsResponseSchema,
@@ -11,7 +12,9 @@ import {
   type ParseQueryResponse,
   type SourcingCriteria,
   type CategoryTag,
-  type CriteriaValue,
+  type Criterion,
+  type Concept,
+  type JobSummaryResponse,
   type StrategyGenerationResponse,
   type StrategyExecutionResponse,
   type StrategyResultsResponse,
@@ -36,178 +39,183 @@ const qstashClient = new Client({
   token: process.env.QSTASH_TOKEN!,
 });
 
-/**
- * Helper to map CriteriaValue array to ParsedQuery field and tags
- */
-function mapCriteriaToField(
-  criteriaList: CriteriaValue[] | null | undefined,
-  category: CategoryTag["category"]
-): { values: string[]; tags: CategoryTag[] } {
-  if (!criteriaList || criteriaList.length === 0) {
-    return { values: [], tags: [] };
+const EXCLUDE_OPERATORS = new Set(["must_exclude", "must_not_be_in_list"]);
+
+function toStringValues(value: unknown): string[] {
+  if (value === null || value === undefined) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" || typeof item === "number" ? String(item) : ""))
+      .filter(Boolean);
   }
+  if (typeof value === "string" || typeof value === "number") {
+    return [String(value)];
+  }
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const languageCode =
+      typeof obj.language_code === "string" ? obj.language_code : undefined;
+    const minimumLevelRaw =
+      (typeof obj.minimum_level === "string" && obj.minimum_level) ||
+      (typeof obj["minimum _level"] === "string" && obj["minimum _level"]);
+    if (languageCode) {
+      const levelSuffix = minimumLevelRaw ? ` (${minimumLevelRaw})` : "";
+      return [`${languageCode}${levelSuffix}`];
+    }
+    const candidate =
+      (typeof obj.name === "string" && obj.name) ||
+      (typeof obj.label === "string" && obj.label) ||
+      (typeof obj.value === "string" && obj.value) ||
+      (typeof obj.title === "string" && obj.title);
+    if (candidate) return [candidate];
+    if (typeof obj.city === "string" && typeof obj.country === "string") {
+      return [`${obj.city}, ${obj.country}`];
+    }
+    return [JSON.stringify(obj)];
+  }
+  return [];
+}
 
-  const values: string[] = [];
-  const tags: CategoryTag[] = [];
+function mapPriorityToImportance(priority: Criterion["priority_level"]): CategoryTag["importance"] {
+  if (priority === "mandatory" || priority === "high") return "high";
+  if (priority === "low") return "low";
+  return "medium";
+}
 
-  for (const item of criteriaList) {
-    if (item.val) {
-      const valStr = String(item.val);
-      values.push(valStr);
-      
-      let importance: "low" | "medium" | "high" = "medium";
-      if (item.imp === "high") importance = "high";
-      if (item.imp === "low") importance = "low";
+function resolveCriterionValues(
+  criterion: Criterion,
+  concepts: Record<string, Concept> | undefined
+): string[] {
+  const concept = criterion.concept_id ? concepts?.[criterion.concept_id] : undefined;
+  const conceptLabel =
+    concept?.display_label && concept.display_label.trim() ? concept.display_label.trim() : "";
+  const values = conceptLabel ? [conceptLabel] : toStringValues(criterion.value);
+  return values.map((value) => value.trim()).filter(Boolean);
+}
 
-      tags.push({
-        category,
-        value: valStr,
-        importance,
-      });
+/**
+ * Convert V3 criteria list to ParsedQuery
+ */
+function mapCriteriaToParsedQuery(
+  criteria: Criterion[],
+  concepts: Record<string, Concept> | undefined
+): ParsedQuery {
+  const allTags: CategoryTag[] = [];
+  const titles: string[] = [];
+  const locations: string[] = [];
+  const skills: string[] = [];
+  const industries: string[] = [];
+  const companies: string[] = [];
+  const educations: string[] = [];
+  const years: string[] = [];
+  let remotePreference = "";
+
+  for (const criterion of criteria) {
+    const values = resolveCriterionValues(criterion, concepts);
+    if (values.length === 0) continue;
+
+    const importance = mapPriorityToImportance(criterion.priority_level);
+    const isExclude = EXCLUDE_OPERATORS.has(criterion.operator);
+
+    switch (criterion.type) {
+      case "logistics_location":
+        locations.push(...values);
+        allTags.push(
+          ...values.map((value) => ({ category: "location", value, importance }))
+        );
+        break;
+      case "logistics_work_mode":
+        if (!remotePreference) remotePreference = values[0];
+        break;
+      case "language_requirement":
+        allTags.push(
+          ...values.map((value) => ({ category: "language", value, importance }))
+        );
+        break;
+      case "minimum_years_of_experience":
+      case "minimum_relevant_years_of_experience":
+        years.push(...values);
+        allTags.push(
+          ...values.map((value) => ({ category: "years_of_experience", value, importance }))
+        );
+        break;
+      case "company_constraint":
+        if (isExclude) {
+          allTags.push(
+            ...values.map((value) => ({ category: "excluded_company", value, importance }))
+          );
+        } else {
+          companies.push(...values);
+          allTags.push(
+            ...values.map((value) => ({ category: "company", value, importance }))
+          );
+        }
+        break;
+      case "capability_requirement":
+        skills.push(...values);
+        allTags.push(
+          ...values.map((value) => ({ category: "hard_skills", value, importance }))
+        );
+        break;
+      case "tool_requirement":
+        skills.push(...values);
+        allTags.push(
+          ...values.map((value) => ({ category: "tools", value, importance }))
+        );
+        break;
+      case "domain_requirement":
+        industries.push(...values);
+        allTags.push(
+          ...values.map((value) => ({ category: "industry", value, importance }))
+        );
+        break;
+      case "certification_requirement":
+        educations.push(...values);
+        allTags.push(
+          ...values.map((value) => ({ category: "education_field", value, importance }))
+        );
+        break;
+      case "career_signal_constraints":
+        titles.push(...values);
+        allTags.push(
+          ...values.map((value) => ({ category: "job_title", value, importance }))
+        );
+        break;
+      default:
+        break;
     }
   }
 
-  return { values, tags };
-}
-
-/**
- * Helper to map single CriteriaValue to ParsedQuery field and tag
- */
-function mapSingleCriteriaToField(
-  criteria: CriteriaValue | null | undefined,
-  category: CategoryTag["category"]
-): { value: string; tag: CategoryTag | null } {
-  if (!criteria || !criteria.val) {
-    return { value: "", tag: null };
-  }
-
-  const valStr = String(criteria.val);
-  
-  let importance: "low" | "medium" | "high" = "medium";
-  if (criteria.imp === "high") importance = "high";
-  if (criteria.imp === "low") importance = "low";
-
-  return {
-    value: valStr,
-    tag: {
-      category,
-      value: valStr,
-      importance,
-    },
+  const toField = (values: string[], operator: "OR" | "AND" = "OR") => {
+    const unique = Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+    if (unique.length === 0) return "";
+    if (unique.length === 1) return unique[0];
+    return { values: unique, operator };
   };
-}
 
-/**
- * Convert SourcingCriteria to ParsedQuery
- */
-function mapCriteriaToParsedQuery(criteria: SourcingCriteria): ParsedQuery {
-  const allTags: CategoryTag[] = [];
-
-  // Job Titles
-  const titlesMap = mapCriteriaToField(criteria.titles, "job_title");
-  allTags.push(...titlesMap.tags);
-
-  // Locations
-  const locsMap = mapCriteriaToField(criteria.locs, "location");
-  allTags.push(...locsMap.tags);
-
-  // Hard Skills
-  const hardMap = mapCriteriaToField(criteria.hard, "hard_skills");
-  allTags.push(...hardMap.tags);
-
-  // Tools & Technologies
-  const toolsMap = mapCriteriaToField(criteria.tools, "tools");
-  allTags.push(...toolsMap.tags);
-
-  // Soft Skills
-  const softMap = mapCriteriaToField(criteria.soft, "soft_skills");
-  allTags.push(...softMap.tags);
-
-  // Combine all skill values for search query compatibility
-  const allSkillsValues = [...hardMap.values, ...toolsMap.values, ...softMap.values];
-
-  // Industry
-  const indsMap = mapCriteriaToField(criteria.inds, "industry");
-  allTags.push(...indsMap.tags);
-
-  // Company
-  const compTargetMap = mapCriteriaToField(criteria.comp_target, "company");
-  allTags.push(...compTargetMap.tags);
-
-  // Excluded Companies
-  const compExclMap = mapCriteriaToField(criteria.comp_excl, "excluded_company");
-  allTags.push(...compExclMap.tags);
-
-  // Education Level
-  const eduLvlMap = mapSingleCriteriaToField(criteria.edu_lvl, "education_level");
-  if (eduLvlMap.tag) allTags.push(eduLvlMap.tag);
-  
-  // Education Fields
-  const eduFieldsMap = mapCriteriaToField(criteria.edu_fields, "education_field");
-  allTags.push(...eduFieldsMap.tags);
-  
-  // Target Universities
-  const univTargetMap = mapCriteriaToField(criteria.univ_target, "university");
-  allTags.push(...univTargetMap.tags);
-
-  // Combine education values for search query compatibility
-  const allEduValues = [
-    ...(eduLvlMap.value ? [eduLvlMap.value] : []),
-    ...eduFieldsMap.values,
-    ...univTargetMap.values
-  ];
-
-  // Experience Years
-  const expYrsMap = mapSingleCriteriaToField(criteria.exp_yrs, "years_of_experience");
-  if (expYrsMap.tag) allTags.push(expYrsMap.tag);
-
-  // Seniority
-  const seniorityMap = mapSingleCriteriaToField(criteria.seniority, "seniority");
-  if (seniorityMap.tag) allTags.push(seniorityMap.tag);
-
-  // Job Family
-  const familyMap = mapSingleCriteriaToField(criteria.family, "job_family");
-  if (familyMap.tag) allTags.push(familyMap.tag);
-
-  // Employment Type
-  const emplTypeMap = mapSingleCriteriaToField(criteria.empl_type, "employment_type");
-  if (emplTypeMap.tag) allTags.push(emplTypeMap.tag);
-
-  // Languages
-  const langsMap = mapCriteriaToField(criteria.langs, "language");
-  allTags.push(...langsMap.tags);
+  const yearsValue = (() => {
+    const numeric = years
+      .map((value) => Number.parseFloat(value))
+      .filter((value) => Number.isFinite(value));
+    if (numeric.length > 0) {
+      return String(Math.max(...numeric));
+    }
+    return years[0] || "";
+  })();
 
   return {
-    job_title: titlesMap.values.length > 1 
-      ? { values: titlesMap.values, operator: "OR" } 
-      : titlesMap.values[0] || "",
-    
-    location: locsMap.values.length > 1
-      ? { values: locsMap.values, operator: "OR" }
-      : locsMap.values[0] || "",
-      
-    skills: allSkillsValues.length > 1
-      ? { values: allSkillsValues, operator: "AND" }
-      : allSkillsValues[0] || "",
-
-    industry: indsMap.values.length > 1
-      ? { values: indsMap.values, operator: "OR" }
-      : indsMap.values[0] || "",
-
-    company: compTargetMap.values.length > 1
-      ? { values: compTargetMap.values, operator: "OR" }
-      : compTargetMap.values[0] || "",
-
-    years_of_experience: expYrsMap.value,
-
-    education: allEduValues.length > 1
-      ? { values: allEduValues, operator: "OR" }
-      : allEduValues[0] || "",
+    job_title: toField(titles, "OR"),
+    location: toField(locations, "OR"),
+    skills: toField(skills, "AND"),
+    industry: toField(industries, "OR"),
+    company: toField(companies, "OR"),
+    years_of_experience: yearsValue,
+    education: toField(educations, "OR"),
 
     is_current: null,
     company_size: "",
     revenue_range: "",
-    remote_preference: "",
+    remote_preference: remotePreference,
     funding_types: "",
     founded_year_range: "",
     web_technologies: "",
@@ -218,13 +226,15 @@ function mapCriteriaToParsedQuery(criteria: SourcingCriteria): ParsedQuery {
 
 /**
  * Parse a job description/search query
- * POST /api/v2/jobs/parse
+ * POST /api/v3/jobs/parse
  */
-export async function parseJob(message: string): Promise<ParseQueryResponse & { criteria?: SourcingCriteria }> {
+export async function parseJob(
+  message: string
+): Promise<ParseQueryResponse & { criteria?: SourcingCriteria }> {
   try {
     console.log("[Search] Parsing job with message:", message);
 
-    const response = await fetch(`${API_BASE_URL}/api/v2/jobs/parse`, {
+    const response = await fetch(`${API_BASE_URL}/api/v3/jobs/parse`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -264,15 +274,15 @@ export async function parseJob(message: string): Promise<ParseQueryResponse & { 
     }
     console.log("[Search] Parse response:", JSON.stringify(data, null, 2));
 
-    const validated = jobParsingResponseSchema.parse(data);
-    const parsedQuery = mapCriteriaToParsedQuery(validated.criteria);
+    const validated = jobParsingResponseV3Schema.parse(data);
+    const parsedQuery = mapCriteriaToParsedQuery(validated.criteria, validated.concepts);
     
     console.log("[Search] Mapped ParsedQuery:", JSON.stringify(parsedQuery, null, 2));
 
     return {
       success: true,
       data: parsedQuery,
-      criteria: validated.criteria,
+      criteria: validated,
     };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
@@ -285,8 +295,51 @@ export async function parseJob(message: string): Promise<ParseQueryResponse & { 
 }
 
 /**
+ * Generate a summary of the job profile
+ * POST /api/v3/jobs/summary
+ */
+export async function getJobSummary(
+  message: unknown,
+  projectId?: string | null
+): Promise<{ success: boolean; data?: JobSummaryResponse; error?: string }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v3/jobs/summary`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message,
+        project_id: projectId ?? null,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[Search] Summary API error:", response.status, errorText);
+      throw new Error(`Summary API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const validated = jobSummaryResponseSchema.parse(data);
+
+    return {
+      success: true,
+      data: validated,
+    };
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    console.error("[Search] Error generating summary:", errorMessage);
+    return {
+      success: false,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
  * Generate sourcing strategies from parsed criteria
- * POST /api/v2/strategies/generate
+ * POST /api/v3/strategies/generate
  */
 export async function generateStrategies(
   rawText: string,
@@ -299,7 +352,7 @@ export async function generateStrategies(
     console.log("[Strategy] Criteria:", JSON.stringify(criteria, null, 2));
     console.log("[Strategy] Request ID:", requestId);
 
-    const response = await fetch(`${API_BASE_URL}/api/v2/strategies/generate`, {
+    const response = await fetch(`${API_BASE_URL}/api/v3/strategies/generate`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -339,7 +392,7 @@ export async function generateStrategies(
 
 /**
  * Execute sourcing strategies
- * POST /api/v2/strategies/execute
+ * POST /api/v3/strategies/execute
  */
 export async function executeStrategies(
   projectId: string,
@@ -351,7 +404,7 @@ export async function executeStrategies(
     console.log("[Strategy] Strategies count:", strategies.length);
     console.log("[Strategy] Strategy names:", strategies.map(s => s.name).join(", "));
 
-    const response = await fetch(`${API_BASE_URL}/api/v2/strategies/execute`, {
+    const response = await fetch(`${API_BASE_URL}/api/v3/strategies/execute`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -391,7 +444,7 @@ export async function executeStrategies(
 
 /**
  * Poll for strategy execution results
- * GET /api/v2/strategies/results/{task_id}
+ * GET /api/v3/strategies/results/{task_id}
  */
 export async function getStrategyResults(
   taskId: string
@@ -400,7 +453,7 @@ export async function getStrategyResults(
     console.log("[Strategy] Step 3: Polling for results...");
     console.log("[Strategy] Task ID:", taskId);
 
-    const response = await fetch(`${API_BASE_URL}/api/v2/strategies/results/${taskId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/v3/strategies/results/${taskId}`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
