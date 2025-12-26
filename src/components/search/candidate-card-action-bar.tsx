@@ -5,9 +5,10 @@ import {
   DataTableActionBar,
   DataTableActionBarAction,
 } from "@/components/data-table/data-table-action-bar";
-import { IconDownload } from "@tabler/icons-react";
 import { toast } from "sonner";
 import type { Table } from "@tanstack/react-table";
+import { Separator } from "@/components/ui/separator";
+import { Icon } from "@/components/ui/icon";
 
 interface SelectedCandidate {
   id: string;
@@ -21,6 +22,8 @@ interface CandidateCardActionBarProps {
   selectedIds: string[];
   selectedCandidates: SelectedCandidate[];
   onClearSelection: () => void;
+  onSelectAll?: () => void;
+  isAllSelected?: boolean;
   onEmail?: (ids: string[]) => Promise<void>;
 }
 
@@ -28,6 +31,8 @@ export function CandidateCardActionBar({
   selectedIds,
   selectedCandidates,
   onClearSelection,
+  onSelectAll,
+  isAllSelected = false,
 }: CandidateCardActionBarProps) {
   React.useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -92,19 +97,32 @@ export function CandidateCardActionBar({
       <CustomSelection />
 
       <DataTableActionBarAction
-        tooltip="Export selected"
-        onClick={handleExport}
+        tooltip={isAllSelected ? "All selected" : "Select all"}
+        onClick={onSelectAll}
         size="icon"
+        disabled={isAllSelected || !onSelectAll}
       >
-        <IconDownload />
+        <Icon name="check" size={14} />
       </DataTableActionBarAction>
 
       <DataTableActionBarAction
         tooltip="Clear selection (Esc)"
         onClick={onClearSelection}
+        size="icon"
       >
-        ✕
+        <Icon name="x" size={14} />
       </DataTableActionBarAction>
+
+      <Separator orientation="vertical" className="mx-0.5 h-6" />
+
+      <DataTableActionBarAction
+        tooltip="Export selected"
+        onClick={handleExport}
+        size="icon"
+      >
+        <Icon name="download" size={14} />
+      </DataTableActionBarAction>
+
     </DataTableActionBar>
   );
 }

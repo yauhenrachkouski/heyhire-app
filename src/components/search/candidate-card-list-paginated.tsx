@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useEffect, useRef } from "react";
+import { useCallback, useState, useEffect, useRef, useMemo } from "react";
 import { useReactTable, getCoreRowModel, getPaginationRowModel } from "@tanstack/react-table";
 import posthog from "posthog-js";
 import { CandidateCard } from "./candidate-card";
@@ -134,19 +134,37 @@ export function CandidateCardListPaginated({
     selectedIds.has(c.id)
   );
 
+  const currentCandidateIds = useMemo(
+    () => currentCandidates.map((candidate) => candidate.id),
+    [currentCandidates],
+  );
+  const isAllSelected =
+    currentCandidateIds.length > 0 &&
+    currentCandidateIds.every((id) => selectedIds.has(id));
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      currentCandidateIds.forEach((id) => {
+        next.add(id);
+      });
+      return next;
+    });
+  }, [currentCandidateIds]);
+
   const handleClearSelection = useCallback(() => {
     setSelectedIds(new Set());
   }, []);
 
   // Detect new candidates for animation
-  const currentCandidateIds = new Set(candidates.map(c => c.id));
+  const allCandidateIds = new Set(candidates.map((c) => c.id));
   const newCandidateIds = new Set(
-    [...currentCandidateIds].filter(id => !previousCandidateIdsRef.current.has(id))
+    [...allCandidateIds].filter(id => !previousCandidateIdsRef.current.has(id))
   );
   
   // Update ref with current IDs
   useEffect(() => {
-    previousCandidateIdsRef.current = currentCandidateIds;
+    previousCandidateIdsRef.current = allCandidateIds;
   }, [candidates]);
 
   // Show skeletons if no candidates yet but expecting some
@@ -225,6 +243,8 @@ export function CandidateCardListPaginated({
             location: c.candidate.location,
             linkedinUrl: c.candidate.linkedinUrl,
           }))}
+          onSelectAll={handleSelectAll}
+          isAllSelected={isAllSelected}
           onClearSelection={handleClearSelection}
         />
       )}

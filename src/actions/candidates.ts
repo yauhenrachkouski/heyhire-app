@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db/drizzle";
-import { candidates, searchCandidates, search } from "@/db/schema";
+import { candidates, searchCandidates, search, searchCandidateStrategies } from "@/db/schema";
 import { eq, and, gte, lte, or, isNull, inArray, count, desc, asc } from "drizzle-orm";
 import { generateId } from "@/lib/id";
 import type { CandidateProfile, ParsedQuery } from "@/types/search";
@@ -91,9 +91,13 @@ export async function saveCandidatesFromSearch(
   const candidatesToInsert: Array<typeof candidates.$inferInsert> = [];
   const candidatesToUpdate: Array<{ id: string; data: Partial<typeof candidates.$inferInsert> }> = [];
   const candidateIdMap = new Map<string, string>(); // linkedinUrl -> candidateId
+  const strategyIdsByUrl = new Map<string, string[]>(); // linkedinUrl -> strategy ids
 
   for (const profile of validProfiles) {
     const candidateData = transformCandidateToDb(profile);
+    if (profile.source_strategy_ids?.length) {
+      strategyIdsByUrl.set(profile.linkedinUrl!, profile.source_strategy_ids);
+    }
     const existing = existingByUrl.get(profile.linkedinUrl!);
 
     if (existing) {
@@ -152,7 +156,7 @@ export async function saveCandidatesFromSearch(
   console.log("[Candidates] Fetching existing links for", candidateIdMap.size, "candidates");
   const allCandidateIds = Array.from(candidateIdMap.values());
   
-  let existingLinks: Array<{ candidateId: string }> = [];
+  let existingLinks: Array<{ id: string; candidateId: string }> = [];
   try {
     existingLinks = await db.query.searchCandidates.findMany({
       where: and(
@@ -160,6 +164,7 @@ export async function saveCandidatesFromSearch(
         inArray(searchCandidates.candidateId, allCandidateIds)
       ),
       columns: {
+        id: true,
         candidateId: true,
       },
     });
@@ -170,19 +175,24 @@ export async function saveCandidatesFromSearch(
   }
   
   const existingLinkSet = new Set(existingLinks.map(l => l.candidateId));
+  const searchCandidateIdByCandidate = new Map<string, string>(
+    existingLinks.map((link) => [link.candidateId, link.id])
+  );
 
   // Step 6: Batch insert new search_candidate links
   const linksToInsert: Array<typeof searchCandidates.$inferInsert> = [];
   
   for (const candidateId of allCandidateIds) {
     if (!existingLinkSet.has(candidateId)) {
-      linksToInsert.push({
+      const newLink = {
         id: generateId(),
         searchId,
         candidateId,
         sourceProvider: "api",
         status: "new",
-      });
+      };
+      linksToInsert.push(newLink);
+      searchCandidateIdByCandidate.set(candidateId, newLink.id);
     }
   }
 
@@ -200,6 +210,36 @@ export async function saveCandidatesFromSearch(
   const linked = linksToInsert.length;
   
   console.log("[Candidates] Batch save complete. New:", saved, "Linked:", linked);
+
+  // Step 7: Link search candidates to sourcing strategies
+  const strategyLinks: Array<typeof searchCandidateStrategies.$inferInsert> = [];
+
+  for (const [linkedinUrl, candidateId] of candidateIdMap.entries()) {
+    const strategyIds = strategyIdsByUrl.get(linkedinUrl);
+    if (!strategyIds || strategyIds.length === 0) continue;
+    const searchCandidateId = searchCandidateIdByCandidate.get(candidateId);
+    if (!searchCandidateId) continue;
+
+    for (const strategyId of strategyIds) {
+      strategyLinks.push({
+        id: generateId(),
+        searchCandidateId,
+        strategyId,
+      });
+    }
+  }
+
+  if (strategyLinks.length > 0) {
+    try {
+      await db
+        .insert(searchCandidateStrategies)
+        .values(strategyLinks)
+        .onConflictDoNothing();
+      console.log("[Candidates] Linked", strategyLinks.length, "candidate-strategy pairs");
+    } catch (error) {
+      console.error("[Candidates] Error linking candidate strategies:", error);
+    }
+  }
   
   return { success: true, saved, linked };
 }

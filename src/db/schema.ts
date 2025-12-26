@@ -302,6 +302,19 @@ export const searchCandidates = pgTable("search_candidates", {
   uniqueSearchCandidate: unique().on(table.searchId, table.candidateId),
 }));
 
+export const searchCandidateStrategies = pgTable("search_candidate_strategies", {
+  id: text("id").primaryKey(),
+  searchCandidateId: text("search_candidate_id")
+    .notNull()
+    .references(() => searchCandidates.id, { onDelete: "cascade" }),
+  strategyId: text("strategy_id")
+    .notNull()
+    .references(() => sourcingStrategies.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  uniqueSearchCandidateStrategy: unique().on(table.searchCandidateId, table.strategyId),
+}));
+
 // Relations for Better Auth
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
