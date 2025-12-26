@@ -12,7 +12,7 @@ import { eq, desc, ilike, and } from "drizzle-orm";
 import { generateId } from "@/lib/id";
 import { auth } from "@/lib/auth";
 import { assertNotReadOnlyForOrganization, getSignedInUser, requireOrganizationReadAccess, requireSearchReadAccess } from "@/lib/request-access";
-import { generateSearchName, SEARCH_NAME_MAX_LENGTH } from "@/lib/search-name";
+const SEARCH_NAME_MAX_LENGTH = 50;
 
 const recentSearchesTag = (organizationId: string) =>
   `recent-searches:${organizationId}`;
@@ -75,7 +75,8 @@ export async function saveSearch(
 
     console.log("[Search] Saving search for user:", userId, "org:", organizationId);
     
-    const name = generateSearchName(parsedQuery);
+    const rawName = criteria.search_name?.trim();
+    const name = rawName || "Untitled Search";
     const id = generateId();
     console.log("[Search] Generated new search ID:", id);
     
@@ -86,6 +87,8 @@ export async function saveSearch(
       params: JSON.stringify(parsedQuery),
       parseResponse: JSON.stringify(criteria),
       parseSchemaVersion: criteria.schema_version ?? null,
+      parseError: null,
+      parseUpdatedAt: new Date(),
       userId,
       organizationId,
     });

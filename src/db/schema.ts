@@ -158,8 +158,13 @@ export const search = pgTable("search", {
   params: text("params").notNull(),
   parseResponse: text("parse_response"), // JSON: v3 parse output (criteria + concepts)
   parseSchemaVersion: integer("parse_schema_version"),
+  parseError: text("parse_error"),
+  parseUpdatedAt: timestamp("parse_updated_at"),
   scoringModel: text("scoring_model"), // JSON: v3 scoring calculation output
   scoringModelVersion: text("scoring_model_version"),
+  scoringModelId: text("scoring_model_id"),
+  scoringModelError: text("scoring_model_error"),
+  scoringModelUpdatedAt: timestamp("scoring_model_updated_at"),
   scoringPrompt: text("scoring_prompt"),
   userId: text("user_id")
     .notNull()
@@ -281,7 +286,11 @@ export const searchCandidates = pgTable("search_candidates", {
   notes: text("notes"), // JSON: { pros: [], cons: [] } or free text
   scoringResult: text("scoring_result"), // JSON: v3 scoring result
   scoringVersion: text("scoring_version"),
+  scoringModelId: text("scoring_model_id"),
   scoringUpdatedAt: timestamp("scoring_updated_at"),
+  scoringAttempts: integer("scoring_attempts").default(0),
+  scoringError: text("scoring_error"),
+  scoringErrorAt: timestamp("scoring_error_at"),
   status: candidateStatusEnum("status").default('new'),
   sourceProvider: text("source_provider"), // strategy name or 'api'
   createdAt: timestamp("created_at").defaultNow().notNull(),

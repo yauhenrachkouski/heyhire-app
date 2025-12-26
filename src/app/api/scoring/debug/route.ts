@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db/drizzle";
 import { candidates, search, searchCandidates } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { prepareCandidateForScoring } from "@/actions/scoring";
 import { jobParsingResponseV3Schema } from "@/types/search";
+import { generateId } from "@/lib/id";
 
 const API_BASE_URL = "http://57.131.25.45";
 
@@ -77,63 +78,126 @@ export async function POST(request: Request) {
 
     const candidateProfile = prepareCandidateForScoring(searchCandidate.candidate);
 
-    const parseRequest = { message: searchRecord.query };
-    console.log("[Scoring Debug] Parse request:", parseRequest);
+    const parseStoredJson = (value: string | null) => {
+      if (!value) return null;
+      try {
+        return JSON.parse(value) as unknown;
+      } catch {
+        return null;
+      }
+    };
 
-    const parseResponse = await fetch(`${API_BASE_URL}/api/v3/jobs/parse`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parseRequest),
-    });
+    let parseRaw = parseStoredJson(searchRecord.parseResponse);
+    let parseStatus = 200;
+    let parseData: ReturnType<typeof jobParsingResponseV3Schema.parse> | null = null;
 
-    const parseRaw = await parseResponse.json();
-    console.log("[Scoring Debug] Parse response:", parseRaw);
-
-    if (!parseResponse.ok) {
-      return NextResponse.json(
-        { error: "Parse failed", status: parseResponse.status, response: parseRaw },
-        { status: 502 }
-      );
+    if (parseRaw) {
+      try {
+        parseData = jobParsingResponseV3Schema.parse(parseRaw);
+      } catch (error) {
+        await db
+          .update(search)
+          .set({
+            parseError: error instanceof Error ? error.message : "Invalid parse cache",
+            parseUpdatedAt: new Date(),
+          })
+          .where(eq(search.id, searchId));
+        parseRaw = null;
+      }
     }
 
-    const parseData = jobParsingResponseV3Schema.parse(parseRaw);
+    if (!parseData) {
+      const parseRequest = { message: searchRecord.query };
+      console.log("[Scoring Debug] Parse request:", parseRequest);
+
+      const parseResponse = await fetch(`${API_BASE_URL}/api/v3/jobs/parse`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parseRequest),
+      });
+
+      parseStatus = parseResponse.status;
+      parseRaw = await parseResponse.json();
+      console.log("[Scoring Debug] Parse response:", parseRaw);
+
+      if (!parseResponse.ok) {
+        await db
+          .update(search)
+          .set({
+            parseError: `Parse failed: ${parseResponse.status}`,
+            parseUpdatedAt: new Date(),
+          })
+          .where(eq(search.id, searchId));
+        return NextResponse.json(
+          { error: "Parse failed", status: parseResponse.status, response: parseRaw },
+          { status: 502 }
+        );
+      }
+
+      parseData = jobParsingResponseV3Schema.parse(parseRaw);
+
+      await db
+        .update(search)
+        .set({
+          parseResponse: JSON.stringify(parseRaw),
+          parseSchemaVersion: parseData.schema_version ?? null,
+          parseError: null,
+          parseUpdatedAt: new Date(),
+        })
+        .where(eq(search.id, searchId));
+    }
+
+    let scoringModel = parseStoredJson(searchRecord.scoringModel);
+    let scoringStatus = 200;
+    let scoringModelId = searchRecord.scoringModelId ?? null;
+
+    if (!scoringModel) {
+      console.log("[Scoring Debug] Calculation request:", parseData);
+      const calculationResponse = await fetch(`${API_BASE_URL}/api/v3/scoring/scoring/calculation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parseData),
+      });
+
+      scoringStatus = calculationResponse.status;
+      const calculationRaw = await calculationResponse.json();
+      console.log("[Scoring Debug] Calculation response:", calculationRaw);
+
+      if (!calculationResponse.ok) {
+        await db
+          .update(search)
+          .set({
+            scoringModelError: `Calculation failed: ${calculationResponse.status}`,
+            scoringModelUpdatedAt: new Date(),
+          })
+          .where(eq(search.id, searchId));
+        return NextResponse.json(
+          { error: "Calculation failed", status: calculationResponse.status, response: calculationRaw },
+          { status: 502 }
+        );
+      }
+
+      scoringModel = calculationRaw;
+    }
+
+    if (!scoringModelId) {
+      scoringModelId = generateId();
+    }
 
     await db
       .update(search)
       .set({
-        parseResponse: JSON.stringify(parseRaw),
-        parseSchemaVersion: parseData.schema_version ?? null,
-      })
-      .where(eq(search.id, searchId));
-
-    console.log("[Scoring Debug] Calculation request:", parseData);
-    const calculationResponse = await fetch(`${API_BASE_URL}/api/v3/scoring/scoring/calculation`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parseData),
-    });
-
-    const calculationRaw = await calculationResponse.json();
-    console.log("[Scoring Debug] Calculation response:", calculationRaw);
-
-    if (!calculationResponse.ok) {
-      return NextResponse.json(
-        { error: "Calculation failed", status: calculationResponse.status, response: calculationRaw },
-        { status: 502 }
-      );
-    }
-
-    await db
-      .update(search)
-      .set({
-        scoringModel: JSON.stringify(calculationRaw),
-        scoringModelVersion: calculationRaw?.version ?? null,
+        scoringModel: JSON.stringify(scoringModel),
+        scoringModelVersion: scoringModel?.version ?? null,
+        scoringModelId,
+        scoringModelError: null,
+        scoringModelUpdatedAt: new Date(),
       })
       .where(eq(search.id, searchId));
 
     const evaluateRequest = {
       candidate_profile: candidateProfile,
-      scoring_model: calculationRaw,
+      scoring_model: scoringModel,
       strategy_id: null,
       candidate_id: searchCandidate.candidateId,
     };
@@ -164,7 +228,11 @@ export async function POST(request: Request) {
             : null,
           notes: JSON.stringify(evaluateRaw),
           scoringResult: JSON.stringify(evaluateRaw),
-          scoringVersion: calculationRaw?.version ?? null,
+          scoringVersion: scoringModel?.version ?? null,
+          scoringModelId,
+          scoringError: null,
+          scoringErrorAt: null,
+          scoringAttempts: sql`coalesce(${searchCandidates.scoringAttempts}, 0) + 1`,
           scoringUpdatedAt: new Date(),
           updatedAt: new Date(),
         })
@@ -175,12 +243,12 @@ export async function POST(request: Request) {
       searchId,
       candidateId: searchCandidate.candidate.id,
       parse: {
-        status: parseResponse.status,
+        status: parseStatus,
         body: parseRaw,
       },
       scoringModel: {
-        status: calculationResponse.status,
-        body: calculationRaw,
+        status: scoringStatus,
+        body: scoringModel,
       },
       evaluation: {
         status: evaluateResponse.status,

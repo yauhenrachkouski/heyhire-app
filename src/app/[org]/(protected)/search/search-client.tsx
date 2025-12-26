@@ -11,7 +11,6 @@ import { useSession, useActiveOrganization } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { recentSearchesKeys } from "@/lib/search-query-keys";
-import { generateSearchName } from "@/lib/search-name";
 
 interface SearchClientProps {
   viewMode?: "table" | "cards"; // Kept for compatibility but unused
@@ -89,7 +88,7 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
       console.log("[Search Client] Search saved with ID:", searchId);
 
       // Ensure sidebar recent searches list updates immediately
-      const optimisticName = generateSearchName(parsedQuery);
+      const optimisticName = sourcingCriteria?.search_name?.trim() || "Untitled Search";
 
       if (activeOrg?.id) {
         queryClient.setQueryData(

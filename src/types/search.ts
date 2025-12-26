@@ -49,6 +49,7 @@ export type Concept = z.infer<typeof conceptSchema>;
 export const jobParsingResponseV3Schema = z.object({
   schema_version: z.number().optional().default(1),
   project_id: z.string().nullable().optional(),
+  search_name: z.string().nullable().optional(),
   criteria: z.array(criterionSchema).default([]),
   concepts: z.object({}).catchall(conceptSchema).optional().catch({}),
 });
