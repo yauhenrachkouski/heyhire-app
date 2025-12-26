@@ -1,7 +1,7 @@
 "use client";
 
 import { SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
-import { Icon } from "@/components/ui/icon";
+import { Icon } from "@/components/custom/icon";
 import { PlansModal } from "@/components/sidebar/plans-modal";
 import { formatCreditBalance } from "@/lib/credits";
 import { usePlansModal } from "@/providers/plans-modal-provider";

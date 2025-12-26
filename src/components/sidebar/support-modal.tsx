@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Icon } from "@/components/ui/icon"
+import { Icon } from "@/components/custom/icon"
 import Link from "next/link"
 
 interface SupportModalProps {

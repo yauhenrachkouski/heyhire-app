@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useSidebar } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
-import { Icon } from "@/components/ui/icon";
+import { Icon } from "@/components/custom/icon";
 import { searchSearchesByTitle } from "@/actions/search";
 import { cn } from "@/lib/utils";
 

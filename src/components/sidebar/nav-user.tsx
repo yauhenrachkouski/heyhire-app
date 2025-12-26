@@ -21,7 +21,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { Icon } from "@/components/ui/icon"
+import { Icon } from "@/components/custom/icon"
 import { signOut } from "@/lib/auth-client"
 import Link from "next/link"
 import { useState } from "react"

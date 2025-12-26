@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Icon } from "@/components/ui/icon";
+import { Icon } from "@/components/custom/icon";
 import { inviteMember } from "@/actions/invitations";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";

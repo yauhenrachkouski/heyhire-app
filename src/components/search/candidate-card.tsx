@@ -10,7 +10,7 @@ import {
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ProfileAvatar } from "@/components/ui/profile-avatar";
+import { ProfileAvatar } from "@/components/custom/profile-avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Tooltip,

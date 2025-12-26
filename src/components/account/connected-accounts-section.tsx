@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Icon } from '@/components/ui/icon'
+import { Icon } from '@/components/custom/icon'
 import Image from 'next/image'
 import googleIcon from '@/assets/google-icon.svg'
 import { toast } from 'sonner'

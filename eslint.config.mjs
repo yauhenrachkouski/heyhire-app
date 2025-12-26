@@ -1,4 +1,5 @@
 import js from "@eslint/js";
+import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
 
 export default [
@@ -21,11 +22,16 @@ export default [
         React: "readonly",
       },
     },
+    plugins: {
+      "react-hooks": reactHooks,
+    },
     rules: {
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-unused-vars": "warn",
       "@typescript-eslint/ban-ts-comment": "warn",
       "@typescript-eslint/no-require-imports": "warn",
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
       "prefer-const": "warn",
       "no-empty": "warn",
     },

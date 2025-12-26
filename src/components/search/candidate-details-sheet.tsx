@@ -10,7 +10,7 @@ import {
 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ProfileAvatar } from "@/components/ui/profile-avatar";
+import { ProfileAvatar } from "@/components/custom/profile-avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {

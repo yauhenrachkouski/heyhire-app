@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { organization, useActiveOrganization, useListOrganizations } from "@/lib/auth-client"
-import { Icon } from "@/components/ui/icon"
+import { Icon } from "@/components/custom/icon"
 import {
   DropdownMenu,
   DropdownMenuContent,

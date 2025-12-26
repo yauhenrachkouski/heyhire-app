@@ -31,7 +31,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Icon, IconName } from "@/components/ui/icon"
+import { Icon, IconName } from "@/components/custom/icon"
 import { NavUser } from "@/components/sidebar/nav-user"
 import { SupportModal } from "@/components/sidebar/support-modal"
 import { CreditBalance } from "@/components/sidebar/credit-balance"
