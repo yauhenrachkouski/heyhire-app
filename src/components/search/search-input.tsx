@@ -1215,7 +1215,7 @@ export function SearchInput({
                         </ScrollArea>
                       </div>
                       <div ref={criteriaScrollRef} className="h-[320px]">
-                        <ScrollArea className="h-[320px] [&_[data-slot=scroll-area-viewport]]:pr-3">
+                        <ScrollArea className="h-[320px] [&_[data-slot=scroll-area-viewport]]:pr-1">
                           <div className="pr-2">
                             <ScenarioGroupList
                               sortedGroups={sortedGroups}
