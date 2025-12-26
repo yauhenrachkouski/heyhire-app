@@ -92,8 +92,9 @@ export function InlineFilters({ onScoreRangeChange, onSortChange }: InlineFilter
               aria-label={scoreLabel}
               title={scoreLabel}
             >
-              <IconSparkles className="h-4 w-4 text-purple-500" />
-              <span className="hidden sm:inline">{scoreLabel}</span>
+              <IconSparkles className="h-4 w-4 text-purple-500 mr-2" />
+              <span className="hidden sm:inline mr-2">{scoreLabel}</span>
+              <SelectValue placeholder={scoreLabel} className="hidden" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="0">All Candidates</SelectItem>
@@ -131,8 +132,9 @@ export function InlineFilters({ onScoreRangeChange, onSortChange }: InlineFilter
             aria-label={`Sort: ${sortLabel}`}
             title={`Sort: ${sortLabel}`}
           >
-            <SortIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">{sortLabel}</span>
+            <SortIcon className="h-4 w-4 mr-2" />
+            <span className="hidden sm:inline mr-2">{sortLabel}</span>
+            <SelectValue placeholder={sortLabel} className="hidden" />
           </SelectTrigger>
           <SelectContent align="end">
             <SelectItem value="date-desc">Newest first</SelectItem>
@@ -145,4 +147,3 @@ export function InlineFilters({ onScoreRangeChange, onSortChange }: InlineFilter
     </div>
   );
 }
-
