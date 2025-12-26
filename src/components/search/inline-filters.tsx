@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { IconSparkles, IconSortAscending, IconSortDescending } from "@tabler/icons-react";
+import { cn } from "@/lib/utils";
 
 interface InlineFiltersProps {
   onScoreRangeChange?: (min: number, max: number) => void;
@@ -23,25 +24,23 @@ export function InlineFilters({ onScoreRangeChange, onSortChange }: InlineFilter
   const [sortBy, setSortBy] = useState<string>("date-desc"); // Default: newest first
 
   const scoreLabel = isCustom
-    ? `AI score: ${minScore}+`
+    ? `Score: ${minScore}+`
     : minScore === 0
-      ? "AI score: All"
+      ? "Score: All"
       : minScore === 80
-        ? "AI score: Excellent (80+)"
+        ? "Score: Excellent (80+)"
         : minScore === 70
-          ? "AI score: Good (70+)"
-          : "AI score: Fair (50+)";
+          ? "Score: Good (70+)"
+          : "Score: Fair (50+)";
 
   const sortLabel =
     sortBy === "date-desc"
-      ? "Newest first"
+      ? "Newest"
       : sortBy === "date-asc"
-        ? "Oldest first"
+        ? "Oldest"
         : sortBy === "score-desc"
-          ? "Highest score first"
-          : "Lowest score first";
-
-  const SortIcon = sortBy.endsWith("asc") ? IconSortAscending : IconSortDescending;
+          ? "Highest Score"
+          : "Lowest Score";
 
   // Debounce the API call to avoid too many requests while dragging
   const debouncedScoreChange = useDebouncedCallback((min: number) => {
@@ -81,69 +80,84 @@ export function InlineFilters({ onScoreRangeChange, onSortChange }: InlineFilter
     return minScore.toString();
   };
 
+  const filters = [
+    {
+      id: "score",
+      value: getSelectValue(),
+      onChange: handlePresetChange,
+      icon: IconSparkles,
+      label: scoreLabel,
+      options: [
+        { value: "0", label: "All Candidates" },
+        { value: "80", label: "Excellent (80+)" },
+        { value: "70", label: "Good (70+)" },
+        { value: "50", label: "Fair (50+)" },
+        { value: "custom", label: "Custom Range" },
+      ],
+      extra: isCustom && (
+        <div className="flex items-center gap-3 px-3 border-l h-5 my-auto">
+          <Slider
+            min={0}
+            max={100}
+            step={5}
+            value={[minScore]}
+            onValueChange={handleScoreChange}
+            className="flex-1 w-24"
+          />
+          <span className="text-sm font-medium whitespace-nowrap w-8 text-right tabular-nums">
+            {minScore}+
+          </span>
+        </div>
+      )
+    },
+    {
+      id: "sort",
+      value: sortBy,
+      onChange: handleSortChange,
+      icon: sortBy.endsWith("asc") ? IconSortAscending : IconSortDescending,
+      label: sortLabel,
+      options: [
+        { value: "date-desc", label: "Newest first" },
+        { value: "date-asc", label: "Oldest first" },
+        { value: "score-desc", label: "Highest score first" },
+        { value: "score-asc", label: "Lowest score first" },
+      ],
+      className: "ml-auto"
+    }
+  ];
+
   return (
-    <div className="w-full flex items-center flex-wrap sm:flex-nowrap gap-6">
-      <div className="flex flex-1 items-center flex-wrap gap-4">
-        {/* AI Score Select */}
-        <div className="flex items-center gap-2">
-          <Select value={getSelectValue()} onValueChange={handlePresetChange}>
-            <SelectTrigger
-              className="h-9 px-3 [&>svg:last-child]:hidden"
-              aria-label={scoreLabel}
-              title={scoreLabel}
+    <div className="flex flex-wrap items-center gap-2 w-full">
+      {filters.map((filter) => (
+        <div 
+          key={filter.id} 
+          className={cn(
+            "group flex items-center h-9 rounded-md border border-input bg-transparent shadow-sm hover:bg-accent hover:text-accent-foreground transition-colors",
+            filter.className
+          )}
+        >
+           <Select value={filter.value} onValueChange={filter.onChange}>
+            <SelectTrigger 
+              className={cn(
+                "h-full border-0 bg-transparent shadow-none px-3 gap-2 text-sm font-medium focus:ring-0 w-auto min-w-0 [&>svg:last-child]:hidden",
+                "[&>span]:line-clamp-1"
+              )}
             >
-              <IconSparkles className="h-4 w-4 text-purple-500 mr-2" />
-              <span className="hidden sm:inline mr-2">{scoreLabel}</span>
-              <SelectValue placeholder={scoreLabel} className="hidden" />
+              <filter.icon className="h-4 w-4 text-muted-foreground shrink-0" />
+              <SelectValue>{filter.label}</SelectValue>
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="0">All Candidates</SelectItem>
-              <SelectItem value="80">Excellent (80+)</SelectItem>
-              <SelectItem value="70">Good (70+)</SelectItem>
-              <SelectItem value="50">Fair (50+)</SelectItem>
-              <SelectItem value="custom">Custom</SelectItem>
+            <SelectContent align="start">
+              {filter.options.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
+          
+          {filter.extra}
         </div>
-
-        {/* Fine-tune Slider - only show when Custom is selected */}
-        {isCustom && (
-          <div className="flex items-center gap-3 min-w-[200px]">
-            <Slider
-              min={0}
-              max={100}
-              step={5}
-              value={[minScore]}
-              onValueChange={handleScoreChange}
-              className="flex-1"
-            />
-            <span className="text-sm font-medium whitespace-nowrap min-w-[45px]">
-              {minScore}+
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Sort Select */}
-      <div className="flex items-center gap-2 ml-auto shrink-0">
-        <Select value={sortBy} onValueChange={handleSortChange}>
-          <SelectTrigger
-            className="h-9 px-3 [&>svg:last-child]:hidden"
-            aria-label={`Sort: ${sortLabel}`}
-            title={`Sort: ${sortLabel}`}
-          >
-            <SortIcon className="h-4 w-4 mr-2" />
-            <span className="hidden sm:inline mr-2">{sortLabel}</span>
-            <SelectValue placeholder={sortLabel} className="hidden" />
-          </SelectTrigger>
-          <SelectContent align="end">
-            <SelectItem value="date-desc">Newest first</SelectItem>
-            <SelectItem value="date-asc">Oldest first</SelectItem>
-            <SelectItem value="score-desc">Highest score first</SelectItem>
-            <SelectItem value="score-asc">Lowest score first</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      ))}
     </div>
   );
 }
