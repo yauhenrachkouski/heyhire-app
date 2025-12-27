@@ -50,6 +50,7 @@ type ScoringResult = {
   high_importance_missing?: string[];
   criteria_scores?: ScoringCriterion[];
   reasoning?: ScoringReasoning;
+  candidate_summary?: string | null;
 };
 
 type ScoringData = ScoringResult | null;
@@ -169,6 +170,33 @@ function CandidateScoreDisplay(props: { matchScore: number | null; scoringData: 
   );
 }
 
+function CandidateSummary(props: { matchScore: number | null; scoringData: ScoringData }) {
+  const { matchScore, scoringData } = props;
+  const candidate_summary = scoringData?.candidate_summary;
+
+  if (matchScore === null) {
+    return (
+      <div className="pt-3 border-t border-gray-200">
+        <div className="space-y-2">
+          <div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div>
+          <div className="h-4 bg-gray-200 rounded animate-pulse w-full"></div>
+          <div className="h-4 bg-gray-200 rounded animate-pulse w-5/6"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!candidate_summary) {
+    return null;
+  }
+
+  return (
+    <div className="pt-3 border-t border-gray-200">
+      <p className="text-sm text-gray-700 leading-relaxed">{candidate_summary}</p>
+    </div>
+  );
+}
+
 function CandidateAIScoring(props: { matchScore: number | null; scoringData: ScoringData }) {
   const { matchScore, scoringData } = props;
   const [showAllMissing, setShowAllMissing] = useState(false);
@@ -199,7 +227,7 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
         )} */}
 
         {/* Critical Missing Requirements */}
-        {high_importance_missing && high_importance_missing.length > 0 && (
+        {/* {high_importance_missing && high_importance_missing.length > 0 && (
           <div className="flex gap-2 items-center">
             <IconAlertTriangle className="w-4 h-4 shrink-0 text-destructive" />
             <div className="flex-1 min-w-0">
@@ -229,7 +257,7 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
               </div>
             </div>
           </div>
-        )}
+        )} */}
         
         {/* If matched perfectly/highly, show strengths */}
         {!high_importance_missing?.length && criteria_scores && matchScore >= 75 && (
@@ -400,7 +428,7 @@ export function CandidateCard({
               </div>
               
               {/* Verdict badge under avatar */}
-              {matchScore !== null && (
+              {/* {matchScore !== null && (
                 <Badge
                   variant="outline"
                   className={cn(
@@ -418,6 +446,39 @@ export function CandidateCard({
                     "Weak Match"
                   )}
                 </Badge>
+              )} */}
+              
+              {/* Scoring Bars under avatar */}
+              {matchScore !== null && scoringData?.criteria_scores && scoringData.criteria_scores.length > 0 && (
+                <div className="flex gap-1.5 items-center justify-center">
+                  {scoringData.criteria_scores.map((c, i) => {
+                    const isHigh = c.importance?.toLowerCase() === 'high' || c.importance?.toLowerCase() === 'mandatory';
+                    const isMedium = c.importance?.toLowerCase() === 'medium';
+                    
+                    return (
+                      <TooltipProvider key={i} delayDuration={0}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div 
+                              className={cn(
+                                "rounded-sm transition-all cursor-help h-4",
+                                c.found 
+                                    ? (isHigh ? "bg-emerald-600 w-1.5" : isMedium ? "bg-emerald-400 w-1.5" : "bg-emerald-200 w-1")
+                                    : (isHigh ? "bg-red-500 w-1.5" : isMedium ? "bg-amber-300 w-1.5" : "bg-slate-200 w-1")
+                              )}
+                            />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs max-w-[200px]">
+                            <div className="font-semibold mb-1 capitalize">
+                              {c.importance} Priority • {c.found ? "Match" : "Missing"}
+                            </div>
+                            <div>{c.criterion}</div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    );
+                  })}
+                </div>
               )}
             </div>
 
@@ -438,43 +499,13 @@ export function CandidateCard({
             </div>
           </div>
 
-          {/* Scoring Bars on top of Analysis */}
-          {matchScore !== null && scoringData?.criteria_scores && scoringData.criteria_scores.length > 0 && (
-            <div className="flex gap-1.5 items-center pt-3">
-              {scoringData.criteria_scores.map((c, i) => {
-                const isHigh = c.importance?.toLowerCase() === 'high' || c.importance?.toLowerCase() === 'mandatory';
-                const isMedium = c.importance?.toLowerCase() === 'medium';
-                
-                return (
-                  <TooltipProvider key={i} delayDuration={0}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div 
-                          className={cn(
-                            "rounded-sm transition-all cursor-help h-4",
-                            c.found 
-                                ? (isHigh ? "bg-emerald-600 w-1.5" : isMedium ? "bg-emerald-400 w-1.5" : "bg-emerald-200 w-1")
-                                : (isHigh ? "bg-red-500 w-1.5" : isMedium ? "bg-amber-300 w-1.5" : "bg-slate-200 w-1")
-                          )}
-                        />
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="text-xs max-w-[200px]">
-                        <div className="font-semibold mb-1 capitalize">
-                          {c.importance} Priority • {c.found ? "Match" : "Missing"}
-                        </div>
-                        <div>{c.criterion}</div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                );
-              })}
-            </div>
-          )}
-
           {/* AI Scoring Analysis */}
           {matchScore !== null && (
             <CandidateAIScoring matchScore={matchScore} scoringData={scoringData} />
           )}
+
+          {/* Candidate Summary */}
+          <CandidateSummary matchScore={matchScore} scoringData={scoringData} />
         </div>
 
         {/* Right column: Vertical Action Buttons */}

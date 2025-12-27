@@ -222,6 +222,7 @@ export const scoreResultSchema = z.object({
   primary_issue: z.string().nullable().optional(),
   total_penalty: z.number(),
   high_importance_missing: z.array(z.string()),
+  candidate_summary: z.string().nullable().optional(),
   reasoning: z.object({
     location_analysis: z.string(),
     title_analysis: z.string(),
