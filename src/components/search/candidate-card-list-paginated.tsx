@@ -192,7 +192,7 @@ export function CandidateCardListPaginated({
               key={candidateId}
               className={`cursor-pointer transition-all rounded-lg ${
                 selectedCandidate?.id === candidateId
-                  && "ring-2 ring-blue-500 ring-offset-0 border-none"
+                  && "ring-2 ring-black ring-offset-0 border-none"
               } ${
                 isNewCandidate 
                   ? "animate-in fade-in slide-in-from-bottom-4 duration-300" 

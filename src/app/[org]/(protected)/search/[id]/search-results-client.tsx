@@ -383,49 +383,33 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
           <div className="space-y-4">
             <div className="space-y-3">
               {/* Inline Filters */}
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <InlineFilters 
-                  onScoreRangeChange={(min, max) => {
-                    posthog.capture('search_filter_applied', {
-                      search_id: search.id,
-                      organization_id: activeOrg?.id,
-                      filter_type: 'score_range',
-                      from_score_min: scoreRange[0],
-                      from_score_max: scoreRange[1],
-                      score_min: min,
-                      score_max: max,
-                    });
-                    setScoreRange([min, max]);
-                  }}
-                  onSortChange={(sort) => {
-                    posthog.capture('search_filter_applied', {
-                      search_id: search.id,
-                      organization_id: activeOrg?.id,
-                      filter_type: 'sort_by',
-                      from_sort_by: sortBy,
-                      sort_by: sort,
-                    });
-                    setSortBy(sort);
-                  }}
-                />
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold">Search results:</h2>
-                {totalCount > 0 && (
-                  <span className="text-sm text-muted-foreground">
-                    {isFiltered ? (
-                      <>
-                        {filteredCount} of {totalCount} people {totalCount === 1 ? 'profile' : 'profiles'}
-                      </>
-                    ) : (
-                      <>
-                        {totalCount} people {totalCount === 1 ? 'profile' : 'profiles'}
-                      </>
-                    )}
-                  </span>
-                )}
-              </div>
+              <InlineFilters 
+                onScoreRangeChange={(min, max) => {
+                  posthog.capture('search_filter_applied', {
+                    search_id: search.id,
+                    organization_id: activeOrg?.id,
+                    filter_type: 'score_range',
+                    from_score_min: scoreRange[0],
+                    from_score_max: scoreRange[1],
+                    score_min: min,
+                    score_max: max,
+                  });
+                  setScoreRange([min, max]);
+                }}
+                onSortChange={(sort) => {
+                  posthog.capture('search_filter_applied', {
+                    search_id: search.id,
+                    organization_id: activeOrg?.id,
+                    filter_type: 'sort_by',
+                    from_sort_by: sortBy,
+                    sort_by: sort,
+                  });
+                  setSortBy(sort);
+                }}
+                totalCount={totalCount}
+                filteredCount={filteredCount}
+                isFiltered={isFiltered}
+              />
             </div>
       
             {/* Results */}

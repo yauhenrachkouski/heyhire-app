@@ -5,14 +5,12 @@ import {
   IconMapPin,
   IconAlertTriangle,
   IconCheck,
-  IconX,
-  IconTargetArrow,
   IconBrain,
-  IconChartBar,
   IconCoin,
-  IconChevronRight
+  IconChevronRight,
+  IconBan
 } from "@tabler/icons-react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProfileAvatar } from "@/components/custom/profile-avatar";
@@ -65,24 +63,19 @@ function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
   }
 }
 
-function CandidateAIScoring(props: { matchScore: number | null; scoringData: ScoringData }) {
+function CandidateScoreDisplay(props: { matchScore: number | null; scoringData: ScoringData }) {
   const { matchScore, scoringData } = props;
 
   if (matchScore === null) {
     return (
-      <div className="flex items-center gap-2 mt-4 text-gray-500 text-xs py-2">
-        <IconLoader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
-        <span>Calculating match score...</span>
+      <div className="flex items-center gap-2 py-2">
+        <IconLoader2 className="h-5 w-5 animate-spin text-gray-400" />
+        <span className="text-xs text-gray-500">Calculating...</span>
       </div>
     );
   }
 
-  const {
-    verdict,
-    primary_issue,
-    high_importance_missing,
-    criteria_scores
-  } = scoringData || {};
+  const { criteria_scores } = scoringData || {};
 
   // Determine score color based on value
   const getScoreColor = (score: number) => {
@@ -103,130 +96,161 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
   const scoreBgColor = getScoreBgColor(matchScore);
 
   return (
-    <div className="mt-4 pt-3 border-t border-dashed border-gray-200">
-      <div className="flex flex-col gap-3">
-        {/* Header: Score + Verdict + Visual Bar */}
-        <div className="flex items-center justify-between gap-4">
-           <div className="flex items-center gap-4">
-             {/* Score with circular progress indicator */}
-             <div className="relative flex items-center justify-center">
-               <div className="relative w-14 h-14">
-                 {/* Circular progress background */}
-                 <svg className="w-14 h-14 transform -rotate-90" viewBox="0 0 56 56">
-                   <circle
-                     cx="28"
-                     cy="28"
-                     r="24"
-                     fill="none"
-                     stroke="currentColor"
-                     strokeWidth="4"
-                     className="text-gray-200"
-                   />
-                   <circle
-                     cx="28"
-                     cy="28"
-                     r="24"
-                     fill="none"
-                     stroke="currentColor"
-                     strokeWidth="4"
-                     strokeLinecap="round"
-                     strokeDasharray={`${2 * Math.PI * 24}`}
-                     strokeDashoffset={`${2 * Math.PI * 24 * (1 - matchScore / 100)}`}
-                     className={cn(scoreBgColor, "transition-all duration-500")}
-                   />
-                 </svg>
-                 {/* Score text overlay */}
-                 <div className="absolute inset-0 flex items-center justify-center">
-                   <span className={cn("text-lg font-bold leading-none", scoreColor)}>
-                     {matchScore}
-                   </span>
-                 </div>
-               </div>
-             </div>
-             
-             {/* Verdict */}
-             <div className="flex items-center">
-               <Badge
-                 variant="outline"
-                 className={cn(
-                   "text-xs px-2 py-0.5",
-                   matchScore >= 80 ? "border-green-200 text-green-700 bg-green-50" :
-                   matchScore >= 60 ? "border-blue-200 text-blue-700 bg-blue-50" :
-                   matchScore >= 40 ? "border-yellow-200 text-yellow-700 bg-yellow-50" :
-                   "border-orange-200 text-orange-700 bg-orange-50"
-                 )}
-               >
-                 {verdict || "Analyzed"}
-               </Badge>
+    <div className="flex items-center gap-3">
+      {/* Score with circular progress indicator */}
+      <div className="relative flex items-center justify-center">
+        <div className="relative w-16 h-16">
+          {/* Circular progress background */}
+          <svg className="w-16 h-16 transform -rotate-90" viewBox="0 0 64 64">
+            <circle
+              cx="32"
+              cy="32"
+              r="28"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="4"
+              className="text-gray-200"
+            />
+            <circle
+              cx="32"
+              cy="32"
+              r="28"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="4"
+              strokeLinecap="round"
+              strokeDasharray={`${2 * Math.PI * 28}`}
+              strokeDashoffset={`${2 * Math.PI * 28 * (1 - matchScore / 100)}`}
+              className={cn(scoreBgColor, "transition-all duration-500")}
+            />
+          </svg>
+          {/* Score text overlay */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className={cn("text-xl font-bold leading-none", scoreColor)}>
+              {matchScore}
+            </span>
+          </div>
+        </div>
+      </div>
+      
+      {/* Horizontal Scoring Bars */}
+      {criteria_scores && criteria_scores.length > 0 && (
+        <div className="flex gap-1.5 items-center">
+          {criteria_scores.map((c, i) => {
+            const isHigh = c.importance?.toLowerCase() === 'high' || c.importance?.toLowerCase() === 'mandatory';
+            const isMedium = c.importance?.toLowerCase() === 'medium';
+            
+            return (
+              <TooltipProvider key={i} delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div 
+                      className={cn(
+                        "rounded-sm transition-all cursor-help h-8",
+                        c.found 
+                            ? (isHigh ? "bg-emerald-600 w-1.5" : isMedium ? "bg-emerald-400 w-1.5" : "bg-emerald-200 w-1")
+                            : (isHigh ? "bg-red-500 w-1.5" : isMedium ? "bg-amber-300 w-1.5" : "bg-slate-200 w-1")
+                      )}
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs max-w-[200px]">
+                    <div className="font-semibold mb-1 capitalize">
+                      {c.importance} Priority • {c.found ? "Match" : "Missing"}
+                    </div>
+                    <div>{c.criterion}</div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CandidateAIScoring(props: { matchScore: number | null; scoringData: ScoringData }) {
+  const { matchScore, scoringData } = props;
+
+  if (matchScore === null) {
+    return null;
+  }
+
+  const {
+    verdict,
+    primary_issue,
+    high_importance_missing,
+    criteria_scores
+  } = scoringData || {};
+
+  return (
+    <div className="pt-3 border-t border-dashed border-gray-200">
+      <div className="flex flex-col gap-2.5 text-xs">
+        {/* Verdict Badge */}
+        {verdict && (
+          <div className="flex items-center gap-2 mb-1">
+            <Badge
+              variant="outline"
+              className="text-xs px-2 py-0.5"
+            >
+              {verdict}
+            </Badge>
+          </div>
+        )}
+
+        {/* Primary Analysis Text */}
+        {primary_issue && (
+          <div className="flex gap-2.5 items-start text-gray-600">
+            <IconBrain className="w-4 h-4 shrink-0 mt-0.5" />
+            <p className="leading-relaxed">
+              <span className="font-semibold text-gray-900">Analysis: </span>
+              {primary_issue}
+            </p>
+          </div>
+        )}
+
+        {/* Critical Missing Requirements */}
+        {high_importance_missing && high_importance_missing.length > 0 && (
+          <div className="flex gap-2.5 items-center">
+            <IconAlertTriangle className="w-4 h-4 shrink-0 text-destructive" />
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap gap-1.5 items-center">
+                <span className="text-xs font-semibold text-gray-900 mr-1">Missing critical: </span>
+                {high_importance_missing.slice(0, 5).map((item, index) => (
+                  <Badge
+                    key={index}
+                    variant="outline"
+                    className="bg-background hover:bg-muted/50 transition-colors font-normal gap-1.5 px-2.5 py-1 text-sm h-7 border-border/60 cursor-default"
+                  >
+                    <IconBan className="size-3.5 shrink-0 text-destructive" />
+                    <span className="truncate max-w-[200px]">{item}</span>
+                  </Badge>
+                ))}
+                {high_importance_missing.length > 5 && (
+                  <Badge
+                    variant="outline"
+                    className="bg-background hover:bg-muted/50 transition-colors font-normal px-2.5 py-1 text-sm h-7 border-border/60 cursor-default"
+                  >
+                    +{high_importance_missing.length - 5} more
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* If matched perfectly/highly, show strengths */}
+        {!high_importance_missing?.length && criteria_scores && matchScore >= 75 && (
+           <div className="flex gap-2.5 items-start">
+             <IconCheck className="w-4 h-4 shrink-0 mt-0.5" />
+             <div className="leading-relaxed">
+                <span className="font-semibold text-gray-900">Key Strengths: </span>
+                <span className="text-gray-600">
+                   {criteria_scores.filter(c => c.found && c.importance === 'high').map(c => c.criterion).slice(0, 5).join(", ")}
+                </span>
              </div>
            </div>
-           
-           {/* Visual Bar for Criteria - Infographic style */}
-           {criteria_scores && (
-             <div className="flex gap-[2px] items-end h-8 pb-1">
-               {criteria_scores.map((c, i) => (
-                 <TooltipProvider key={i} delayDuration={0}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div 
-                        className={cn(
-                          "w-1.5 h-6 rounded-sm transition-all cursor-help",
-                          c.found 
-                              ? (c.importance === 'high' ? "bg-green-500" : "bg-green-400") 
-                              : (c.importance === 'high' ? "bg-gray-300" : "bg-gray-200")
-                        )}
-                      />
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs">
-                      {c.found ? "Matches: " : "Missing: "}{c.criterion}
-                    </TooltipContent>
-                  </Tooltip>
-                 </TooltipProvider>
-               ))}
-             </div>
-           )}
-        </div>
-
-        {/* Content Block: Primary Issue & Gaps - Clean, no heavy bg */}
-        <div className="flex flex-col gap-2.5 text-xs">
-            {/* Primary Analysis Text */}
-            {primary_issue && (
-              <div className="flex gap-2.5 items-start text-gray-600">
-                <IconBrain className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
-                <p className="leading-relaxed">
-                  <span className="font-semibold text-gray-900">Analysis: </span>
-                  {primary_issue}
-                </p>
-              </div>
-            )}
-
-            {/* Critical Missing Requirements */}
-            {high_importance_missing && high_importance_missing.length > 0 && (
-              <div className="flex gap-2.5 items-start">
-                <IconAlertTriangle className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
-                <div className="leading-relaxed">
-                   <span className="font-semibold text-gray-900">Missing critical: </span>
-                   <span className="text-gray-600">
-                      {high_importance_missing.slice(0, 5).join(", ")}
-                      {high_importance_missing.length > 5 && `, +${high_importance_missing.length - 5} more`}
-                   </span>
-                </div>
-              </div>
-            )}
-            
-            {/* If matched perfectly/highly, show strengths */}
-            {!high_importance_missing?.length && criteria_scores && matchScore >= 75 && (
-               <div className="flex gap-2.5 items-start">
-                 <IconCheck className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
-                 <div className="leading-relaxed">
-                    <span className="font-semibold text-gray-900">Key Strengths: </span>
-                    <span className="text-gray-600">
-                       {criteria_scores.filter(c => c.found && c.importance === 'high').map(c => c.criterion).slice(0, 5).join(", ")}
-                    </span>
-                 </div>
-               </div>
-            )}
-        </div>
+        )}
       </div>
     </div>
   );
@@ -306,19 +330,16 @@ export function CandidateCard({
         }
       }}
       className={`group relative rounded-lg border bg-white p-4 transition-all outline-none ${
-        isSelected ? "ring-2 ring-blue-500 border-blue-500" : "border-gray-200"
+        isSelected ? "ring-2 ring-black border-black" : "border-gray-200"
       } ${
         onCardClick
-          ? "cursor-pointer hover:border-blue-400 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+          ? "cursor-pointer hover:border-black focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
           : ""
       }`}
     >
-
-     
-
       <div className="flex gap-4">
         {/* Left column: Checkbox */}
-        <div className="flex items-start pt-1">
+        <div className="flex items-start pt-1 shrink-0">
           <Checkbox
             checked={isSelected}
             onCheckedChange={onSelect}
@@ -339,82 +360,86 @@ export function CandidateCard({
               />
             </div>
 
-            {/* Name, position, location with action buttons */}
-            <div className="flex-1 min-w-0 flex items-start justify-between gap-4">
-              <div className="flex-1 min-w-0 space-y-1.5">
-                <h3 className="text-base font-semibold leading-tight text-gray-900">{fullName}</h3>
-                
-                <p className="text-sm font-medium leading-snug text-gray-700">
-                  {currentRole} {organizationName && `@ ${organizationName}`}
-                </p>
-
-                {locationText && (
-                  <p className="text-xs text-gray-500 inline-flex items-center gap-1 leading-snug">
-                    <IconMapPin className="h-3.5 w-3.5 text-gray-400" />
-                    <span>{locationText}</span>
-                  </p>
-                )}
-              </div>
+            {/* Name, position, location */}
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <h3 className="text-base font-semibold leading-tight text-gray-900">{fullName}</h3>
               
-              {/* Action buttons aligned with name, position, and location */}
-              <div className="flex flex-row gap-2 shrink-0">
-                {/* Primary action: LinkedIn */}
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant="default"
-                        className="font-medium"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openLinkedIn({ candidateId: candidate.id, linkedinUrl: candidate.linkedinUrl });
-                        }}
-                        disabled={isOpeningLinkedIn}
-                      >
-                        {isOpeningLinkedIn ? (
-                          <IconLoader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <IconCoin className="h-4 w-4" />
-                        )}
-                        <span>Open LinkedIn</span>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {isOpeningLinkedIn ? "Opening LinkedIn..." : "1 credit"}
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+              <p className="text-sm font-medium leading-snug text-gray-700">
+                {currentRole} {organizationName && `@ ${organizationName}`}
+              </p>
 
-                {/* Secondary action: View details */}
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-2"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onShowCandidate?.();
-                        }}
-                      >
-                        <span>View details</span>
-                        <IconChevronRight className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Open detailed candidate card</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
+              {locationText && (
+                <p className="text-xs text-gray-500 inline-flex items-center gap-1 leading-snug">
+                  <IconMapPin className="h-3.5 w-3.5" />
+                  <span>{locationText}</span>
+                </p>
+              )}
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* AI Scoring */}
-      <div className="mt-4">
-        <CandidateAIScoring matchScore={matchScore} scoringData={scoringData} />
+          {/* AI Scoring Analysis */}
+          <CandidateAIScoring matchScore={matchScore} scoringData={scoringData} />
+        </div>
+
+        {/* Right column: Score/Bars and Buttons side by side */}
+        <div className="flex items-start gap-3 shrink-0">
+          {/* Score and Scoring Bars */}
+          <div className="flex items-center">
+            <CandidateScoreDisplay matchScore={matchScore} scoringData={scoringData} />
+          </div>
+
+          {/* Vertical Action Buttons */}
+          <div className="flex flex-col gap-2">
+            {/* Primary action: LinkedIn */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="font-medium w-full"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openLinkedIn({ candidateId: candidate.id, linkedinUrl: candidate.linkedinUrl });
+                    }}
+                    disabled={isOpeningLinkedIn}
+                  >
+                    {isOpeningLinkedIn ? (
+                      <IconLoader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <IconCoin className="h-4 w-4" />
+                    )}
+                    <span>Open LinkedIn</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {isOpeningLinkedIn ? "Opening LinkedIn..." : "1 credit"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            {/* Secondary action: View details */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-2 w-full"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onShowCandidate?.();
+                    }}
+                  >
+                    <span>View details</span>
+                    <IconChevronRight className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Open detailed candidate card</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        </div>
       </div>
     </div>
   );
