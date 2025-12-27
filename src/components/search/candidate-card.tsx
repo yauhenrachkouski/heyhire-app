@@ -10,7 +10,7 @@ import {
   IconChevronRight,
   IconBan
 } from "@tabler/icons-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProfileAvatar } from "@/components/custom/profile-avatar";
@@ -171,6 +171,7 @@ function CandidateScoreDisplay(props: { matchScore: number | null; scoringData: 
 
 function CandidateAIScoring(props: { matchScore: number | null; scoringData: ScoringData }) {
   const { matchScore, scoringData } = props;
+  const [showAllMissing, setShowAllMissing] = useState(false);
 
   if (matchScore === null) {
     return null;
@@ -184,54 +185,45 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
   } = scoringData || {};
 
   return (
-    <div className="pt-3 border-t border-dashed border-gray-200">
-      <div className="flex flex-col gap-2.5 text-xs">
-        {/* Verdict Badge */}
-        {verdict && (
-          <div className="flex items-center gap-2 mb-1">
-            <Badge
-              variant="outline"
-              className="text-xs px-2 py-0.5"
-            >
-              {verdict}
-            </Badge>
-          </div>
-        )}
-
+    <div className="pt-3">
+      <div className="flex flex-col gap-2 text-xs">
         {/* Primary Analysis Text */}
-        {primary_issue && (
-          <div className="flex gap-2.5 items-start text-gray-600">
+        {/* {primary_issue && (
+          <div className="flex gap-2 items-start text-gray-600">
             <IconBrain className="w-4 h-4 shrink-0 mt-0.5" />
-            <p className="leading-relaxed">
+            <p className="leading-relaxed text-sm">
               <span className="font-semibold text-gray-900">Analysis: </span>
               {primary_issue}
             </p>
           </div>
-        )}
+        )} */}
 
         {/* Critical Missing Requirements */}
         {high_importance_missing && high_importance_missing.length > 0 && (
-          <div className="flex gap-2.5 items-center">
+          <div className="flex gap-2 items-center">
             <IconAlertTriangle className="w-4 h-4 shrink-0 text-destructive" />
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap gap-1.5 items-center">
                 <span className="text-xs font-semibold text-gray-900 mr-1">Missing critical: </span>
-                {high_importance_missing.slice(0, 5).map((item, index) => (
+                {(showAllMissing ? high_importance_missing : high_importance_missing.slice(0, 5)).map((item, index) => (
                   <Badge
                     key={index}
                     variant="outline"
-                    className="bg-background hover:bg-muted/50 transition-colors font-normal gap-1.5 px-2.5 py-1 text-sm h-7 border-border/60 cursor-default"
+                    className="bg-background hover:bg-muted/50 transition-colors font-normal px-2.5 py-1 text-sm h-7 border-border/60 cursor-default"
                   >
-                    <IconBan className="size-3.5 shrink-0 text-destructive" />
                     <span className="truncate max-w-[200px]">{item}</span>
                   </Badge>
                 ))}
                 {high_importance_missing.length > 5 && (
                   <Badge
                     variant="outline"
-                    className="bg-background hover:bg-muted/50 transition-colors font-normal px-2.5 py-1 text-sm h-7 border-border/60 cursor-default"
+                    className="bg-background hover:bg-muted transition-colors font-normal px-2.5 py-1 text-sm h-7 border-border/60 cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowAllMissing(!showAllMissing);
+                    }}
                   >
-                    +{high_importance_missing.length - 5} more
+                    {showAllMissing ? "Show less" : `+${high_importance_missing.length - 5} more`}
                   </Badge>
                 )}
               </div>
@@ -241,7 +233,7 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
         
         {/* If matched perfectly/highly, show strengths */}
         {!high_importance_missing?.length && criteria_scores && matchScore >= 75 && (
-           <div className="flex gap-2.5 items-start">
+           <div className="flex gap-2 items-start">
              <IconCheck className="w-4 h-4 shrink-0 mt-0.5" />
              <div className="leading-relaxed">
                 <span className="font-semibold text-gray-900">Key Strengths: </span>
@@ -351,13 +343,82 @@ export function CandidateCard({
         {/* Middle column: Profile content */}
         <div className="flex-1 min-w-0">
           <div className="flex gap-4 mb-4">
-            {/* Avatar */}
-            <div className="shrink-0">
-              <ProfileAvatar
-                className="h-16 w-16"
-                fullName={fullName}
-                photoUrl={candidate.photoUrl}
-              />
+            {/* Avatar with integrated score */}
+            <div className="shrink-0 flex flex-col items-center gap-2">
+              <div className="relative w-[72px] h-[72px] flex items-center justify-center">
+                {/* Partial ring showing score percentage - positioned around avatar */}
+                {matchScore !== null && (
+                  <svg className="absolute inset-0 w-full h-full transform -rotate-90" viewBox="0 0 72 72">
+                    {/* Background circle */}
+                    <circle
+                      cx="36"
+                      cy="36"
+                      r="33"
+                      fill="none"
+                      stroke="#e5e7eb"
+                      strokeWidth="3"
+                    />
+                    {/* Score percentage circle */}
+                    <circle
+                      cx="36"
+                      cy="36"
+                      r="33"
+                      fill="none"
+                      stroke={
+                        matchScore >= 80 ? "#16a34a" :
+                        matchScore >= 60 ? "#2563eb" :
+                        matchScore >= 40 ? "#ca8a04" :
+                        "#ea580c"
+                      }
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeDasharray={`${2 * Math.PI * 33}`}
+                      strokeDashoffset={`${2 * Math.PI * 33 * (1 - matchScore / 100)}`}
+                      className="transition-all duration-500"
+                    />
+                  </svg>
+                )}
+                <ProfileAvatar
+                  className="h-16 w-16 relative z-10"
+                  fullName={fullName}
+                  photoUrl={candidate.photoUrl}
+                />
+                {/* Score number overlay on avatar */}
+                {matchScore !== null && (
+                  <div className="absolute bottom-0 right-0 z-20 bg-white rounded-full ring-2 ring-white shadow-sm">
+                    <span className={cn(
+                      "text-xs font-bold px-1.5 py-0.5 block",
+                      matchScore >= 80 ? "text-green-600" :
+                      matchScore >= 60 ? "text-blue-600" :
+                      matchScore >= 40 ? "text-yellow-600" :
+                      "text-orange-600"
+                    )}>
+                      {matchScore}
+                    </span>
+                  </div>
+                )}
+              </div>
+              
+              {/* Verdict badge under avatar */}
+              {matchScore !== null && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-xs px-2 py-0.5 h-5",
+                    matchScore >= 80 ? "border-green-600 text-green-700 bg-green-50" :
+                    matchScore >= 60 ? "border-blue-600 text-blue-700 bg-blue-50" :
+                    matchScore >= 40 ? "border-yellow-600 text-yellow-700 bg-yellow-50" :
+                    "border-orange-600 text-orange-700 bg-orange-50"
+                  )}
+                >
+                  {scoringData?.verdict || (
+                    matchScore >= 80 ? "Strong Match" :
+                    matchScore >= 60 ? "Good Match" :
+                    matchScore >= 40 ? "Fair Match" :
+                    "Weak Match"
+                  )}
+                </Badge>
+              )}
             </div>
 
             {/* Name, position, location */}
@@ -377,18 +438,47 @@ export function CandidateCard({
             </div>
           </div>
 
+          {/* Scoring Bars on top of Analysis */}
+          {matchScore !== null && scoringData?.criteria_scores && scoringData.criteria_scores.length > 0 && (
+            <div className="flex gap-1.5 items-center pt-3">
+              {scoringData.criteria_scores.map((c, i) => {
+                const isHigh = c.importance?.toLowerCase() === 'high' || c.importance?.toLowerCase() === 'mandatory';
+                const isMedium = c.importance?.toLowerCase() === 'medium';
+                
+                return (
+                  <TooltipProvider key={i} delayDuration={0}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div 
+                          className={cn(
+                            "rounded-sm transition-all cursor-help h-4",
+                            c.found 
+                                ? (isHigh ? "bg-emerald-600 w-1.5" : isMedium ? "bg-emerald-400 w-1.5" : "bg-emerald-200 w-1")
+                                : (isHigh ? "bg-red-500 w-1.5" : isMedium ? "bg-amber-300 w-1.5" : "bg-slate-200 w-1")
+                          )}
+                        />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs max-w-[200px]">
+                        <div className="font-semibold mb-1 capitalize">
+                          {c.importance} Priority • {c.found ? "Match" : "Missing"}
+                        </div>
+                        <div>{c.criterion}</div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                );
+              })}
+            </div>
+          )}
+
           {/* AI Scoring Analysis */}
-          <CandidateAIScoring matchScore={matchScore} scoringData={scoringData} />
+          {matchScore !== null && (
+            <CandidateAIScoring matchScore={matchScore} scoringData={scoringData} />
+          )}
         </div>
 
-        {/* Right column: Score/Bars and Buttons side by side */}
-        <div className="flex items-start gap-3 shrink-0">
-          {/* Score and Scoring Bars */}
-          <div className="flex items-center">
-            <CandidateScoreDisplay matchScore={matchScore} scoringData={scoringData} />
-          </div>
-
-          {/* Vertical Action Buttons */}
+        {/* Right column: Vertical Action Buttons */}
+        <div className="flex items-start shrink-0">
           <div className="flex flex-col gap-2">
             {/* Primary action: LinkedIn */}
             <TooltipProvider>

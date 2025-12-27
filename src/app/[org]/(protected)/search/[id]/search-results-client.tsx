@@ -309,7 +309,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
           >
             <h1 
               ref={titleRef}
-              className="text-3xl font-bold max-w-[calc(100%-40px)] truncate"
+              className="text-2 xl font-bold max-w-[calc(100%-40px)] truncate"
               contentEditable={isEditingName && !isReadOnly}
               suppressContentEditableWarning={true} // Suppress React warning for contentEditable
               onBlur={handleSaveName}
