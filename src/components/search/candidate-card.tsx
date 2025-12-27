@@ -1,16 +1,16 @@
 "use client";
 
 import {
-  IconEye,
   IconLoader2,
-  IconExternalLink,
   IconMapPin,
   IconAlertTriangle,
   IconCheck,
   IconX,
   IconTargetArrow,
   IconBrain,
-  IconChartBar
+  IconChartBar,
+  IconBrandLinkedin,
+  IconChevronRight
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -323,8 +323,9 @@ export function CandidateCard({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    size="icon"
-                    variant="outline"
+                    size="sm"
+                    variant="ghost"
+                    className="text-muted-foreground hover:text-foreground"
                     onClick={(e) => {
                       e.stopPropagation();
                       openLinkedIn({ candidateId: candidate.id, linkedinUrl: candidate.linkedinUrl });
@@ -334,8 +335,9 @@ export function CandidateCard({
                     {isOpeningLinkedIn ? (
                       <IconLoader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <IconExternalLink className="h-4 w-4" />
+                      <IconBrandLinkedin className="h-4 w-4" />
                     )}
+                    LinkedIn
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -348,14 +350,14 @@ export function CandidateCard({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    size="icon"
-                    variant="outline"
+                    size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
                       onShowCandidate?.();
                     }}
                   >
-                    <IconEye className="h-4 w-4" />
+                    View
+                    <IconChevronRight className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>View details</TooltipContent>
