@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db/drizzle";
-import { candidates, searchCandidates, search, searchCandidateStrategies } from "@/db/schema";
+import { candidates, searchCandidates, search, searchCandidateStrategies, sourcingStrategies } from "@/db/schema";
 import { eq, and, gte, lte, or, isNull, inArray, count, desc, asc } from "drizzle-orm";
 import { generateId } from "@/lib/id";
 import type { CandidateProfile, ParsedQuery } from "@/types/search";
@@ -212,6 +212,29 @@ export async function saveCandidatesFromSearch(
   console.log("[Candidates] Batch save complete. New:", saved, "Linked:", linked);
 
   // Step 7: Link search candidates to sourcing strategies
+  // First, collect all unique strategy IDs from candidates
+  const allStrategyIds = new Set<string>();
+  for (const strategyIds of strategyIdsByUrl.values()) {
+    strategyIds.forEach(id => allStrategyIds.add(id));
+  }
+
+  // Validate which strategy IDs actually exist in the database
+  let validStrategyIds = new Set<string>();
+  if (allStrategyIds.size > 0) {
+    try {
+      const existingStrategies = await db.query.sourcingStrategies.findMany({
+        where: inArray(sourcingStrategies.id, Array.from(allStrategyIds)),
+        columns: { id: true },
+      });
+      validStrategyIds = new Set(existingStrategies.map(s => s.id));
+      console.log("[Candidates] Found", validStrategyIds.size, "valid strategies out of", allStrategyIds.size, "provided");
+    } catch (error) {
+      console.error("[Candidates] Error fetching valid strategies:", error);
+      // Continue with empty set - won't link any strategies
+    }
+  }
+
+  // Build strategy links only for valid strategy IDs
   const strategyLinks: Array<typeof searchCandidateStrategies.$inferInsert> = [];
 
   for (const [linkedinUrl, candidateId] of candidateIdMap.entries()) {
@@ -220,12 +243,15 @@ export async function saveCandidatesFromSearch(
     const searchCandidateId = searchCandidateIdByCandidate.get(candidateId);
     if (!searchCandidateId) continue;
 
+    // Only link to strategies that exist in the database
     for (const strategyId of strategyIds) {
-      strategyLinks.push({
-        id: generateId(),
-        searchCandidateId,
-        strategyId,
-      });
+      if (validStrategyIds.has(strategyId)) {
+        strategyLinks.push({
+          id: generateId(),
+          searchCandidateId,
+          strategyId,
+        });
+      }
     }
   }
 
@@ -239,6 +265,8 @@ export async function saveCandidatesFromSearch(
     } catch (error) {
       console.error("[Candidates] Error linking candidate strategies:", error);
     }
+  } else if (allStrategyIds.size > 0) {
+    console.log("[Candidates] No valid strategy links to create (0 valid out of", allStrategyIds.size, "provided)");
   }
   
   return { success: true, saved, linked };

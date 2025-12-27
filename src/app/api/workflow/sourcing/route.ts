@@ -513,6 +513,22 @@ export const { POST } = serve<SourcingWorkflowPayload>(
             process.env.NEXT_PUBLIC_APP_URL ||
             (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
             "http://localhost:3000";
+          // Step 10a: Build scoring model (v3 calculation) once per search
+          const scoringModelUrl = `${baseUrl}/api/scoring/model`;
+          const scoringModelRes = await fetch(scoringModelUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ searchId }),
+          });
+          if (!scoringModelRes.ok) {
+            const text = await scoringModelRes.text();
+            console.error("[Workflow] Error building scoring model:", scoringModelRes.status, text);
+            await realtime.channel(channel).emit("scoring.failed", {
+              error: `Failed to build scoring model: ${scoringModelRes.status}`,
+            });
+            return;
+          }
+
           const scoringUrl = `${baseUrl}/api/workflow/scoring`;
           
           await qstashClient.publishJSON({
@@ -527,6 +543,9 @@ export const { POST } = serve<SourcingWorkflowPayload>(
         } catch (error) {
           console.error("[Workflow] Error triggering scoring:", error);
           // Don't throw - sourcing is complete, scoring failure shouldn't affect that
+          await realtime.channel(channel).emit("scoring.failed", {
+            error: error instanceof Error ? error.message : "Unknown error",
+          });
         }
       });
     }

@@ -95,8 +95,8 @@ export async function saveSearch(
     
     console.log("[Search] Search saved with ID:", id);
 
-    revalidateTag(recentSearchesTag(organizationId), 'layout');
-    revalidatePath(`/${organizationId}`, "layout");
+    revalidateTag(recentSearchesTag(organizationId), 'max');
+    revalidatePath(`/${organizationId}`);
     
     return {
       success: true,

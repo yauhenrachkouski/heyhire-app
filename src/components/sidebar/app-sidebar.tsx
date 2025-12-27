@@ -176,10 +176,12 @@ export function AppSidebar({
   }
 
   const recentSearchLimit = 10
+  const queryKey = activeOrganization?.id
+    ? recentSearchesKeys.list(activeOrganization.id, recentSearchLimit)
+    : recentSearchesKeys.all
+
   const { data: sidebarRecentSearches = [], isLoading: recentSearchesLoading } = useQuery({
-    queryKey: activeOrganization?.id
-      ? recentSearchesKeys.list(activeOrganization.id, recentSearchLimit)
-      : recentSearchesKeys.all,
+    queryKey,
     queryFn: async () => {
       if (!activeOrganization?.id) return []
       const url = new URL("/api/search/recent", window.location.origin)
@@ -193,12 +195,12 @@ export function AppSidebar({
       return payload.data ?? []
     },
     enabled: !!activeOrganization?.id,
-    initialData: recentSearches,
-    initialDataUpdatedAt: recentSearches.length > 0 ? Date.now() : 0,
-    staleTime: 10 * 1000, // Consider data stale after 10 seconds
-    gcTime: 30 * 1000, // Keep in cache for 30 seconds after last use
-    refetchOnWindowFocus: true,
-    refetchOnMount: true, // Always refetch when component mounts
+    initialData: recentSearches.length > 0 ? recentSearches : undefined,
+    placeholderData: (previousData) => previousData, // Keep previous data while refetching to prevent flicker
+    staleTime: 0, // Always consider data stale so it refetches when needed
+    gcTime: 60 * 1000, // Keep in cache for 60 seconds after last use
+    refetchOnWindowFocus: true, // Refetch when window regains focus
+    refetchOnMount: true, // Refetch when component mounts if data is stale
   })
 
   return (

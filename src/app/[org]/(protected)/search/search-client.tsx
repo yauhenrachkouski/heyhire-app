@@ -91,29 +91,38 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
       const optimisticName = sourcingCriteria?.search_name?.trim() || "Untitled Search";
 
       if (activeOrg?.id) {
-        queryClient.setQueryData(
-          recentSearchesKeys.list(activeOrg.id, 10),
-          (old: Array<{
-            id: string;
-            name: string;
-            query: string;
-            createdAt: string | Date;
-          }> | undefined) => {
-            const next = [
-              {
-                id: searchId,
-                name: optimisticName,
-                query: queryText,
-                createdAt: new Date(),
-              },
-              ...(old ?? []),
-            ];
-            return next.slice(0, 10);
-          }
-        );
-      }
+        const queryKey = recentSearchesKeys.list(activeOrg.id, 10);
+        
+        // Get current data from cache, or fetch it if not available
+        const currentData = queryClient.getQueryData<Array<{
+          id: string;
+          name: string;
+          query: string;
+          createdAt: string | Date;
+        }>>(queryKey);
 
-      await queryClient.invalidateQueries({ queryKey: recentSearchesKeys.lists() });
+        const newSearch = {
+          id: searchId,
+          name: optimisticName,
+          query: queryText,
+          createdAt: new Date(),
+        };
+
+        // Update with the new search prepended to existing searches
+        const updatedSearches = [
+          newSearch,
+          ...(currentData ?? []),
+        ].slice(0, 10);
+
+        queryClient.setQueryData(queryKey, updatedSearches);
+        
+        // Mark the query as needing a background refetch without forcing immediate refetch
+        // This allows the optimistic update to show while background sync happens
+        queryClient.invalidateQueries({ 
+          queryKey: recentSearchesKeys.lists(),
+          refetchType: 'none' // Don't refetch immediately, just mark as stale
+        });
+      }
 
       if (source === "autorun") {
         posthog.capture('search_autorun_triggered', {

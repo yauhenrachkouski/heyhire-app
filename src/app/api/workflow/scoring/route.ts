@@ -44,6 +44,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Search not found" }, { status: 404 });
     }
 
+    // Scoring model must be built in a previous workflow step via /api/scoring/model
+    if (!searchRecord.scoringModel || !searchRecord.scoringModelId) {
+      return NextResponse.json(
+        { error: "Missing cached scoring model. Call /api/scoring/model first." },
+        { status: 409 }
+      );
+    }
+
     let parsedQuery: ParsedQuery;
     try {
       parsedQuery = JSON.parse(searchRecord.params);

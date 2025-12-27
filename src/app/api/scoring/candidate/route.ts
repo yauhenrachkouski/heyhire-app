@@ -161,15 +161,8 @@ export async function POST(request: Request) {
       }
     }
 
-    if (!scoringModel) {
-      const errorMessage = "Missing cached scoring model";
-      await db
-        .update(search)
-        .set({
-          scoringModelError: errorMessage,
-          scoringModelUpdatedAt: new Date(),
-        })
-        .where(eq(search.id, searchId));
+    if (!scoringModel || !scoringModelId) {
+      const errorMessage = "Missing cached scoring model. Call /api/scoring/model first.";
       await db
         .update(searchCandidates)
         .set({
@@ -179,7 +172,7 @@ export async function POST(request: Request) {
           updatedAt: new Date(),
         })
         .where(eq(searchCandidates.id, searchCandidateId));
-      return NextResponse.json({ success: false, error: errorMessage });
+      return NextResponse.json({ success: false, error: errorMessage }, { status: 409 });
     }
 
     scoringVersion = scoringModel?.version ?? searchRecord.scoringModelVersion ?? "v3";
