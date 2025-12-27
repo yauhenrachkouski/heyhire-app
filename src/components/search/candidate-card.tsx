@@ -4,8 +4,13 @@ import {
   IconEye,
   IconLoader2,
   IconExternalLink,
-  IconSparkles,
   IconMapPin,
+  IconAlertTriangle,
+  IconCheck,
+  IconX,
+  IconTargetArrow,
+  IconBrain,
+  IconChartBar
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -19,6 +24,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useOpenLinkedInWithCredits } from "@/hooks/use-open-linkedin-with-credits";
+import { cn } from "@/lib/utils";
 
 type Skill = string | { name?: string | null };
 type LocationData = { name?: string | null; linkedinText?: string | null; city?: string | null } | null;
@@ -59,69 +65,127 @@ function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
   }
 }
 
-function getMatchScoreClasses(matchScore: number) {
-  if (matchScore >= 80) return "bg-green-100 text-green-700";
-  if (matchScore >= 60) return "bg-yellow-100 text-yellow-700";
-  return "bg-red-100 text-red-700";
-}
-
-function SkillsBadges(props: { skills: Skill[] }) {
-  const { skills } = props;
-  const [expanded, setExpanded] = useState(false);
-
-  if (skills.length === 0) return null;
-
-  const visibleSkills = expanded ? skills : skills.slice(0, 5);
-  return (
-    <div className="flex flex-wrap gap-1.5 mb-4">
-      {visibleSkills.map((skill, index) => (
-        <Badge key={index} variant="secondary" className="text-xs">
-          {typeof skill === "string" ? skill : skill.name}
-        </Badge>
-      ))}
-      {skills.length > 5 && (
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="text-xs text-primary hover:underline"
-        >
-          {expanded ? "Show less" : `+${skills.length - 5} more`}
-        </button>
-      )}
-    </div>
-  );
-}
-
 function CandidateAIScoring(props: { matchScore: number | null; scoringData: ScoringData }) {
   const { matchScore, scoringData } = props;
 
-  const verdict = scoringData?.verdict;
+  if (matchScore === null) {
+    return (
+      <div className="flex items-center gap-2 mt-4 text-muted-foreground text-xs py-2">
+        <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
+        <span>Calculating match score...</span>
+      </div>
+    );
+  }
+
+  const {
+    verdict,
+    primary_issue,
+    high_importance_missing,
+    criteria_scores
+  } = scoringData || {};
+
+  // Determine styles based on score
+  const isHigh = matchScore >= 75;
+  const isMedium = matchScore >= 50 && matchScore < 75;
+  
+  const scoreColor = isHigh ? "text-emerald-600" : isMedium ? "text-amber-600" : "text-rose-600";
+  const borderColor = isHigh ? "border-emerald-200" : isMedium ? "border-amber-200" : "border-rose-200";
 
   return (
-    <div>
-      <div className="flex items-center gap-2">
-        <IconSparkles className="h-4 w-4 text-purple-500" />
-        <span className="text-sm font-medium text-muted-foreground">AI Score:</span>
-
-        {matchScore !== null ? (
-          <div
-            className={`
-              px-2 py-1 rounded-md text-sm font-semibold
-              ${getMatchScoreClasses(matchScore)}
-            `}
-          >
-            {matchScore}
+    <div className="mt-3 pt-3 border-t border-dashed border-border/60">
+      <div className="flex flex-col gap-3">
+        {/* Top Row: Score & Verdict */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+             <div className={cn(
+               "flex flex-col items-center justify-center w-12 h-12 rounded-lg border bg-background/50",
+               borderColor
+             )}>
+                <span className={cn("text-lg font-bold leading-none", scoreColor)}>{matchScore}</span>
+                <span className="text-[10px] text-muted-foreground uppercase">Score</span>
+             </div>
+             
+             <div className="flex flex-col">
+                <div className="flex items-center gap-1.5">
+                   <IconBrain className="w-3.5 h-3.5 text-muted-foreground" />
+                   <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">AI Verdict</span>
+                </div>
+                <span className={cn("text-sm font-semibold", scoreColor)}>
+                  {verdict || "Evaluated"}
+                </span>
+             </div>
           </div>
-        ) : (
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted text-muted-foreground text-sm">
-            <IconLoader2 className="h-3 w-3 animate-spin" />
-            <span>Calculating...</span>
+          
+          {/* Visual Indicator of missing/found */}
+           {criteria_scores && (
+             <div className="flex gap-1">
+               {criteria_scores.filter(c => c.importance === 'high').slice(0, 5).map((c, i) => (
+                 <div 
+                    key={i} 
+                    className={cn(
+                      "w-1.5 h-4 rounded-full",
+                      c.found ? "bg-emerald-400/80" : "bg-rose-300/60"
+                    )}
+                    title={`${c.criterion}: ${c.found ? 'Met' : 'Missing'}`}
+                 />
+               ))}
+             </div>
+           )}
+        </div>
+
+        {/* Primary Insight */}
+        {primary_issue && (
+          <div className="text-xs text-muted-foreground leading-relaxed pl-3 border-l-2 border-amber-400/50 py-0.5">
+            <span className="text-foreground font-medium mr-1">Why not a match?</span>
+            {primary_issue}
           </div>
         )}
 
-        {verdict && (
-          <Badge variant="outline" className="text-xs">
-            {verdict}
-          </Badge>
+        {/* Requirements Gaps or Highlights */}
+        {high_importance_missing && high_importance_missing.length > 0 ? (
+          <div className="space-y-1.5">
+             <div className="flex items-center gap-1.5">
+                <IconTargetArrow className="w-3.5 h-3.5 text-muted-foreground/70" />
+                <span className="text-[11px] font-medium text-muted-foreground uppercase">Missing Critical Requirements</span>
+             </div>
+             <div className="flex flex-wrap gap-1.5">
+                {high_importance_missing.slice(0, 4).map((item, i) => (
+                  <Badge 
+                    key={i} 
+                    variant="outline" 
+                    className="h-5 px-1.5 text-[10px] font-medium text-muted-foreground bg-muted/30 border-border/60 hover:bg-muted/50 rounded-md"
+                  >
+                    {item}
+                  </Badge>
+                ))}
+                {high_importance_missing.length > 4 && (
+                  <span className="text-[10px] text-muted-foreground self-center pl-1">
+                    +{high_importance_missing.length - 4} more
+                  </span>
+                )}
+             </div>
+          </div>
+        ) : (
+          // If match is high, show positive highlights
+          criteria_scores && isHigh && (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                  <IconChartBar className="w-3.5 h-3.5 text-muted-foreground/70" />
+                  <span className="text-[11px] font-medium text-muted-foreground uppercase">Key Strengths</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                  {criteria_scores.filter(c => c.found && c.importance === 'high').slice(0, 3).map((c, i) => (
+                    <Badge 
+                      key={i} 
+                      variant="outline"
+                      className="h-5 px-1.5 text-[10px] font-medium text-emerald-700 bg-emerald-50/50 border-emerald-100 rounded-md"
+                    >
+                      {c.criterion}
+                    </Badge>
+                  ))}
+              </div>
+            </div>
+          )
         )}
       </div>
     </div>
@@ -178,23 +242,6 @@ export function CandidateCard({
   const scoringData = useMemo<ScoringData>(() => {
     return safeJsonParse<ScoringData>(notes, null);
   }, [notes]);
-
-  const {
-    match_score,
-    verdict,
-    primary_issue,
-    high_importance_missing,
-    criteria_scores,
-    reasoning,
-  } = scoringData || {};
-
-  // Suppress unused variable warnings until UI is implemented
-  void match_score;
-  void verdict;
-  void primary_issue;
-  void high_importance_missing;
-  void criteria_scores;
-  void reasoning;
 
   const fullName = candidate.fullName || "Unknown";
   
