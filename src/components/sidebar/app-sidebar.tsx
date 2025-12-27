@@ -195,8 +195,10 @@ export function AppSidebar({
     enabled: !!activeOrganization?.id,
     initialData: recentSearches,
     initialDataUpdatedAt: recentSearches.length > 0 ? Date.now() : 0,
-    staleTime: 30 * 1000,
+    staleTime: 10 * 1000, // Consider data stale after 10 seconds
+    gcTime: 30 * 1000, // Keep in cache for 30 seconds after last use
     refetchOnWindowFocus: true,
+    refetchOnMount: true, // Always refetch when component mounts
   })
 
   return (

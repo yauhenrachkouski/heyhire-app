@@ -64,7 +64,6 @@ type ScoringResult = {
   verdict?: string;
   primary_issue?: string;
   high_importance_missing?: string[];
-  criteria_scores?: ScoringCriterion[];
   concept_scores?: ConceptScore[];
   reasoning?: ScoringReasoning;
   candidate_summary?: string | null;
@@ -103,38 +102,13 @@ function CandidateScoreDisplay(props: {
     return new Map(entries);
   }, [scoringData?.concept_scores]);
 
-  const normalize = (s: string) =>
-    s
-      .toLowerCase()
-      .trim()
-      .replace(/[’']/g, "")
-      .replace(/[^\p{L}\p{N}]+/gu, " ")
-      .replace(/\s+/g, " ");
-
-  const criteriaScores = scoringData?.criteria_scores ?? [];
-  const criteriaScoresByNormalizedCriterion = useMemo(() => {
-    const m = new Map<string, ScoringCriterion>();
-    for (const cs of criteriaScores) {
-      const key = normalize(cs.criterion);
-      if (!key) continue;
-      // If duplicates exist, keep the first one
-      if (!m.has(key)) m.set(key, cs);
-    }
-    return m;
-  }, [criteriaScores]);
-
   const getCriteriaKeyV3 = (criterion: any) => {
-    // v3 parse criteria uses snake_case: concept_id
-    // (but we still guard for accidental camelCase)
-    const conceptId =
-      (criterion?.concept_id as string | undefined) ??
-      (criterion?.conceptId as string | undefined) ??
-      undefined;
-    const id = (criterion?.id as string | undefined) ?? undefined;
-
+    // v3 parse criteria uses snake_case concept_id.
     // v3 scoring uses concept_scores[].concept_id where:
     // - tools/capabilities/languages -> criterion.concept_id
     // - location/experience -> criterion.id
+    const conceptId = (criterion?.concept_id as string | undefined) ?? undefined;
+    const id = (criterion?.id as string | undefined) ?? undefined;
     return conceptId ?? id ?? "";
   };
 
@@ -156,64 +130,6 @@ function CandidateScoreDisplay(props: {
     }
 
     return raw;
-  };
-
-  const getLegacyMatchForCriterion = (criterion: any) => {
-    if (!criteriaScores.length) return null;
-
-    const type = String(criterion?.type ?? "");
-    const rawValue = criterion?.value;
-    const candidates: string[] = [];
-
-    // Prefer exact values first
-    if (Array.isArray(rawValue)) {
-      for (const v of rawValue) {
-        if (typeof v === "string" && v.trim()) candidates.push(v);
-      }
-    } else if (typeof rawValue === "string" && rawValue.trim()) {
-      candidates.push(rawValue);
-    }
-
-    // Experience often appears like "2+ years of experience" in legacy scoring
-    if (type.includes("minimum_years_of_experience") || type.includes("minimum_relevant_years_of_experience")) {
-      const n = Number(rawValue);
-      if (Number.isFinite(n)) {
-        candidates.push(`${n}+ years of experience`);
-        candidates.push(`${n} years of experience`);
-        candidates.push(`${n}+ years`);
-      }
-    }
-
-    // Concept label/synonyms can help match legacy criterion strings
-    const conceptId = (criterion?.concept_id as string | undefined) ?? (criterion?.conceptId as string | undefined);
-    if (conceptId && sourcingCriteria?.concepts && conceptId in sourcingCriteria.concepts) {
-      const concept = (sourcingCriteria.concepts as any)[conceptId] as { display_label?: string | null; synonyms?: string[] };
-      if (concept?.display_label) candidates.push(concept.display_label);
-      for (const syn of concept?.synonyms ?? []) candidates.push(syn);
-    }
-
-    // Heuristic: legacy sometimes stores literal criterion label like "React", "Next.js"
-    // Try exact normalized lookups first, then includes fallback.
-    for (const c of candidates) {
-      const key = normalize(c);
-      const exact = criteriaScoresByNormalizedCriterion.get(key);
-      if (exact) return exact;
-    }
-
-    const normalizedCandidates = candidates.map(normalize).filter(Boolean);
-    if (!normalizedCandidates.length) return null;
-
-    // Includes matching fallback (kept intentionally for legacy payloads)
-    for (const cs of criteriaScores) {
-      const csNorm = normalize(cs.criterion);
-      for (const cand of normalizedCandidates) {
-        if (csNorm.includes(cand) || cand.includes(csNorm)) {
-          return cs;
-        }
-      }
-    }
-
-    return null;
   };
 
   const groups = useMemo(() => {
@@ -273,17 +189,12 @@ function CandidateScoreDisplay(props: {
           {items.map((item: any) => {
             let status: "match" | "missing" | "neutral" = "neutral";
 
-            // Prefer v3 scoring (concept_scores) when present
             const criteriaKeyV3 = getCriteriaKeyV3(item);
             const conceptScore = criteriaKeyV3 ? conceptScoresById.get(criteriaKeyV3) : undefined;
             if (conceptScore) {
               if (conceptScore.status === "pass") status = "match";
               if (conceptScore.status === "fail") status = "missing";
               if (conceptScore.status === "warn") status = "neutral";
-            } else {
-              // Legacy scoring fallback (criteria_scores)
-              const legacy = getLegacyMatchForCriterion(item);
-              if (legacy) status = legacy.found ? "match" : "missing";
             }
 
             const displayValue = getCriteriaDisplayValue(item) || String(item?.value ?? item?.id ?? "");
@@ -403,15 +314,6 @@ function CandidateAIScoring(props: {
       .filter(Boolean);
   }, [conceptScoresById, concept_scores?.length, sourcingCriteria?.criteria]);
 
-  const passedHighCriteriaLegacy = useMemo(() => {
-    const cs = scoringData?.criteria_scores ?? [];
-    if (!cs.length) return [];
-    return cs
-      .filter((x) => x.found && String(x.importance).toLowerCase() === "high")
-      .map((x) => x.criterion)
-      .filter(Boolean);
-  }, [scoringData?.criteria_scores]);
-
   return (
     <div className="pt-3">
       <div className="flex flex-col gap-2 text-xs">
@@ -461,14 +363,14 @@ function CandidateAIScoring(props: {
         
         {/* If matched perfectly/highly, show strengths */}
         {!high_importance_missing?.length &&
-          ((passedHighCriteria.length > 0) || (passedHighCriteriaLegacy.length > 0)) &&
+          passedHighCriteria.length > 0 &&
           matchScore >= 75 && (
            <div className="flex gap-2 items-start">
              <IconCheck className="w-4 h-4 shrink-0 mt-0.5" />
              <div className="leading-relaxed">
                 <span className="font-semibold text-gray-900">Key Strengths: </span>
                 <span className="text-gray-600">
-                   {(passedHighCriteria.length ? passedHighCriteria : passedHighCriteriaLegacy).slice(0, 5).join(", ")}
+                   {passedHighCriteria.slice(0, 5).join(", ")}
                 </span>
              </div>
            </div>
@@ -497,6 +399,7 @@ interface SearchCandidate {
   };
   matchScore: number | null;
   notes: string | null;
+  scoringResult?: string | null;
 }
 
 interface CandidateCardProps {
@@ -520,16 +423,16 @@ export function CandidateCard({
 }: CandidateCardProps) {
   const { openLinkedIn, isLoading: isOpeningLinkedIn } = useOpenLinkedInWithCredits();
 
-  const { candidate, matchScore, notes } = searchCandidate;
+  const { candidate, matchScore, scoringResult } = searchCandidate;
   
-  // console.log("[CandidateCard] Rendering candidate:", candidate.fullName, "Score:", matchScore, "Has notes:", !!notes);
+  // console.log("[CandidateCard] Rendering candidate:", candidate.fullName, "Score:", matchScore);
   
   const experiences = useMemo(() => safeJsonParse<any[]>(candidate.experiences, []), [candidate.experiences]);
   const skills = useMemo(() => safeJsonParse<Skill[]>(candidate.skills, []), [candidate.skills]);
   const location = useMemo(() => safeJsonParse<LocationData>(candidate.location, null), [candidate.location]);
   const scoringData = useMemo<ScoringData>(() => {
-    return safeJsonParse<ScoringData>(notes, null);
-  }, [notes]);
+    return safeJsonParse<ScoringData>(scoringResult, null);
+  }, [scoringResult]);
 
   const fullName = candidate.fullName || "Unknown";
   
@@ -663,7 +566,7 @@ export function CandidateCard({
               )} */}
               
               {/* Scoring Bars under avatar (REMOVED - now integrated into body) */}
-              {/* {matchScore !== null && scoringData?.criteria_scores && scoringData.criteria_scores.length > 0 && (
+              {/* {matchScore !== null && scoringData?.concept_scores && scoringData.concept_scores.length > 0 && (
                 <div className="flex gap-1.5 items-center justify-center">
                    ... 
                 </div>

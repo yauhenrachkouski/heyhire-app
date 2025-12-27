@@ -226,7 +226,6 @@ export async function POST(request: Request) {
           matchScore: typeof evaluateRaw?.final_score === "number"
             ? Math.round(evaluateRaw.final_score)
             : null,
-          notes: JSON.stringify(evaluateRaw),
           scoringResult: JSON.stringify(evaluateRaw),
           scoringVersion: scoringModel?.version ?? null,
           scoringModelId,

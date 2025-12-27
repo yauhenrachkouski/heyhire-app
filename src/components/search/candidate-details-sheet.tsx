@@ -50,6 +50,7 @@ interface SearchCandidate {
   };
   matchScore: number | null;
   notes: string | null;
+  scoringResult?: string | null;
 }
 
 interface CandidateDetailsSheetProps {
@@ -114,7 +115,7 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
 
   if (!searchCandidate) return null;
 
-  const { candidate, matchScore, notes } = searchCandidate;
+  const { candidate, matchScore, scoringResult } = searchCandidate;
 
   // Parse JSON fields
   const experiences = safeJsonParse<any[]>(candidate.experiences, []);
@@ -141,19 +142,11 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
     currentExperience.companyName ||
     "";
 
-  // Parse scoring data (new format with full reasoning)
-  let scoringData: any = null;
-  try {
-    if (notes) {
-      scoringData = JSON.parse(notes);
-    }
-  } catch {
-    // Notes is plain text
-  }
+  // Parse scoring data (v3 scoring result)
+  const scoringData = safeJsonParse<any>(scoringResult, null);
 
   const reasoning = scoringData?.reasoning;
   const conceptScores = scoringData?.concept_scores || [];
-  const criteriaScores = scoringData?.criteria_scores || [];
 
   return (
     <TooltipProvider>
@@ -329,43 +322,6 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
                             {conceptScores.length > 8 && (
                               <p className="text-xs text-muted-foreground">
                                 +{conceptScores.length - 8} more criteria
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Criteria Scores (legacy) */}
-                      {conceptScores.length === 0 && criteriaScores.length > 0 && (
-                        <div className="border rounded-lg p-3">
-                          <p className="text-xs font-semibold text-foreground mb-2">Criteria Breakdown</p>
-                          <div className="space-y-2">
-                            {criteriaScores.slice(0, 8).map((criteria: any, idx: number) => (
-                              <div key={idx} className="flex items-start justify-between gap-2 text-xs">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-medium">{criteria.criterion}</span>
-                                    <Badge variant="outline" className="text-xs">
-                                      {criteria.importance}
-                                    </Badge>
-                                    {criteria.found ? (
-                                      <span className="text-green-600">✓</span>
-                                    ) : (
-                                      <span className="text-red-600">✗</span>
-                                    )}
-                                  </div>
-                                  {criteria.reasoning && (
-                                    <p className="text-muted-foreground mt-1">{criteria.reasoning}</p>
-                                  )}
-                                </div>
-                                {typeof criteria.penalty === "number" && criteria.penalty < 0 && (
-                                  <span className="text-red-600 font-medium">{criteria.penalty}</span>
-                                )}
-                              </div>
-                            ))}
-                            {criteriaScores.length > 8 && (
-                              <p className="text-xs text-muted-foreground">
-                                +{criteriaScores.length - 8} more criteria
                               </p>
                             )}
                           </div>

@@ -31,6 +31,7 @@ interface SearchCandidate {
   };
   matchScore: number | null;
   notes: string | null;
+  scoringResult?: string | null;
 }
 
 interface CandidateCardListPaginatedProps {
@@ -255,7 +256,7 @@ export function CandidateCardListPaginated({
 
       {/* Right side: Candidate details sheet */}
       <Sheet open={!!selectedCandidate} onOpenChange={(open) => !open && setSelectedCandidate(null)}>
-        <SheetContent side="right" className="!w-1/2 !max-w-none p-0 overflow-hidden flex flex-col">
+        <SheetContent side="right" className="w-1/2! max-w-none! p-0 overflow-hidden flex flex-col">
           <CandidateDetailsSheet
             searchCandidate={selectedCandidate}
             onClose={() => setSelectedCandidate(null)}

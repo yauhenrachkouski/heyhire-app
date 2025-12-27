@@ -253,7 +253,6 @@ export async function POST(request: Request) {
           .update(searchCandidates)
           .set({
             matchScore: Math.round(score),
-            notes: JSON.stringify(evaluateRaw),
             scoringResult: JSON.stringify(evaluateRaw),
             scoringVersion: scoringModel?.version ?? null,
             scoringModelId,

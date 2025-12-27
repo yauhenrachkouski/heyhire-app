@@ -95,7 +95,7 @@ export async function saveSearch(
     
     console.log("[Search] Search saved with ID:", id);
 
-    revalidateTag(recentSearchesTag(organizationId));
+    revalidateTag(recentSearchesTag(organizationId), 'layout');
     revalidatePath(`/${organizationId}`, "layout");
     
     return {
@@ -152,7 +152,10 @@ export async function getRecentSearches(
         }));
       },
       ["recent-searches", organizationId, String(limit)],
-      { tags: [recentSearchesTag(organizationId)] }
+      { 
+        tags: [recentSearchesTag(organizationId)],
+        revalidate: 10 // Cache for 10 seconds, then refetch
+      }
     );
 
     const parsedSearches = await fetchRecentSearches();
