@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/tooltip";
 import { useOpenLinkedInWithCredits } from "@/hooks/use-open-linkedin-with-credits";
 import { cn } from "@/lib/utils";
+import { SourcingCriteria } from "@/types/search";
+import { CriteriaBadge } from "./criteria-badge";
 
 type Skill = string | { name?: string | null };
 type LocationData = { name?: string | null; linkedinText?: string | null; city?: string | null } | null;
@@ -64,8 +66,8 @@ function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
   }
 }
 
-function CandidateScoreDisplay(props: { matchScore: number | null; scoringData: ScoringData }) {
-  const { matchScore, scoringData } = props;
+function CandidateScoreDisplay(props: { matchScore: number | null; scoringData: ScoringData; sourcingCriteria?: SourcingCriteria }) {
+  const { matchScore, scoringData, sourcingCriteria } = props;
 
   if (matchScore === null) {
     return (
@@ -96,76 +98,71 @@ function CandidateScoreDisplay(props: { matchScore: number | null; scoringData: 
   const scoreColor = getScoreColor(matchScore);
   const scoreBgColor = getScoreBgColor(matchScore);
 
+  // Helper to stringify value for matching
+  const getValueString = (value: any) => {
+    if (Array.isArray(value)) return value.join(", ");
+    if (typeof value === "object") return JSON.stringify(value);
+    return String(value);
+  };
+
   return (
-    <div className="flex items-center gap-3">
-      {/* Score with circular progress indicator */}
-      <div className="relative flex items-center justify-center">
-        <div className="relative w-16 h-16">
-          {/* Circular progress background */}
-          <svg className="w-16 h-16 transform -rotate-90" viewBox="0 0 64 64">
-            <circle
-              cx="32"
-              cy="32"
-              r="28"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="4"
-              className="text-gray-200"
-            />
-            <circle
-              cx="32"
-              cy="32"
-              r="28"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="4"
-              strokeLinecap="round"
-              strokeDasharray={`${2 * Math.PI * 28}`}
-              strokeDashoffset={`${2 * Math.PI * 28 * (1 - matchScore / 100)}`}
-              className={cn(scoreBgColor, "transition-all duration-500")}
-            />
-          </svg>
-          {/* Score text overlay */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className={cn("text-xl font-bold leading-none", scoreColor)}>
-              {matchScore}
-            </span>
-          </div>
-        </div>
-      </div>
-      
-      {/* Horizontal Scoring Bars */}
-      {criteria_scores && criteria_scores.length > 0 && (
-        <div className="flex gap-1.5 items-center">
-          {criteria_scores.map((c, i) => {
-            const isHigh = c.importance?.toLowerCase() === 'high' || c.importance?.toLowerCase() === 'mandatory';
-            const isMedium = c.importance?.toLowerCase() === 'medium';
+    <div className="flex flex-col gap-3">
+      {/* Visual Matching Criteria Badges */}
+      <div className="flex flex-wrap gap-1.5 items-center">
+        {/* Strategy 1: If we have Sourcing Criteria (from Header), use that order */}
+        {sourcingCriteria?.criteria && sourcingCriteria.criteria.length > 0 ? (
+          sourcingCriteria.criteria.map((sourceCrit) => {
+            const valStr = getValueString(sourceCrit.value);
             
-            return (
-              <TooltipProvider key={i} delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div 
-                      className={cn(
-                        "rounded-sm transition-all cursor-help h-8",
-                        c.found 
-                            ? (isHigh ? "bg-emerald-600 w-1.5" : isMedium ? "bg-emerald-400 w-1.5" : "bg-emerald-200 w-1")
-                            : (isHigh ? "bg-red-500 w-1.5" : isMedium ? "bg-amber-300 w-1.5" : "bg-slate-200 w-1")
-                      )}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs max-w-[200px]">
-                    <div className="font-semibold mb-1 capitalize">
-                      {c.importance} Priority • {c.found ? "Match" : "Missing"}
-                    </div>
-                    <div>{c.criterion}</div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+            // Try to find match status in scoring data
+            const matchedScore = criteria_scores?.find(cs => 
+              cs.criterion.toLowerCase().includes(valStr.toLowerCase()) ||
+              valStr.toLowerCase().includes(cs.criterion.toLowerCase())
             );
-          })}
-        </div>
-      )}
+
+            // If found in scoring, use its status. If not, assume neutral/pending? 
+            // Or if we have scoring data but no match, it might be implicit missing?
+            // Safer to only mark missing if we find a negative record, OR if we have scores at all.
+            const hasScores = criteria_scores && criteria_scores.length > 0;
+            const isFound = matchedScore?.found;
+            
+            // If we have scores, and this criterion wasn't explicitly 'found', is it missing?
+            // Usually AI returns all evaluated criteria. 
+            // Let's rely on matchedScore.found. If matchedScore is undefined, treat as neutral (maybe didn't evaluate this specific constraint).
+            
+            let status: "match" | "missing" | "neutral" = "neutral";
+            if (matchedScore) {
+              status = matchedScore.found ? "match" : "missing";
+            } else if (hasScores) {
+               // If we have scores but didn't find this specific one, usually implies it wasn't a key factor or was missed. 
+               // For now, keep neutral to avoid false negatives.
+               // Actually, user wants to see what matched/missed.
+            }
+
+            return (
+              <CriteriaBadge 
+                key={sourceCrit.id}
+                label={valStr + (sourceCrit.type.includes("years") ? " years" : "")}
+                type={sourceCrit.type}
+                priority={sourceCrit.priority_level}
+                operator={sourceCrit.operator}
+                status={status}
+                className="opacity-90"
+              />
+            );
+          })
+        ) : (
+          /* Strategy 2: Fallback to showing whatever scoring data we have (Legacy / No definitions) */
+          criteria_scores?.map((c, i) => (
+             <CriteriaBadge 
+                key={i}
+                label={c.criterion}
+                priority={c.importance}
+                status={c.found ? "match" : "missing"}
+              />
+          ))
+        )}
+      </div>
     </div>
   );
 }
@@ -299,6 +296,7 @@ interface SearchCandidate {
 
 interface CandidateCardProps {
   searchCandidate: SearchCandidate;
+  sourcingCriteria?: SourcingCriteria;
   isSelected?: boolean;
   onSelect?: (checked: boolean | "indeterminate") => void;
   onShowCandidate?: () => void;
@@ -309,6 +307,7 @@ interface CandidateCardProps {
 
 export function CandidateCard({
   searchCandidate,
+  sourcingCriteria,
   isSelected = false,
   onSelect,
   onShowCandidate,
@@ -458,38 +457,12 @@ export function CandidateCard({
                 </Badge>
               )} */}
               
-              {/* Scoring Bars under avatar */}
-              {matchScore !== null && scoringData?.criteria_scores && scoringData.criteria_scores.length > 0 && (
+              {/* Scoring Bars under avatar (REMOVED - now integrated into body) */}
+              {/* {matchScore !== null && scoringData?.criteria_scores && scoringData.criteria_scores.length > 0 && (
                 <div className="flex gap-1.5 items-center justify-center">
-                  {scoringData.criteria_scores.map((c, i) => {
-                    const isHigh = c.importance?.toLowerCase() === 'high' || c.importance?.toLowerCase() === 'mandatory';
-                    const isMedium = c.importance?.toLowerCase() === 'medium';
-                    
-                    return (
-                      <TooltipProvider key={i} delayDuration={0}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div 
-                              className={cn(
-                                "rounded-sm transition-all cursor-help h-4",
-                                c.found 
-                                    ? (isHigh ? "bg-emerald-600 w-1.5" : isMedium ? "bg-emerald-400 w-1.5" : "bg-emerald-200 w-1")
-                                    : (isHigh ? "bg-red-500 w-1.5" : isMedium ? "bg-amber-300 w-1.5" : "bg-slate-200 w-1")
-                              )}
-                            />
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="text-xs max-w-[200px]">
-                            <div className="font-semibold mb-1 capitalize">
-                              {c.importance} Priority • {c.found ? "Match" : "Missing"}
-                            </div>
-                            <div>{c.criterion}</div>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    );
-                  })}
+                   ... 
                 </div>
-              )}
+              )} */}
             </div>
 
             {/* Name, position, location */}
@@ -521,7 +494,13 @@ export function CandidateCard({
 
           {/* AI Scoring Analysis */}
           {matchScore !== null && (
-            <CandidateAIScoring matchScore={matchScore} scoringData={scoringData} />
+            <>
+              {/* Show badges first for immediate visual feedback */}
+              <CandidateScoreDisplay matchScore={matchScore} scoringData={scoringData} sourcingCriteria={sourcingCriteria} />
+              
+              {/* Then text analysis */}
+              <CandidateAIScoring matchScore={matchScore} scoringData={scoringData} />
+            </>
           )}
 
           {/* Candidate Summary */}

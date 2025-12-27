@@ -10,6 +10,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { CandidateCardActionBar } from "./candidate-card-action-bar";
 import { SkeletonCard } from "./skeleton-card";
 import { useActiveOrganization } from "@/lib/auth-client";
+import { SourcingCriteria } from "@/types/search";
 
 // Type for candidate from database schema
 interface SearchCandidate {
@@ -35,6 +36,7 @@ interface SearchCandidate {
 interface CandidateCardListPaginatedProps {
   candidates: SearchCandidate[];
   searchId: string;
+  sourcingCriteria?: SourcingCriteria;
   viewMode?: "table" | "cards";
   pageSize?: number;
   pageIndex?: number;
@@ -47,6 +49,7 @@ interface CandidateCardListPaginatedProps {
 export function CandidateCardListPaginated({
   candidates,
   searchId,
+  sourcingCriteria,
   viewMode = "cards",
   pageSize = 10,
   pageIndex = 0,
@@ -206,6 +209,7 @@ export function CandidateCardListPaginated({
             >
               <CandidateCard
                 searchCandidate={searchCandidate}
+                sourcingCriteria={sourcingCriteria}
                 isSelected={isSelected}
                 onSelect={(selected) => handleSelectCandidate(candidateId, selected)}
                 onShowCandidate={() => handleShowCandidate(searchCandidate)}

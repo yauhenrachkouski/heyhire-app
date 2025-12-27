@@ -427,6 +427,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
                   <CandidateCardListPaginated
                     candidates={sortedCandidates}
                     searchId={search.id}
+                    sourcingCriteria={search.parseResponse || undefined}
                     viewMode="cards"
                     skeletonCount={effectiveSkeletonCount}
                     pageIndex={pageIndex}

@@ -1,24 +1,18 @@
 import { Criterion, SourcingCriteria } from "@/types/search";
-import { Badge } from "@/components/ui/badge";
 import {
   IconMapPin,
   IconBriefcase,
   IconTools,
   IconBrain,
   IconList,
-  IconShieldCheck,
-  IconArrowUp,
-  IconArrowRight,
-  IconArrowDown,
-  IconBan,
 } from "@tabler/icons-react";
-import { cn } from "@/lib/utils";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { CriteriaBadge } from "./criteria-badge";
 
 interface CriteriaDisplayProps {
   data: SourcingCriteria | null;
@@ -33,38 +27,6 @@ export function CriteriaDisplay({ data }: CriteriaDisplayProps) {
     if (Array.isArray(value)) return value.join(", ");
     if (typeof value === "object") return JSON.stringify(value);
     return String(value);
-  };
-
-  const getPriorityConfig = (priority: string, operator: string) => {
-    if (operator.includes("exclude")) {
-      return { icon: IconBan, color: "text-destructive", label: "Excluded" };
-    }
-    switch (priority) {
-      case "mandatory":
-        return {
-          icon: IconShieldCheck,
-          color: "text-violet-600 dark:text-violet-400",
-          label: "Mandatory",
-        };
-      case "high":
-        return {
-          icon: IconArrowUp,
-          color: "text-emerald-600 dark:text-emerald-400",
-          label: "High Priority",
-        };
-      case "medium":
-        return {
-          icon: IconArrowRight,
-          color: "text-muted-foreground",
-          label: "Medium Priority",
-        };
-      default:
-        return {
-          icon: IconArrowDown,
-          color: "text-muted-foreground/60",
-          label: "Low Priority",
-        };
-    }
   };
 
   const groups = {
@@ -113,35 +75,15 @@ export function CriteriaDisplay({ data }: CriteriaDisplayProps) {
         </Tooltip>
 
         <div className="flex flex-wrap gap-1.5 items-center">
-          {items.map((c) => {
-            const config = getPriorityConfig(c.priority_level, c.operator);
-            const PriorityIcon = config.icon;
-
-            return (
-              <Tooltip key={c.id}>
-                <TooltipTrigger asChild>
-                  <Badge
-                    variant="outline"
-                    className="bg-background hover:bg-muted/50 transition-colors font-normal gap-1.5 px-2.5 py-1 text-sm h-7 border-border/60 cursor-default"
-                  >
-                    <PriorityIcon
-                      className={cn("size-3.5 shrink-0", config.color)}
-                    />
-                    <span className="truncate max-w-[200px]">
-                      {getValueString(c.value)}
-                      {c.type.includes("years") && " years"}
-                    </span>
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">
-                  <p className="font-medium">{config.label}</p>
-                  <p className="text-muted-foreground">
-                    {c.operator.replace(/_/g, " ")}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            );
-          })}
+          {items.map((c) => (
+            <CriteriaBadge
+              key={c.id}
+              label={getValueString(c.value) + (c.type.includes("years") ? " years" : "")}
+              type={c.type}
+              priority={c.priority_level}
+              operator={c.operator}
+            />
+          ))}
         </div>
       </div>
     );
