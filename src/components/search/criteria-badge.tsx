@@ -30,6 +30,7 @@ interface CriteriaBadgeProps {
   priority?: string;
   operator?: string;
   status?: CriteriaStatus; // If provided, shows match/miss status
+  scoreStatus?: string | null; // Raw scorer status (e.g. pass, warn, fail, critical_fail)
   className?: string;
   short?: boolean; // If true, truncates text more aggressively or hides it
   compact?: boolean; // New compact mode for cards
@@ -44,6 +45,7 @@ export function CriteriaBadge({
   priority,
   operator,
   status = "neutral",
+  scoreStatus,
   className,
   short = false,
   compact = false,
@@ -99,8 +101,55 @@ export function CriteriaBadge({
 
     const priorityConfig = getPriorityConfig();
 
+    const getScoreStatusStyle = () => {
+      const s = String(scoreStatus ?? "").toLowerCase();
+      if (!s) return null;
+
+      // v3 scoring statuses observed: pass, fail, warn, critical_fail, etc.
+      if (s.includes("pass")) {
+        return {
+          bg: "bg-emerald-50 border-emerald-200 text-emerald-900 hover:bg-emerald-50/80",
+          iconColor: "text-emerald-700",
+          label: s,
+        };
+      }
+      if (s.includes("fail")) {
+        return {
+          bg: "bg-red-50 border-red-200 text-red-900 hover:bg-red-50/80",
+          iconColor: "text-red-700",
+          label: s,
+        };
+      }
+      if (s === "warn" || s.includes("warn")) {
+        return {
+          bg: "bg-amber-50 border-amber-200 text-amber-900 hover:bg-amber-50/80",
+          iconColor: "text-amber-700",
+          label: s,
+        };
+      }
+
+      return {
+        bg: "bg-muted/50 border-border text-foreground hover:bg-muted/60",
+        iconColor: "text-muted-foreground",
+        label: s,
+      };
+    };
+
+    const scoreStyle = getScoreStatusStyle();
+
     if (compact) {
       // Compact Mode Logic (for Cards)
+
+      // If we have raw scoring status, color the badge by that status (v3)
+      if (scoreStyle) {
+        return {
+          icon: priorityConfig.icon,
+          color: scoreStyle.iconColor,
+          bg: scoreStyle.bg,
+          label: scoreStyle.label,
+          priorityLabel: priorityConfig.label,
+        };
+      }
       
       if (status === "match") {
          return {
@@ -133,6 +182,16 @@ export function CriteriaBadge({
     }
 
     // Default / Header Mode Logic
+    if (scoreStyle) {
+      return {
+        icon: IconShieldCheck,
+        color: scoreStyle.iconColor,
+        bg: scoreStyle.bg,
+        label: scoreStyle.label,
+        priorityLabel: priorityConfig.label,
+      };
+    }
+
     if (status === "match") {
       return {
         icon: IconCheck,
@@ -229,6 +288,11 @@ export function CriteriaBadge({
           <p className={cn("text-muted-foreground", !compact && "capitalize")}>
             {config.priorityLabel || config.label}
           </p>
+          {scoreStatus && (
+            <p className="text-muted-foreground">
+              Status: <span className="font-mono">{String(scoreStatus)}</span>
+            </p>
+          )}
           {compact && status && (
              <p className={cn(
                status === 'match' ? "text-emerald-500" : 

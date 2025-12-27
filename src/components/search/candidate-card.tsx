@@ -55,7 +55,7 @@ type ConceptScore = {
   raw_match_score: number;
   confidence: number;
   final_concept_score: number;
-  status: "pass" | "fail" | "warn";
+  status: string;
   evidence_snippet: string;
 };
 
@@ -192,9 +192,17 @@ function CandidateScoreDisplay(props: {
             const criteriaKeyV3 = getCriteriaKeyV3(item);
             const conceptScore = criteriaKeyV3 ? conceptScoresById.get(criteriaKeyV3) : undefined;
             if (conceptScore) {
-              if (conceptScore.status === "pass") status = "match";
-              if (conceptScore.status === "fail") status = "missing";
-              if (conceptScore.status === "warn") status = "neutral";
+              const s = String(conceptScore.status).toLowerCase();
+              const priorityLevel = String(item?.priority_level ?? "").toLowerCase();
+              if (s === "pass" || s.includes("pass")) status = "match";
+              else if (s.includes("fail")) status = "missing"; // handles fail, critical_fail, etc.
+              else if (s === "warn") {
+                // "warn" means partial/uncertain match. For high/mandatory criteria, treat as missing.
+                status = (priorityLevel === "high" || priorityLevel === "mandatory") ? "missing" : "neutral";
+              } else {
+                // unknown/partial/etc.
+                status = "neutral";
+              }
             }
 
             const displayValue = getCriteriaDisplayValue(item) || String(item?.value ?? item?.id ?? "");
@@ -208,6 +216,7 @@ function CandidateScoreDisplay(props: {
                 priority={(item.priority_level || item.importance)?.toLowerCase()}
                 operator={item.operator}
                 status={status}
+                scoreStatus={conceptScore?.status ?? null}
                 compact={true}
               />
             );

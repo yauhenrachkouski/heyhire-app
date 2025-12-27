@@ -302,9 +302,9 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
                                     <Badge variant="outline" className="text-xs">
                                       {cs.status}
                                     </Badge>
-                                    {cs.status === "pass" ? (
+                                    {String(cs.status).toLowerCase() === "pass" ? (
                                       <span className="text-green-600">✓</span>
-                                    ) : cs.status === "fail" ? (
+                                    ) : String(cs.status).toLowerCase().includes("fail") ? (
                                       <span className="text-red-600">✗</span>
                                     ) : (
                                       <span className="text-amber-600">~</span>
