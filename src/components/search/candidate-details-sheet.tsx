@@ -23,6 +23,15 @@ import { useState } from "react";
 import { formatDate, calculateDuration } from "@/lib/utils";
 import { useOpenLinkedInWithCredits } from "@/hooks/use-open-linkedin-with-credits";
 
+function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 interface SearchCandidate {
   id: string;
   candidate: {
@@ -108,11 +117,11 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
   const { candidate, matchScore, notes } = searchCandidate;
 
   // Parse JSON fields
-  const experiences = candidate.experiences ? JSON.parse(candidate.experiences) : [];
-  const skills = candidate.skills ? JSON.parse(candidate.skills) : [];
-  const educations = candidate.educations ? JSON.parse(candidate.educations) : [];
-  const certifications = candidate.certifications ? JSON.parse(candidate.certifications) : [];
-  const locationData = candidate.location ? JSON.parse(candidate.location) : null;
+  const experiences = safeJsonParse<any[]>(candidate.experiences, []);
+  const skills = safeJsonParse<any[]>(candidate.skills, []);
+  const educations = safeJsonParse<any[]>(candidate.educations, []);
+  const certifications = safeJsonParse<any[]>(candidate.certifications, []);
+  const locationData = safeJsonParse<any>(candidate.location, null);
 
   // Extract name parts
   const fullName = candidate.fullName || "Unknown";
@@ -143,6 +152,7 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
   }
 
   const reasoning = scoringData?.reasoning;
+  const conceptScores = scoringData?.concept_scores || [];
   const criteriaScores = scoringData?.criteria_scores || [];
 
   return (
@@ -286,12 +296,51 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
                         </div>
                       )}
                       
-                      {/* Criteria Scores */}
-                      {criteriaScores.length > 0 && (
+                      {/* Criteria Scores (v3) */}
+                      {conceptScores.length > 0 && (
                         <div className="border rounded-lg p-3">
                           <p className="text-xs font-semibold text-foreground mb-2">Criteria Breakdown</p>
                           <div className="space-y-2">
-                            {criteriaScores.slice(0, 5).map((criteria: any, idx: number) => (
+                            {conceptScores.slice(0, 8).map((cs: any, idx: number) => (
+                              <div key={idx} className="flex items-start justify-between gap-2 text-xs">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium">{cs.concept_id}</span>
+                                    <Badge variant="outline" className="text-xs">
+                                      {cs.status}
+                                    </Badge>
+                                    {cs.status === "pass" ? (
+                                      <span className="text-green-600">✓</span>
+                                    ) : cs.status === "fail" ? (
+                                      <span className="text-red-600">✗</span>
+                                    ) : (
+                                      <span className="text-amber-600">~</span>
+                                    )}
+                                  </div>
+                                  {cs.evidence_snippet && cs.evidence_snippet !== "N/A" && (
+                                    <p className="text-muted-foreground mt-1">{cs.evidence_snippet}</p>
+                                  )}
+                                </div>
+                                <span className="text-muted-foreground font-medium">
+                                  {typeof cs.final_concept_score === "number" ? cs.final_concept_score : ""}
+                                </span>
+                              </div>
+                            ))}
+                            {conceptScores.length > 8 && (
+                              <p className="text-xs text-muted-foreground">
+                                +{conceptScores.length - 8} more criteria
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Criteria Scores (legacy) */}
+                      {conceptScores.length === 0 && criteriaScores.length > 0 && (
+                        <div className="border rounded-lg p-3">
+                          <p className="text-xs font-semibold text-foreground mb-2">Criteria Breakdown</p>
+                          <div className="space-y-2">
+                            {criteriaScores.slice(0, 8).map((criteria: any, idx: number) => (
                               <div key={idx} className="flex items-start justify-between gap-2 text-xs">
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2">
@@ -309,14 +358,14 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
                                     <p className="text-muted-foreground mt-1">{criteria.reasoning}</p>
                                   )}
                                 </div>
-                                {criteria.penalty > 0 && (
-                                  <span className="text-red-600 font-medium">-{criteria.penalty}</span>
+                                {typeof criteria.penalty === "number" && criteria.penalty < 0 && (
+                                  <span className="text-red-600 font-medium">{criteria.penalty}</span>
                                 )}
                               </div>
                             ))}
-                            {criteriaScores.length > 5 && (
+                            {criteriaScores.length > 8 && (
                               <p className="text-xs text-muted-foreground">
-                                +{criteriaScores.length - 5} more criteria
+                                +{criteriaScores.length - 8} more criteria
                               </p>
                             )}
                           </div>

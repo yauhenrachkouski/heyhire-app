@@ -48,14 +48,27 @@ type ScoringCriterion = {
   reasoning: string;
 };
 
+type ConceptScore = {
+  concept_id: string;
+  group_id: string;
+  weight: number;
+  raw_match_score: number;
+  confidence: number;
+  final_concept_score: number;
+  status: "pass" | "fail" | "warn";
+  evidence_snippet: string;
+};
+
 type ScoringResult = {
   match_score?: number;
   verdict?: string;
   primary_issue?: string;
   high_importance_missing?: string[];
   criteria_scores?: ScoringCriterion[];
+  concept_scores?: ConceptScore[];
   reasoning?: ScoringReasoning;
   candidate_summary?: string | null;
+  missing_critical?: string[];
 };
 
 type ScoringData = ScoringResult | null;
@@ -69,7 +82,11 @@ function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
   }
 }
 
-function CandidateScoreDisplay(props: { matchScore: number | null; scoringData: ScoringData; sourcingCriteria?: SourcingCriteria }) {
+function CandidateScoreDisplay(props: {
+  matchScore: number | null;
+  scoringData: ScoringData;
+  sourcingCriteria?: SourcingCriteria;
+}) {
   const { matchScore, scoringData, sourcingCriteria } = props;
 
   if (matchScore === null) {
@@ -81,13 +98,122 @@ function CandidateScoreDisplay(props: { matchScore: number | null; scoringData: 
     );
   }
 
-  const { criteria_scores } = scoringData || {};
+  const conceptScoresById = useMemo(() => {
+    const entries = (scoringData?.concept_scores ?? []).map((cs) => [cs.concept_id, cs] as const);
+    return new Map(entries);
+  }, [scoringData?.concept_scores]);
 
-  // Helper to stringify value for matching
-  const getValueString = (value: any) => {
+  const normalize = (s: string) =>
+    s
+      .toLowerCase()
+      .trim()
+      .replace(/[’']/g, "")
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .replace(/\s+/g, " ");
+
+  const criteriaScores = scoringData?.criteria_scores ?? [];
+  const criteriaScoresByNormalizedCriterion = useMemo(() => {
+    const m = new Map<string, ScoringCriterion>();
+    for (const cs of criteriaScores) {
+      const key = normalize(cs.criterion);
+      if (!key) continue;
+      // If duplicates exist, keep the first one
+      if (!m.has(key)) m.set(key, cs);
+    }
+    return m;
+  }, [criteriaScores]);
+
+  const getCriteriaKeyV3 = (criterion: any) => {
+    // v3 parse criteria uses snake_case: concept_id
+    // (but we still guard for accidental camelCase)
+    const conceptId =
+      (criterion?.concept_id as string | undefined) ??
+      (criterion?.conceptId as string | undefined) ??
+      undefined;
+    const id = (criterion?.id as string | undefined) ?? undefined;
+
+    // v3 scoring uses concept_scores[].concept_id where:
+    // - tools/capabilities/languages -> criterion.concept_id
+    // - location/experience -> criterion.id
+    return conceptId ?? id ?? "";
+  };
+
+  const getCriteriaValueString = (value: any) => {
     if (Array.isArray(value)) return value.join(", ");
-    if (typeof value === "object") return JSON.stringify(value);
+    if (value === null || value === undefined) return "";
     return String(value);
+  };
+
+  const getCriteriaDisplayValue = (criterion: any) => {
+    const raw = getCriteriaValueString(criterion?.value);
+    const type = String(criterion?.type ?? "");
+    if (!raw) return "";
+
+    // Make experience requirements more explicit
+    if (type.includes("minimum_years_of_experience") || type.includes("minimum_relevant_years_of_experience")) {
+      const n = Number(criterion?.value);
+      if (Number.isFinite(n)) return `${n}y+`;
+    }
+
+    return raw;
+  };
+
+  const getLegacyMatchForCriterion = (criterion: any) => {
+    if (!criteriaScores.length) return null;
+
+    const type = String(criterion?.type ?? "");
+    const rawValue = criterion?.value;
+    const candidates: string[] = [];
+
+    // Prefer exact values first
+    if (Array.isArray(rawValue)) {
+      for (const v of rawValue) {
+        if (typeof v === "string" && v.trim()) candidates.push(v);
+      }
+    } else if (typeof rawValue === "string" && rawValue.trim()) {
+      candidates.push(rawValue);
+    }
+
+    // Experience often appears like "2+ years of experience" in legacy scoring
+    if (type.includes("minimum_years_of_experience") || type.includes("minimum_relevant_years_of_experience")) {
+      const n = Number(rawValue);
+      if (Number.isFinite(n)) {
+        candidates.push(`${n}+ years of experience`);
+        candidates.push(`${n} years of experience`);
+        candidates.push(`${n}+ years`);
+      }
+    }
+
+    // Concept label/synonyms can help match legacy criterion strings
+    const conceptId = (criterion?.concept_id as string | undefined) ?? (criterion?.conceptId as string | undefined);
+    if (conceptId && sourcingCriteria?.concepts && conceptId in sourcingCriteria.concepts) {
+      const concept = (sourcingCriteria.concepts as any)[conceptId] as { display_label?: string | null; synonyms?: string[] };
+      if (concept?.display_label) candidates.push(concept.display_label);
+      for (const syn of concept?.synonyms ?? []) candidates.push(syn);
+    }
+
+    // Heuristic: legacy sometimes stores literal criterion label like "React", "Next.js"
+    // Try exact normalized lookups first, then includes fallback.
+    for (const c of candidates) {
+      const key = normalize(c);
+      const exact = criteriaScoresByNormalizedCriterion.get(key);
+      if (exact) return exact;
+    }
+
+    const normalizedCandidates = candidates.map(normalize).filter(Boolean);
+    if (!normalizedCandidates.length) return null;
+
+    // Includes matching fallback (kept intentionally for legacy payloads)
+    for (const cs of criteriaScores) {
+      const csNorm = normalize(cs.criterion);
+      for (const cand of normalizedCandidates) {
+        if (csNorm.includes(cand) || cand.includes(csNorm)) {
+          return cs;
+        }
+      }
+    }
+
+    return null;
   };
 
   const groups = useMemo(() => {
@@ -106,17 +232,18 @@ function CandidateScoreDisplay(props: { matchScore: number | null; scoringData: 
       g.skills = c.filter((x) => ["tool_requirement", "language_requirement"].includes(x.type));
       g.capabilities = c.filter((x) => x.type === "capability_requirement");
       g.other = c.filter((x) => !["logistics_location", "minimum_years_of_experience", "minimum_relevant_years_of_experience", "tool_requirement", "language_requirement", "capability_requirement"].includes(x.type));
-    } else if (criteria_scores) {
-      g.other = criteria_scores.map(cs => ({
-        id: cs.criterion,
-        value: cs.criterion,
-        type: 'unknown',
-        priority_level: cs.importance,
-        operator: 'include'
+    } else if (scoringData?.concept_scores?.length) {
+      // Fallback if parse criteria is missing: show what scoring actually evaluated
+      g.other = scoringData.concept_scores.map((cs) => ({
+        id: cs.concept_id,
+        value: cs.concept_id,
+        type: "unknown",
+        priority_level: "medium",
+        operator: "include",
       }));
     }
     return g;
-  }, [sourcingCriteria, criteria_scores]);
+  }, [sourcingCriteria, scoringData?.concept_scores]);
 
   const groupConfig = useMemo(() => [
     { key: "location", title: "Location", icon: IconMapPin },
@@ -144,35 +271,26 @@ function CandidateScoreDisplay(props: { matchScore: number | null; scoringData: 
 
         <div className="flex flex-wrap gap-1 items-center">
           {items.map((item: any) => {
-            // If it's a SourcingCriteria item (has id/value/type/priority_level)
-            const isSourcingItem = item.priority_level !== undefined;
-            const valStr = isSourcingItem ? getValueString(item.value) : item.criterion || String(item.value);
-
-            // Determine status
             let status: "match" | "missing" | "neutral" = "neutral";
-            let matchedScore;
 
-            if (criteria_scores) {
-              matchedScore = criteria_scores.find(cs =>
-                cs.criterion.toLowerCase().includes(valStr.toLowerCase()) ||
-                valStr.toLowerCase().includes(cs.criterion.toLowerCase())
-              );
-              if (matchedScore) {
-                status = matchedScore.found ? "match" : "missing";
-              } else if (criteria_scores.length > 0) {
-                // If we have scores but can't map it, leave neutral
-              }
-            } else if (!isSourcingItem && item.found !== undefined) {
-              // It's a raw score item
-              status = item.found ? "match" : "missing";
+            // Prefer v3 scoring (concept_scores) when present
+            const criteriaKeyV3 = getCriteriaKeyV3(item);
+            const conceptScore = criteriaKeyV3 ? conceptScoresById.get(criteriaKeyV3) : undefined;
+            if (conceptScore) {
+              if (conceptScore.status === "pass") status = "match";
+              if (conceptScore.status === "fail") status = "missing";
+              if (conceptScore.status === "warn") status = "neutral";
+            } else {
+              // Legacy scoring fallback (criteria_scores)
+              const legacy = getLegacyMatchForCriterion(item);
+              if (legacy) status = legacy.found ? "match" : "missing";
             }
 
-            // Determine value string including unit for display
-            const displayValue = valStr + (item.type?.includes("years") ? "y" : "");
+            const displayValue = getCriteriaDisplayValue(item) || String(item?.value ?? item?.id ?? "");
 
             return (
               <CriteriaBadge
-                key={item.id || valStr}
+                key={item.id || criteriaKeyV3 || displayValue}
                 label={displayValue}
                 value={displayValue} // Pass full value so 2y becomes 2Y
                 type={item.type}
@@ -234,8 +352,12 @@ function CandidateSummary(props: { matchScore: number | null; scoringData: Scori
   );
 }
 
-function CandidateAIScoring(props: { matchScore: number | null; scoringData: ScoringData }) {
-  const { matchScore, scoringData } = props;
+function CandidateAIScoring(props: {
+  matchScore: number | null;
+  scoringData: ScoringData;
+  sourcingCriteria?: SourcingCriteria;
+}) {
+  const { matchScore, scoringData, sourcingCriteria } = props;
   const [showAllMissing, setShowAllMissing] = useState(false);
 
   if (matchScore === null) {
@@ -246,8 +368,49 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
     verdict,
     primary_issue,
     high_importance_missing,
-    criteria_scores
+    concept_scores
   } = scoringData || {};
+
+  const conceptScoresById = useMemo(() => {
+    const entries = (concept_scores ?? []).map((cs) => [cs.concept_id, cs] as const);
+    return new Map(entries);
+  }, [concept_scores]);
+
+  const passedHighCriteria = useMemo(() => {
+    const criteria = sourcingCriteria?.criteria ?? [];
+    if (!criteria.length || !concept_scores?.length) return [];
+
+    const toDisplay = (criterion: any) => {
+      if (Array.isArray(criterion?.value)) return criterion.value.join(", ");
+      if (criterion?.value === null || criterion?.value === undefined) return "";
+
+      const type = String(criterion?.type ?? "");
+      if (type.includes("minimum_years_of_experience") || type.includes("minimum_relevant_years_of_experience")) {
+        const n = Number(criterion?.value);
+        if (Number.isFinite(n)) return `${n}y+`;
+      }
+      return String(criterion.value);
+    };
+
+    return criteria
+      .filter((c: any) => String(c?.priority_level ?? "").toLowerCase() === "high")
+      .filter((c: any) => {
+        const key = (c?.concept_id as string | undefined) ?? (c?.id as string | undefined);
+        if (!key) return false;
+        return conceptScoresById.get(key)?.status === "pass";
+      })
+      .map((c: any) => toDisplay(c))
+      .filter(Boolean);
+  }, [conceptScoresById, concept_scores?.length, sourcingCriteria?.criteria]);
+
+  const passedHighCriteriaLegacy = useMemo(() => {
+    const cs = scoringData?.criteria_scores ?? [];
+    if (!cs.length) return [];
+    return cs
+      .filter((x) => x.found && String(x.importance).toLowerCase() === "high")
+      .map((x) => x.criterion)
+      .filter(Boolean);
+  }, [scoringData?.criteria_scores]);
 
   return (
     <div className="pt-3">
@@ -297,13 +460,15 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
         )} */}
         
         {/* If matched perfectly/highly, show strengths */}
-        {!high_importance_missing?.length && criteria_scores && matchScore >= 75 && (
+        {!high_importance_missing?.length &&
+          ((passedHighCriteria.length > 0) || (passedHighCriteriaLegacy.length > 0)) &&
+          matchScore >= 75 && (
            <div className="flex gap-2 items-start">
              <IconCheck className="w-4 h-4 shrink-0 mt-0.5" />
              <div className="leading-relaxed">
                 <span className="font-semibold text-gray-900">Key Strengths: </span>
                 <span className="text-gray-600">
-                   {criteria_scores.filter(c => c.found && c.importance === 'high').map(c => c.criterion).slice(0, 5).join(", ")}
+                   {(passedHighCriteria.length ? passedHighCriteria : passedHighCriteriaLegacy).slice(0, 5).join(", ")}
                 </span>
              </div>
            </div>
@@ -539,7 +704,7 @@ export function CandidateCard({
               <CandidateScoreDisplay matchScore={matchScore} scoringData={scoringData} sourcingCriteria={sourcingCriteria} />
               
               {/* Then text analysis */}
-              <CandidateAIScoring matchScore={matchScore} scoringData={scoringData} />
+              <CandidateAIScoring matchScore={matchScore} scoringData={scoringData} sourcingCriteria={sourcingCriteria} />
             </>
           )}
 
