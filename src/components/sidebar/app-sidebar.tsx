@@ -216,106 +216,31 @@ export function AppSidebar({
           <SidebarGroup key={data.navMain[0].title || 'group-0'}>
             {data.navMain[0].title && <SidebarGroupLabel>{data.navMain[0].title}</SidebarGroupLabel>}
             <SidebarGroupContent>
-              <SidebarMenu>
-                {data.navMain[0].items.map((navItem) => {
-                  const active = !navItem.disabled && isPathActive(relativePath, navItem.url)
-                  const hasSubItems = navItem.items && navItem.items.length > 0
-                  
-                  return (
-                    <Collapsible key={navItem.title} asChild defaultOpen={hasSubItems}>
-                      <SidebarMenuItem>
-                        <SidebarMenuButton 
-                          asChild={!navItem.disabled}
-                          isActive={active}
-                          disabled={navItem.disabled}
-                          tooltip={navItem.title}
-                          className={navItem.disabled ? "opacity-50 cursor-not-allowed" : ""}
-                        >
-                          {navItem.disabled ? (
-                            <>
-                              {navItem.icon && <Icon name={navItem.icon} />}
-                              <span>{navItem.title}</span>
-                            </>
-                          ) : (
-                            <Link href={toOrgPath(navItem.url)} aria-current={active ? "page" : undefined} prefetch>
-                              {navItem.icon && <Icon name={navItem.icon} />}
-                              <span>{navItem.title}</span>
-                            </Link>
-                          )}
-                        </SidebarMenuButton>
-                        
-                        {/* Render collapsible sub-items */}
-                        {hasSubItems && (
-                          <>
-                            <CollapsibleTrigger asChild>
-                              <SidebarMenuAction className="data-[state=open]:rotate-90">
-                                <Icon name="chevron-right" />
-                                <span className="sr-only">Toggle {navItem.title}</span>
-                              </SidebarMenuAction>
-                            </CollapsibleTrigger>
-                            <CollapsibleContent>
-                              <SidebarMenuSub>
-                                {navItem.items?.map((subItem) => {
-                                  const subActive = !subItem.disabled && isPathActive(relativePath, subItem.url)
-                                  const isAllJobs = subItem.title === "All Jobs"
-                                  return (
-                                    <SidebarMenuSubItem key={subItem.title}>
-                                      {subItem.fullTitle ? (
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <SidebarMenuSubButton 
-                                              asChild={!subItem.disabled}
-                                              isActive={subActive}
-                                              className={(subItem.disabled ? "opacity-50 cursor-not-allowed" : "") + (isAllJobs ? " text-muted-foreground" : "")}
-                                            >
-                                              {subItem.disabled ? (
-                                                <>
-                                                  {subItem.icon && <Icon name={subItem.icon} />}
-                                                  <span>{subItem.title}</span>
-                                                </>
-                                              ) : (
-                                                <Link href={toOrgPath(subItem.url)} aria-current={subActive ? "page" : undefined} prefetch className={isAllJobs ? "text-muted-foreground" : undefined}>
-                                                  {subItem.icon && <Icon name={subItem.icon} /> }
-                                                  <span>{subItem.title}</span>
-                                                </Link>
-                                              )}
-                                            </SidebarMenuSubButton>
-                                          </TooltipTrigger>
-                                          <TooltipContent side="right">
-                                            <p>{subItem.fullTitle}</p>
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      ) : (
-                                        <SidebarMenuSubButton 
-                                          asChild={!subItem.disabled}
-                                          isActive={subActive}
-                                          className={(subItem.disabled ? "opacity-50 cursor-not-allowed" : "") + (isAllJobs ? " text-muted-foreground" : "")}
-                                        >
-                                          {subItem.disabled ? (
-                                            <>
-                                              {subItem.icon && <Icon name={subItem.icon} />}
-                                              <span>{subItem.title}</span>
-                                            </>
-                                          ) : (
-                                            <Link href={toOrgPath(subItem.url)} aria-current={subActive ? "page" : undefined} prefetch className={isAllJobs ? "text-muted-foreground" : undefined}>
-                                              {subItem.icon && <Icon name={subItem.icon} /> }
-                                              <span>{subItem.title}</span>
-                                            </Link>
-                                          )}
-                                        </SidebarMenuSubButton>
-                                      )}
-                                    </SidebarMenuSubItem>
-                                  )
-                                })}
-                              </SidebarMenuSub>
-                            </CollapsibleContent>
-                          </>
-                        )}
-                      </SidebarMenuItem>
-                    </Collapsible>
-                  )
-                })}
-              </SidebarMenu>
+              {data.navMain[0].items.map((navItem) => {
+                const active = !navItem.disabled && isPathActive(relativePath, navItem.url)
+                const isNewTalentSearch = navItem.title === "New Talent Search"
+                
+                return (
+                  <SidebarMenu key={navItem.title}>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        tooltip={navItem.title}
+                        isActive={active}
+                        className={
+                          "h-9 !bg-black !text-white shadow-md transition-all active:scale-95 hover:!bg-black/90 data-[active=true]:!bg-black data-[active=true]:!text-white" +
+                          (isNewTalentSearch ? " hh-new-talent-search-border !rounded-lg" : "")
+                        }
+                      >
+                        <Link href={toOrgPath(navItem.url)} aria-current={active ? "page" : undefined} prefetch>
+                          <Icon name="plus" />
+                          <span className="group-data-[collapsible=icon]:sr-only">{navItem.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </SidebarMenu>
+                )
+              })}
             </SidebarGroupContent>
           </SidebarGroup>
         )}
