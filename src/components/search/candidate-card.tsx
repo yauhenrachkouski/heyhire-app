@@ -84,32 +84,56 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
     criteria_scores
   } = scoringData || {};
 
-  // Determine styles based on score
-  const isHigh = matchScore >= 75;
-  const isMedium = matchScore >= 50 && matchScore < 75;
-  const isLow = matchScore < 50;
-  
-  const scoreColor = isHigh ? "text-emerald-600" : isMedium ? "text-amber-600" : "text-rose-600";
-  const barColor = isHigh ? "bg-emerald-500" : isMedium ? "bg-amber-500" : "bg-rose-500";
-
   return (
     <div className="mt-4 pt-3 border-t border-dashed border-border/60">
       <div className="flex flex-col gap-3">
         {/* Header: Score + Verdict + Visual Bar */}
-        <div className="flex items-start justify-between gap-4">
-           <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-4">
+           <div className="flex items-center gap-4">
+             {/* Score with circular progress indicator */}
              <div className="relative flex items-center justify-center">
-                {/* Simple textual score, large and clean */}
-                <span className={cn("text-3xl font-bold tracking-tighter", scoreColor)}>
-                  {matchScore}
-                </span>
-                <span className="text-[10px] text-muted-foreground font-medium absolute -top-1 -right-2">%</span>
+               <div className="relative w-14 h-14">
+                 {/* Circular progress background */}
+                 <svg className="w-14 h-14 transform -rotate-90" viewBox="0 0 56 56">
+                   <circle
+                     cx="28"
+                     cy="28"
+                     r="24"
+                     fill="none"
+                     stroke="currentColor"
+                     strokeWidth="4"
+                     className="text-muted/20"
+                   />
+                   <circle
+                     cx="28"
+                     cy="28"
+                     r="24"
+                     fill="none"
+                     stroke="currentColor"
+                     strokeWidth="4"
+                     strokeLinecap="round"
+                     strokeDasharray={`${2 * Math.PI * 24}`}
+                     strokeDashoffset={`${2 * Math.PI * 24 * (1 - matchScore / 100)}`}
+                     className="text-foreground transition-all duration-500"
+                   />
+                 </svg>
+                 {/* Score text overlay */}
+                 <div className="absolute inset-0 flex items-center justify-center">
+                   <span className="text-lg font-bold leading-none text-foreground">
+                     {matchScore}
+                   </span>
+                 </div>
+               </div>
              </div>
-             <div className="flex flex-col">
-               <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Match Quality</span>
-               <span className={cn("text-sm font-semibold leading-none", scoreColor)}>
+             
+             {/* Verdict */}
+             <div className="flex items-center">
+               <Badge
+                 variant="outline"
+                 className="text-xs font-semibold px-2 py-0.5"
+               >
                  {verdict || "Analyzed"}
-               </span>
+               </Badge>
              </div>
            </div>
            
@@ -124,8 +148,8 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
                         className={cn(
                           "w-1.5 rounded-sm transition-all cursor-help",
                           c.found 
-                              ? (c.importance === 'high' ? "h-6 bg-emerald-500" : "h-4 bg-emerald-300/60") 
-                              : (c.importance === 'high' ? "h-6 bg-rose-400" : "h-2 bg-muted-foreground/20")
+                              ? (c.importance === 'high' ? "h-6 bg-foreground/60" : "h-4 bg-foreground/40") 
+                              : (c.importance === 'high' ? "h-6 bg-muted-foreground/30" : "h-2 bg-muted-foreground/20")
                         )}
                       />
                     </TooltipTrigger>
@@ -155,7 +179,7 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
             {/* Critical Missing Requirements */}
             {high_importance_missing && high_importance_missing.length > 0 && (
               <div className="flex gap-2.5 items-start">
-                <IconAlertTriangle className="w-4 h-4 text-rose-500/60 shrink-0 mt-0.5" />
+                <IconAlertTriangle className="w-4 h-4 text-muted-foreground/60 shrink-0 mt-0.5" />
                 <div className="leading-relaxed">
                    <span className="font-semibold text-foreground/90">Missing critical: </span>
                    <span className="text-muted-foreground">
@@ -167,9 +191,9 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
             )}
             
             {/* If matched perfectly/highly, show strengths */}
-            {!high_importance_missing?.length && criteria_scores && isHigh && (
+            {!high_importance_missing?.length && criteria_scores && matchScore >= 75 && (
                <div className="flex gap-2.5 items-start">
-                 <IconCheck className="w-4 h-4 text-emerald-500/60 shrink-0 mt-0.5" />
+                 <IconCheck className="w-4 h-4 text-muted-foreground/60 shrink-0 mt-0.5" />
                  <div className="leading-relaxed">
                     <span className="font-semibold text-foreground/90">Key Strengths: </span>
                     <span className="text-muted-foreground">
