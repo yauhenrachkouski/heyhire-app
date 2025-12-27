@@ -215,7 +215,7 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      {isOpeningLinkedIn ? "Opening LinkedIn..." : "Open LinkedIn (uses credits)"}
+                      {isOpeningLinkedIn ? "Opening LinkedIn..." : "1 credit"}
                     </TooltipContent>
                   </Tooltip>
                 )}

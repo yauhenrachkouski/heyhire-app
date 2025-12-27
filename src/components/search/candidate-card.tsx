@@ -9,7 +9,7 @@ import {
   IconTargetArrow,
   IconBrain,
   IconChartBar,
-  IconBrandLinkedin,
+  IconCoin,
   IconChevronRight
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
@@ -291,82 +291,82 @@ export function CandidateCard({
               />
             </div>
 
-            {/* Name and role */}
-            <div className="flex-1 min-w-0 space-y-1.5">
-              <h3 className="text-base font-semibold leading-tight">{fullName}</h3>
-              
-              <p className="text-sm font-medium leading-snug text-foreground/90">
-                {currentRole} {organizationName && `@ ${organizationName}`}
-              </p>
-
-              {locationText && (
-                <p className="text-xs text-muted-foreground inline-flex items-center gap-1 leading-snug">
-                  <IconMapPin className="h-3.5 w-3.5 opacity-80" />
-                  <span>{locationText}</span>
+            {/* Name, position, location with action buttons */}
+            <div className="flex-1 min-w-0 flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <h3 className="text-base font-semibold leading-tight">{fullName}</h3>
+                
+                <p className="text-sm font-medium leading-snug text-foreground/90">
+                  {currentRole} {organizationName && `@ ${organizationName}`}
                 </p>
-              )}
+
+                {locationText && (
+                  <p className="text-xs text-muted-foreground inline-flex items-center gap-1 leading-snug">
+                    <IconMapPin className="h-3.5 w-3.5 opacity-80" />
+                    <span>{locationText}</span>
+                  </p>
+                )}
+              </div>
+              
+              {/* Action buttons aligned with name, position, and location */}
+              <div className="flex flex-row gap-2 shrink-0">
+                {/* Primary action: LinkedIn */}
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="font-medium"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openLinkedIn({ candidateId: candidate.id, linkedinUrl: candidate.linkedinUrl });
+                        }}
+                        disabled={isOpeningLinkedIn}
+                      >
+                        {isOpeningLinkedIn ? (
+                          <IconLoader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <IconCoin className="h-4 w-4" />
+                        )}
+                        <span>Open LinkedIn</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {isOpeningLinkedIn ? "Opening LinkedIn..." : "1 credit"}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                {/* Secondary action: View details */}
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onShowCandidate?.();
+                        }}
+                      >
+                        <span>View details</span>
+                        <IconChevronRight className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Open detailed candidate card</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
             </div>
           </div>
-
-          <div className="mt-2">
-            <CandidateAIScoring matchScore={matchScore} scoringData={scoringData} />
-          </div>
-
         </div>
+      </div>
 
-        {/* Right column: Action buttons */}
-        <div className="flex flex-col gap-2 items-end">
-          <div className="flex flex-row gap-2">
-            
-
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openLinkedIn({ candidateId: candidate.id, linkedinUrl: candidate.linkedinUrl });
-                    }}
-                    disabled={isOpeningLinkedIn}
-                  >
-                    {isOpeningLinkedIn ? (
-                      <IconLoader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <IconBrandLinkedin className="h-4 w-4" />
-                    )}
-                    LinkedIn
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {isOpeningLinkedIn ? "Opening LinkedIn..." : "Open LinkedIn (uses credits)"}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onShowCandidate?.();
-                    }}
-                  >
-                    View
-                    <IconChevronRight className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>View details</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-
-            
-          </div>
-        </div>
+      {/* AI Scoring */}
+      <div className="mt-4">
+        <CandidateAIScoring matchScore={matchScore} scoringData={scoringData} />
       </div>
     </div>
   );
