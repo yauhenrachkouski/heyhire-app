@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ParsedQuery } from "@/types/search";
+import type { ParsedQuery, SourcingCriteria } from "@/types/search";
 import { CandidateCardListPaginated } from "@/components/search/candidate-card-list-paginated";
 import { AppliedFilters } from "@/components/search/applied-filters";
 import { InlineFilters } from "@/components/search/inline-filters";
+import { CriteriaDisplay } from "@/components/search/criteria-display";
 import { Button } from "@/components/ui/button";
 import { IconPencil } from "@tabler/icons-react";
 import SourcingLoader from "@/components/search/sourcing-custom-loader";
@@ -22,6 +23,7 @@ interface SearchResultsClientProps {
     name: string;
     query: string;
     params: ParsedQuery;
+    parseResponse: SourcingCriteria | null;
     createdAt: Date;
     status: string;
     progress: number | null;
@@ -339,7 +341,8 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
           </div>
         </div>
 
-        <p className="text-muted-foreground">{search.query}</p>
+        
+        <CriteriaDisplay data={search.parseResponse} />
         
         <AppliedFilters 
           params={currentParsedQuery} 

@@ -244,6 +244,7 @@ export async function getSearchById(
     name: string;
     query: string;
     params: ParsedQuery;
+    parseResponse: SourcingCriteria | null;
     createdAt: Date;
     status: string;
     progress: number | null;
@@ -274,6 +275,7 @@ export async function getSearchById(
       name: s.name,
       query: s.query,
       params: JSON.parse(s.params) as ParsedQuery,
+      parseResponse: s.parseResponse ? (JSON.parse(s.parseResponse) as SourcingCriteria) : null,
       createdAt: s.createdAt,
       status: s.status,
       progress: s.progress,
