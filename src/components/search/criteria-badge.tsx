@@ -101,21 +101,33 @@ export function CriteriaBadge({
 
     if (compact) {
       // Compact Mode Logic (for Cards)
-      // "black (default) or outline - for not matched"
-      // Default implies matched or neutral
-      const isMatched = status === "match" || status === "neutral";
       
+      if (status === "match") {
+         return {
+            icon: priorityConfig.icon,
+            color: "text-white/90",
+            bg: "bg-black text-white border-black hover:bg-black/90",
+            label: "Matched",
+            priorityLabel: priorityConfig.label
+         };
+      }
+      
+      if (status === "missing") {
+         return {
+            icon: priorityConfig.icon,
+            color: priorityConfig.color,
+            bg: "bg-secondary text-secondary-foreground border-transparent hover:bg-secondary/80",
+            label: "Missing",
+            priorityLabel: priorityConfig.label
+         };
+      }
+      
+      // Neutral / Default
       return {
         icon: priorityConfig.icon,
-        // For compact mode, we want the priority icon color to be visible? 
-        // If background is black, we need light icon. 
-        // If background is white (outline), we can use colored icon.
-        // Let's assume user wants the priority INDICATOR.
-        color: isMatched ? "text-white/90" : priorityConfig.color, 
-        bg: isMatched 
-          ? "bg-black text-white border-black hover:bg-black/90" 
-          : "bg-background border-dashed text-muted-foreground hover:bg-muted/50",
-        label: isMatched ? "Matched" : "Missing",
+        color: priorityConfig.color,
+        bg: "bg-background border-dashed text-muted-foreground hover:bg-muted/50",
+        label: "Neutral",
         priorityLabel: priorityConfig.label
       };
     }

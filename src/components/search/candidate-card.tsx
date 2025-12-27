@@ -8,7 +8,10 @@ import {
   IconBrain,
   IconCoin,
   IconChevronRight,
-  IconBan
+  IconBan,
+  IconBriefcase,
+  IconTools,
+  IconList
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -87,67 +90,88 @@ function CandidateScoreDisplay(props: { matchScore: number | null; scoringData: 
     return String(value);
   };
 
-  // Group and sort criteria for display
-  const displayItems = useMemo(() => {
+  const groups = useMemo(() => {
+    const g: Record<string, any[]> = {
+      location: [],
+      experience: [],
+      skills: [],
+      capabilities: [],
+      other: []
+    };
+
     if (sourcingCriteria?.criteria && sourcingCriteria.criteria.length > 0) {
       const c = sourcingCriteria.criteria;
-      // Define groups to match header order
-      const groups = [
-        c.filter((x) => x.type === "logistics_location"),
-        c.filter((x) => ["minimum_years_of_experience", "minimum_relevant_years_of_experience"].includes(x.type)),
-        c.filter((x) => ["tool_requirement", "language_requirement"].includes(x.type)),
-        c.filter((x) => x.type === "capability_requirement"),
-        c.filter((x) => !["logistics_location", "minimum_years_of_experience", "minimum_relevant_years_of_experience", "tool_requirement", "language_requirement", "capability_requirement"].includes(x.type))
-      ];
-      return groups.flat();
+      g.location = c.filter((x) => x.type === "logistics_location");
+      g.experience = c.filter((x) => ["minimum_years_of_experience", "minimum_relevant_years_of_experience"].includes(x.type));
+      g.skills = c.filter((x) => ["tool_requirement", "language_requirement"].includes(x.type));
+      g.capabilities = c.filter((x) => x.type === "capability_requirement");
+      g.other = c.filter((x) => !["logistics_location", "minimum_years_of_experience", "minimum_relevant_years_of_experience", "tool_requirement", "language_requirement", "capability_requirement"].includes(x.type));
+    } else if (criteria_scores) {
+      g.other = criteria_scores.map(cs => ({
+        id: cs.criterion,
+        value: cs.criterion,
+        type: 'unknown',
+        priority_level: cs.importance,
+        operator: 'include'
+      }));
     }
-    
-    // Fallback: Use criteria_scores if no definitions
-    if (criteria_scores) {
-       return criteria_scores.map(cs => ({
-         id: cs.criterion, // Use criterion as ID fallback
-         value: cs.criterion,
-         type: 'unknown',
-         priority_level: cs.importance,
-         operator: 'include' // Default
-       }));
-    }
-    return [];
+    return g;
   }, [sourcingCriteria, criteria_scores]);
 
-  return (
-    <div className="flex flex-col gap-3">
-      {/* Visual Matching Criteria Badges */}
-      <div className="flex flex-wrap gap-1 items-center">
-        {displayItems.map((item: any) => {
-           // If it's a SourcingCriteria item (has id/value/type/priority_level)
-           const isSourcingItem = item.priority_level !== undefined; 
-           const valStr = isSourcingItem ? getValueString(item.value) : item.criterion || String(item.value);
-           
-           // Determine status
-           let status: "match" | "missing" | "neutral" = "neutral";
-           let matchedScore;
+  const groupConfig = useMemo(() => [
+    { key: "location", title: "Location", icon: IconMapPin },
+    { key: "experience", title: "Experience", icon: IconBriefcase },
+    { key: "skills", title: "Skills", icon: IconTools },
+    { key: "capabilities", title: "Capabilities", icon: IconBrain },
+    { key: "other", title: "Other", icon: IconList },
+  ].filter(g => groups[g.key] && groups[g.key].length > 0), [groups]);
 
-           if (criteria_scores) {
-             matchedScore = criteria_scores.find(cs => 
+  const renderGroup = (title: string, items: any[], Icon: React.ElementType) => {
+    return (
+      <div className="flex items-center gap-2 group/category">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center justify-center size-6 rounded-md bg-muted/50 text-muted-foreground shrink-0 cursor-help transition-colors hover:bg-muted">
+                <Icon className="size-3.5" />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{title}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <div className="flex flex-wrap gap-1 items-center">
+          {items.map((item: any) => {
+            // If it's a SourcingCriteria item (has id/value/type/priority_level)
+            const isSourcingItem = item.priority_level !== undefined;
+            const valStr = isSourcingItem ? getValueString(item.value) : item.criterion || String(item.value);
+
+            // Determine status
+            let status: "match" | "missing" | "neutral" = "neutral";
+            let matchedScore;
+
+            if (criteria_scores) {
+              matchedScore = criteria_scores.find(cs =>
                 cs.criterion.toLowerCase().includes(valStr.toLowerCase()) ||
                 valStr.toLowerCase().includes(cs.criterion.toLowerCase())
-             );
-             if (matchedScore) {
-               status = matchedScore.found ? "match" : "missing";
-             } else if (criteria_scores.length > 0) {
+              );
+              if (matchedScore) {
+                status = matchedScore.found ? "match" : "missing";
+              } else if (criteria_scores.length > 0) {
                 // If we have scores but can't map it, leave neutral
-             }
-           } else if (!isSourcingItem && item.found !== undefined) {
+              }
+            } else if (!isSourcingItem && item.found !== undefined) {
               // It's a raw score item
               status = item.found ? "match" : "missing";
-           }
+            }
 
-           // Determine value string including unit for display
-           const displayValue = valStr + (item.type?.includes("years") ? "y" : "");
+            // Determine value string including unit for display
+            const displayValue = valStr + (item.type?.includes("years") ? "y" : "");
 
-           return (
-              <CriteriaBadge 
+            return (
+              <CriteriaBadge
                 key={item.id || valStr}
                 label={displayValue}
                 value={displayValue} // Pass full value so 2y becomes 2Y
@@ -157,8 +181,27 @@ function CandidateScoreDisplay(props: { matchScore: number | null; scoringData: 
                 status={status}
                 compact={true}
               />
-           );
-        })}
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {groupConfig.flatMap((group, index) => [
+          <div key={group.key} className="flex items-center">
+            {renderGroup(group.title, groups[group.key], group.icon)}
+          </div>,
+          index < groupConfig.length - 1 && (
+            <div
+              key={`divider-${group.key}`}
+              className="h-4 w-px bg-border/40 shrink-0 hidden sm:block"
+            />
+          ),
+        ]).filter(Boolean)}
       </div>
     </div>
   );
