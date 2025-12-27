@@ -329,11 +329,21 @@ export function CandidateCard({
 
   const fullName = candidate.fullName || "Unknown";
   
-  
-  // Current role from first experience
-  const currentExperience = experiences[0] || {};
-  const currentRole = currentExperience.role_title || currentExperience.position || candidate.headline || "----";
-  const organizationName = currentExperience.organization_name || currentExperience.companyName || "";
+  // Find all current roles (endDate.text === "Present" or no endDate)
+  const currentRoles = useMemo(() => {
+    return experiences.filter((exp: any) => {
+      const endDate = exp.endDate || exp.end_date;
+      const isPresent = endDate?.text === "Present" || endDate?.text === "present";
+      const hasNoEndDate = !endDate;
+      return isPresent || hasNoEndDate;
+    });
+  }, [experiences]);
+
+  // Get the first current role
+  const firstCurrentRole = currentRoles[0] || experiences[0] || {};
+  const currentRole = firstCurrentRole.role_title || firstCurrentRole.title || firstCurrentRole.position || candidate.headline || "----";
+  const organizationName = firstCurrentRole.organization_name || firstCurrentRole.companyName || firstCurrentRole.company || "";
+  const additionalCurrentRolesCount = currentRoles.length > 1 ? currentRoles.length - 1 : 0;
   
   const locationText = location?.name || location?.linkedinText || location?.city;
 
@@ -486,9 +496,19 @@ export function CandidateCard({
             <div className="flex-1 min-w-0 space-y-1.5">
               <h3 className="text-base font-semibold leading-tight text-gray-900">{fullName}</h3>
               
-              <p className="text-sm font-medium leading-snug text-gray-700">
-                {currentRole} {organizationName && `@ ${organizationName}`}
-              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-medium leading-snug text-gray-700">
+                  {currentRole} {organizationName && `@ ${organizationName}`}
+                </p>
+                {additionalCurrentRolesCount > 0 && (
+                  <Badge
+                    variant="outline"
+                    className="text-xs px-2 py-0.5 h-5 font-normal border-gray-300 bg-gray-50 text-gray-700"
+                  >
+                    +{additionalCurrentRolesCount}
+                  </Badge>
+                )}
+              </div>
 
               {locationText && (
                 <p className="text-xs text-gray-500 inline-flex items-center gap-1 leading-snug">
