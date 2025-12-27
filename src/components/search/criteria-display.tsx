@@ -183,14 +183,17 @@ export function CriteriaDisplay({ data }: CriteriaDisplayProps) {
   return (
     <TooltipProvider delayDuration={300}>
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 py-3 w-full">
-        {groupItems.map((group, index) => (
+        {groupItems.flatMap((group, index) => [
           <div key={group.key} className="flex items-center">
             {renderGroup(group.title, group.items, group.icon)}
-            {index < groupItems.length - 1 && (
-              <div className="h-4 w-px bg-border/40 mx-3 shrink-0 hidden sm:block" />
-            )}
-          </div>
-        ))}
+          </div>,
+          index < groupItems.length - 1 && (
+            <div
+              key={`divider-${group.key}`}
+              className="h-4 w-px bg-border/40 shrink-0 hidden sm:block -mx-3"
+            />
+          ),
+        ]).filter(Boolean)}
       </div>
     </TooltipProvider>
   );

@@ -16,6 +16,7 @@ import { useSearchRealtime } from "@/hooks/use-search-realtime";
 import posthog from 'posthog-js';
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useIsReadOnly } from "@/hooks/use-is-read-only";
+import { DialogOverlay } from "@/components/ui/dialog";
 
 interface SearchResultsClientProps {
   search: {
@@ -299,7 +300,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
       
       
       {/* Shared Header */}
-      <div className="space-y-4">
+      <div>
         <div className="flex items-start justify-between gap-4">
           <div 
             className="group flex items-center gap-2" // Add group for hover effect
