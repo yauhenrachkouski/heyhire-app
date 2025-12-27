@@ -87,106 +87,98 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
   // Determine styles based on score
   const isHigh = matchScore >= 75;
   const isMedium = matchScore >= 50 && matchScore < 75;
+  const isLow = matchScore < 50;
   
   const scoreColor = isHigh ? "text-emerald-600" : isMedium ? "text-amber-600" : "text-rose-600";
-  const borderColor = isHigh ? "border-emerald-200" : isMedium ? "border-amber-200" : "border-rose-200";
+  const barColor = isHigh ? "bg-emerald-500" : isMedium ? "bg-amber-500" : "bg-rose-500";
 
   return (
-    <div className="mt-3 pt-3 border-t border-dashed border-border/60">
+    <div className="mt-4 pt-3 border-t border-dashed border-border/60">
       <div className="flex flex-col gap-3">
-        {/* Top Row: Score & Verdict */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-             <div className={cn(
-               "flex flex-col items-center justify-center w-12 h-12 rounded-lg border bg-background/50",
-               borderColor
-             )}>
-                <span className={cn("text-lg font-bold leading-none", scoreColor)}>{matchScore}</span>
-                <span className="text-[10px] text-muted-foreground uppercase">Score</span>
-             </div>
-             
-             <div className="flex flex-col">
-                <div className="flex items-center gap-1.5">
-                   <IconBrain className="w-3.5 h-3.5 text-muted-foreground" />
-                   <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">AI Verdict</span>
-                </div>
-                <span className={cn("text-sm font-semibold", scoreColor)}>
-                  {verdict || "Evaluated"}
+        {/* Header: Score + Verdict + Visual Bar */}
+        <div className="flex items-start justify-between gap-4">
+           <div className="flex items-center gap-3">
+             <div className="relative flex items-center justify-center">
+                {/* Simple textual score, large and clean */}
+                <span className={cn("text-3xl font-bold tracking-tighter", scoreColor)}>
+                  {matchScore}
                 </span>
+                <span className="text-[10px] text-muted-foreground font-medium absolute -top-1 -right-2">%</span>
              </div>
-          </div>
-          
-          {/* Visual Indicator of missing/found */}
+             <div className="flex flex-col">
+               <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Match Quality</span>
+               <span className={cn("text-sm font-semibold leading-none", scoreColor)}>
+                 {verdict || "Analyzed"}
+               </span>
+             </div>
+           </div>
+           
+           {/* Visual Bar for Criteria - Infographic style */}
            {criteria_scores && (
-             <div className="flex gap-1">
-               {criteria_scores.filter(c => c.importance === 'high').slice(0, 5).map((c, i) => (
-                 <div 
-                    key={i} 
-                    className={cn(
-                      "w-1.5 h-4 rounded-full",
-                      c.found ? "bg-emerald-400/80" : "bg-rose-300/60"
-                    )}
-                    title={`${c.criterion}: ${c.found ? 'Met' : 'Missing'}`}
-                 />
+             <div className="flex gap-[2px] items-end h-8 pb-1">
+               {criteria_scores.map((c, i) => (
+                 <TooltipProvider key={i} delayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div 
+                        className={cn(
+                          "w-1.5 rounded-sm transition-all cursor-help",
+                          c.found 
+                              ? (c.importance === 'high' ? "h-6 bg-emerald-500" : "h-4 bg-emerald-300/60") 
+                              : (c.importance === 'high' ? "h-6 bg-rose-400" : "h-2 bg-muted-foreground/20")
+                        )}
+                      />
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">
+                      {c.found ? "Matches: " : "Missing: "}{c.criterion}
+                    </TooltipContent>
+                  </Tooltip>
+                 </TooltipProvider>
                ))}
              </div>
            )}
         </div>
 
-        {/* Primary Insight */}
-        {primary_issue && (
-          <div className="text-xs text-muted-foreground leading-relaxed pl-3 border-l-2 border-amber-400/50 py-0.5">
-            <span className="text-foreground font-medium mr-1">Why not a match?</span>
-            {primary_issue}
-          </div>
-        )}
+        {/* Content Block: Primary Issue & Gaps - Clean, no heavy bg */}
+        <div className="flex flex-col gap-2.5 text-xs">
+            {/* Primary Analysis Text */}
+            {primary_issue && (
+              <div className="flex gap-2.5 items-start text-foreground/80">
+                <IconBrain className="w-4 h-4 text-primary/40 shrink-0 mt-0.5" />
+                <p className="leading-relaxed">
+                  <span className="font-semibold text-foreground/90">Analysis: </span>
+                  {primary_issue}
+                </p>
+              </div>
+            )}
 
-        {/* Requirements Gaps or Highlights */}
-        {high_importance_missing && high_importance_missing.length > 0 ? (
-          <div className="space-y-1.5">
-             <div className="flex items-center gap-1.5">
-                <IconTargetArrow className="w-3.5 h-3.5 text-muted-foreground/70" />
-                <span className="text-[11px] font-medium text-muted-foreground uppercase">Missing Critical Requirements</span>
-             </div>
-             <div className="flex flex-wrap gap-1.5">
-                {high_importance_missing.slice(0, 4).map((item, i) => (
-                  <Badge 
-                    key={i} 
-                    variant="outline" 
-                    className="h-5 px-1.5 text-[10px] font-medium text-muted-foreground bg-muted/30 border-border/60 hover:bg-muted/50 rounded-md"
-                  >
-                    {item}
-                  </Badge>
-                ))}
-                {high_importance_missing.length > 4 && (
-                  <span className="text-[10px] text-muted-foreground self-center pl-1">
-                    +{high_importance_missing.length - 4} more
-                  </span>
-                )}
-             </div>
-          </div>
-        ) : (
-          // If match is high, show positive highlights
-          criteria_scores && isHigh && (
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5">
-                  <IconChartBar className="w-3.5 h-3.5 text-muted-foreground/70" />
-                  <span className="text-[11px] font-medium text-muted-foreground uppercase">Key Strengths</span>
+            {/* Critical Missing Requirements */}
+            {high_importance_missing && high_importance_missing.length > 0 && (
+              <div className="flex gap-2.5 items-start">
+                <IconAlertTriangle className="w-4 h-4 text-rose-500/60 shrink-0 mt-0.5" />
+                <div className="leading-relaxed">
+                   <span className="font-semibold text-foreground/90">Missing critical: </span>
+                   <span className="text-muted-foreground">
+                      {high_importance_missing.slice(0, 5).join(", ")}
+                      {high_importance_missing.length > 5 && `, +${high_importance_missing.length - 5} more`}
+                   </span>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                  {criteria_scores.filter(c => c.found && c.importance === 'high').slice(0, 3).map((c, i) => (
-                    <Badge 
-                      key={i} 
-                      variant="outline"
-                      className="h-5 px-1.5 text-[10px] font-medium text-emerald-700 bg-emerald-50/50 border-emerald-100 rounded-md"
-                    >
-                      {c.criterion}
-                    </Badge>
-                  ))}
-              </div>
-            </div>
-          )
-        )}
+            )}
+            
+            {/* If matched perfectly/highly, show strengths */}
+            {!high_importance_missing?.length && criteria_scores && isHigh && (
+               <div className="flex gap-2.5 items-start">
+                 <IconCheck className="w-4 h-4 text-emerald-500/60 shrink-0 mt-0.5" />
+                 <div className="leading-relaxed">
+                    <span className="font-semibold text-foreground/90">Key Strengths: </span>
+                    <span className="text-muted-foreground">
+                       {criteria_scores.filter(c => c.found && c.importance === 'high').map(c => c.criterion).slice(0, 5).join(", ")}
+                    </span>
+                 </div>
+               </div>
+            )}
+        </div>
       </div>
     </div>
   );
