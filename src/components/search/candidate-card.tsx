@@ -70,8 +70,8 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
 
   if (matchScore === null) {
     return (
-      <div className="flex items-center gap-2 mt-4 text-muted-foreground text-xs py-2">
-        <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
+      <div className="flex items-center gap-2 mt-4 text-gray-500 text-xs py-2">
+        <IconLoader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
         <span>Calculating match score...</span>
       </div>
     );
@@ -84,8 +84,26 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
     criteria_scores
   } = scoringData || {};
 
+  // Determine score color based on value
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return "text-green-600";
+    if (score >= 60) return "text-blue-600";
+    if (score >= 40) return "text-yellow-600";
+    return "text-orange-600";
+  };
+
+  const getScoreBgColor = (score: number) => {
+    if (score >= 80) return "stroke-green-600";
+    if (score >= 60) return "stroke-blue-600";
+    if (score >= 40) return "stroke-yellow-600";
+    return "stroke-orange-600";
+  };
+
+  const scoreColor = getScoreColor(matchScore);
+  const scoreBgColor = getScoreBgColor(matchScore);
+
   return (
-    <div className="mt-4 pt-3 border-t border-dashed border-border/60">
+    <div className="mt-4 pt-3 border-t border-dashed border-gray-200">
       <div className="flex flex-col gap-3">
         {/* Header: Score + Verdict + Visual Bar */}
         <div className="flex items-center justify-between gap-4">
@@ -102,7 +120,7 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
                      fill="none"
                      stroke="currentColor"
                      strokeWidth="4"
-                     className="text-muted/20"
+                     className="text-gray-200"
                    />
                    <circle
                      cx="28"
@@ -114,12 +132,12 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
                      strokeLinecap="round"
                      strokeDasharray={`${2 * Math.PI * 24}`}
                      strokeDashoffset={`${2 * Math.PI * 24 * (1 - matchScore / 100)}`}
-                     className="text-foreground transition-all duration-500"
+                     className={cn(scoreBgColor, "transition-all duration-500")}
                    />
                  </svg>
                  {/* Score text overlay */}
                  <div className="absolute inset-0 flex items-center justify-center">
-                   <span className="text-lg font-bold leading-none text-foreground">
+                   <span className={cn("text-lg font-bold leading-none", scoreColor)}>
                      {matchScore}
                    </span>
                  </div>
@@ -130,7 +148,13 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
              <div className="flex items-center">
                <Badge
                  variant="outline"
-                 className="text-xs font-semibold px-2 py-0.5"
+                 className={cn(
+                   "text-xs px-2 py-0.5",
+                   matchScore >= 80 ? "border-green-200 text-green-700 bg-green-50" :
+                   matchScore >= 60 ? "border-blue-200 text-blue-700 bg-blue-50" :
+                   matchScore >= 40 ? "border-yellow-200 text-yellow-700 bg-yellow-50" :
+                   "border-orange-200 text-orange-700 bg-orange-50"
+                 )}
                >
                  {verdict || "Analyzed"}
                </Badge>
@@ -146,10 +170,10 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
                     <TooltipTrigger asChild>
                       <div 
                         className={cn(
-                          "w-1.5 rounded-sm transition-all cursor-help",
+                          "w-1.5 h-6 rounded-sm transition-all cursor-help",
                           c.found 
-                              ? (c.importance === 'high' ? "h-6 bg-foreground/60" : "h-4 bg-foreground/40") 
-                              : (c.importance === 'high' ? "h-6 bg-muted-foreground/30" : "h-2 bg-muted-foreground/20")
+                              ? (c.importance === 'high' ? "bg-green-500" : "bg-green-400") 
+                              : (c.importance === 'high' ? "bg-gray-300" : "bg-gray-200")
                         )}
                       />
                     </TooltipTrigger>
@@ -167,10 +191,10 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
         <div className="flex flex-col gap-2.5 text-xs">
             {/* Primary Analysis Text */}
             {primary_issue && (
-              <div className="flex gap-2.5 items-start text-foreground/80">
-                <IconBrain className="w-4 h-4 text-primary/40 shrink-0 mt-0.5" />
+              <div className="flex gap-2.5 items-start text-gray-600">
+                <IconBrain className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
                 <p className="leading-relaxed">
-                  <span className="font-semibold text-foreground/90">Analysis: </span>
+                  <span className="font-semibold text-gray-900">Analysis: </span>
                   {primary_issue}
                 </p>
               </div>
@@ -179,10 +203,10 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
             {/* Critical Missing Requirements */}
             {high_importance_missing && high_importance_missing.length > 0 && (
               <div className="flex gap-2.5 items-start">
-                <IconAlertTriangle className="w-4 h-4 text-muted-foreground/60 shrink-0 mt-0.5" />
+                <IconAlertTriangle className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
                 <div className="leading-relaxed">
-                   <span className="font-semibold text-foreground/90">Missing critical: </span>
-                   <span className="text-muted-foreground">
+                   <span className="font-semibold text-gray-900">Missing critical: </span>
+                   <span className="text-gray-600">
                       {high_importance_missing.slice(0, 5).join(", ")}
                       {high_importance_missing.length > 5 && `, +${high_importance_missing.length - 5} more`}
                    </span>
@@ -193,10 +217,10 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
             {/* If matched perfectly/highly, show strengths */}
             {!high_importance_missing?.length && criteria_scores && matchScore >= 75 && (
                <div className="flex gap-2.5 items-start">
-                 <IconCheck className="w-4 h-4 text-muted-foreground/60 shrink-0 mt-0.5" />
+                 <IconCheck className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
                  <div className="leading-relaxed">
-                    <span className="font-semibold text-foreground/90">Key Strengths: </span>
-                    <span className="text-muted-foreground">
+                    <span className="font-semibold text-gray-900">Key Strengths: </span>
+                    <span className="text-gray-600">
                        {criteria_scores.filter(c => c.found && c.importance === 'high').map(c => c.criterion).slice(0, 5).join(", ")}
                     </span>
                  </div>
@@ -281,11 +305,11 @@ export function CandidateCard({
           onCardClick();
         }
       }}
-      className={`group relative rounded-lg border bg-card p-4 transition-all outline-none ${
-        isSelected ? "ring-2 ring-primary" : ""
+      className={`group relative rounded-lg border bg-white p-4 transition-all outline-none ${
+        isSelected ? "ring-2 ring-blue-500 border-blue-500" : "border-gray-200"
       } ${
         onCardClick
-          ? "cursor-pointer hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          ? "cursor-pointer hover:border-blue-400 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
           : ""
       }`}
     >
@@ -318,15 +342,15 @@ export function CandidateCard({
             {/* Name, position, location with action buttons */}
             <div className="flex-1 min-w-0 flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0 space-y-1.5">
-                <h3 className="text-base font-semibold leading-tight">{fullName}</h3>
+                <h3 className="text-base font-semibold leading-tight text-gray-900">{fullName}</h3>
                 
-                <p className="text-sm font-medium leading-snug text-foreground/90">
+                <p className="text-sm font-medium leading-snug text-gray-700">
                   {currentRole} {organizationName && `@ ${organizationName}`}
                 </p>
 
                 {locationText && (
-                  <p className="text-xs text-muted-foreground inline-flex items-center gap-1 leading-snug">
-                    <IconMapPin className="h-3.5 w-3.5 opacity-80" />
+                  <p className="text-xs text-gray-500 inline-flex items-center gap-1 leading-snug">
+                    <IconMapPin className="h-3.5 w-3.5 text-gray-400" />
                     <span>{locationText}</span>
                   </p>
                 )}
