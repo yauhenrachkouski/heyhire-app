@@ -338,6 +338,8 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
             )}
           </div>
         </div>
+
+        <p className="text-muted-foreground">{search.query}</p>
         
         <AppliedFilters 
           params={currentParsedQuery} 

@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { IconSparkles, IconSortAscending, IconSortDescending } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 
@@ -22,16 +23,6 @@ export function InlineFilters({ onScoreRangeChange, onSortChange }: InlineFilter
   const [minScore, setMinScore] = useState<number>(0); // Start with "All" candidates by default
   const [isCustom, setIsCustom] = useState<boolean>(false);
   const [sortBy, setSortBy] = useState<string>("date-desc"); // Default: newest first
-
-  const scoreLabel = isCustom
-    ? `Score: ${minScore}+`
-    : minScore === 0
-      ? "Score: All"
-      : minScore === 80
-        ? "Score: Excellent (80+)"
-        : minScore === 70
-          ? "Score: Good (70+)"
-          : "Score: Fair (50+)";
 
   const sortLabel =
     sortBy === "date-desc"
@@ -57,6 +48,8 @@ export function InlineFilters({ onScoreRangeChange, onSortChange }: InlineFilter
   };
 
   const handlePresetChange = (value: string) => {
+    if (!value) return;
+    
     if (value === "custom") {
       setIsCustom(true);
       return;
@@ -80,84 +73,66 @@ export function InlineFilters({ onScoreRangeChange, onSortChange }: InlineFilter
     return minScore.toString();
   };
 
-  const filters = [
-    {
-      id: "score",
-      value: getSelectValue(),
-      onChange: handlePresetChange,
-      icon: IconSparkles,
-      label: scoreLabel,
-      options: [
-        { value: "0", label: "All Candidates" },
-        { value: "80", label: "Excellent (80+)" },
-        { value: "70", label: "Good (70+)" },
-        { value: "50", label: "Fair (50+)" },
-        { value: "custom", label: "Custom Range" },
-      ],
-      extra: isCustom && (
-        <div className="flex items-center gap-3 px-3 border-l h-5 my-auto">
-          <Slider
-            min={0}
-            max={100}
-            step={5}
-            value={[minScore]}
-            onValueChange={handleScoreChange}
-            className="flex-1 w-24"
-          />
-          <span className="text-sm font-medium whitespace-nowrap w-8 text-right tabular-nums">
-            {minScore}+
-          </span>
-        </div>
-      )
-    },
-    {
-      id: "sort",
-      value: sortBy,
-      onChange: handleSortChange,
-      icon: sortBy.endsWith("asc") ? IconSortAscending : IconSortDescending,
-      label: sortLabel,
-      options: [
-        { value: "date-desc", label: "Newest first" },
-        { value: "date-asc", label: "Oldest first" },
-        { value: "score-desc", label: "Highest score first" },
-        { value: "score-asc", label: "Lowest score first" },
-      ],
-      className: "ml-auto"
-    }
-  ];
+  const toggleItemClass = "px-4 min-w-12 data-[state=on]:bg-black data-[state=on]:text-white hover:data-[state=on]:bg-black/90";
 
   return (
-    <div className="flex flex-wrap items-center gap-2 w-full">
-      {filters.map((filter) => (
-        <div 
-          key={filter.id} 
-          className={cn(
-            "group flex items-center h-9 rounded-md border border-input bg-transparent shadow-sm hover:bg-accent hover:text-accent-foreground transition-colors",
-            filter.className
-          )}
+    <div className="flex flex-wrap items-center gap-4 w-full">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium text-muted-foreground flex items-center gap-1.5 mr-1">
+          <IconSparkles className="h-4 w-4" />
+          Score
+        </span>
+        <ToggleGroup 
+          type="single" 
+          value={getSelectValue()} 
+          onValueChange={handlePresetChange}
+          variant="outline"
+          className="justify-start"
         >
-           <Select value={filter.value} onValueChange={filter.onChange}>
-            <SelectTrigger 
-              className={cn(
-                "h-full border-0 bg-transparent shadow-none px-3 gap-2 text-sm font-medium focus:ring-0 w-auto min-w-0 [&>svg:last-child]:hidden",
-                "[&>span]:line-clamp-1"
-              )}
-            >
-              <filter.icon className="h-4 w-4 text-muted-foreground shrink-0" />
-              <SelectValue>{filter.label}</SelectValue>
-            </SelectTrigger>
-            <SelectContent align="start">
-              {filter.options.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          
-          {filter.extra}
-        </div>
-      ))}
+          <ToggleGroupItem value="0" className={toggleItemClass}>All</ToggleGroupItem>
+          <ToggleGroupItem value="80" className={toggleItemClass}>Excellent</ToggleGroupItem>
+          <ToggleGroupItem value="70" className={toggleItemClass}>Good</ToggleGroupItem>
+          <ToggleGroupItem value="50" className={toggleItemClass}>Fair</ToggleGroupItem>
+          <ToggleGroupItem value="custom" className={toggleItemClass}>Custom</ToggleGroupItem>
+        </ToggleGroup>
+
+        {isCustom && (
+          <div className="flex items-center gap-3 px-3 border-l h-5 my-auto animate-in fade-in zoom-in-95 duration-200">
+            <Slider
+              min={0}
+              max={100}
+              step={5}
+              value={[minScore, 100]}
+              onValueChange={handleScoreChange}
+              className="w-24 [&>[data-slot=slider-thumb]:last-child]:hidden [&>[data-slot=slider-track]>[data-slot=slider-range]]:bg-black"
+            />
+            <span className="text-sm font-medium whitespace-nowrap w-8 text-right tabular-nums">
+              {minScore}+
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className="ml-auto">
+        <Select value={sortBy} onValueChange={handleSortChange}>
+          <SelectTrigger 
+            className="h-9 w-auto gap-2 border-0 bg-transparent shadow-none px-3 focus:ring-0 hover:bg-accent hover:text-accent-foreground transition-colors rounded-md"
+          >
+            {sortBy.endsWith("asc") ? (
+              <IconSortAscending className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <IconSortDescending className="h-4 w-4 text-muted-foreground" />
+            )}
+            <SelectValue>{sortLabel}</SelectValue>
+          </SelectTrigger>
+          <SelectContent align="end">
+            <SelectItem value="date-desc">Newest first</SelectItem>
+            <SelectItem value="date-asc">Oldest first</SelectItem>
+            <SelectItem value="score-desc">Highest score first</SelectItem>
+            <SelectItem value="score-asc">Lowest score first</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   );
 }
