@@ -85,3 +85,11 @@ export function calculateDuration(
     return "";
   }
 }
+
+/**
+ * Generates a shortcode for a given string (e.g., "Javascript" -> "JA", "5 years" -> "5Y")
+ */
+export function getCriteriaShortcode(value: string | number | null | undefined, fallback: string = ""): string {
+  const text = value ? String(value) : fallback;
+  return text.slice(0, 2).toUpperCase();
+}

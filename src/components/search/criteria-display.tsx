@@ -79,9 +79,11 @@ export function CriteriaDisplay({ data }: CriteriaDisplayProps) {
             <CriteriaBadge
               key={c.id}
               label={getValueString(c.value) + (c.type.includes("years") ? " years" : "")}
+              value={getValueString(c.value)} // Pass raw value for consistent shortcode
               type={c.type}
               priority={c.priority_level}
               operator={c.operator}
+              withShortname={true}
             />
           ))}
         </div>

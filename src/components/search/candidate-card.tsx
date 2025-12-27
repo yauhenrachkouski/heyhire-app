@@ -80,24 +80,6 @@ function CandidateScoreDisplay(props: { matchScore: number | null; scoringData: 
 
   const { criteria_scores } = scoringData || {};
 
-  // Determine score color based on value
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return "text-green-600";
-    if (score >= 60) return "text-blue-600";
-    if (score >= 40) return "text-yellow-600";
-    return "text-orange-600";
-  };
-
-  const getScoreBgColor = (score: number) => {
-    if (score >= 80) return "stroke-green-600";
-    if (score >= 60) return "stroke-blue-600";
-    if (score >= 40) return "stroke-yellow-600";
-    return "stroke-orange-600";
-  };
-
-  const scoreColor = getScoreColor(matchScore);
-  const scoreBgColor = getScoreBgColor(matchScore);
-
   // Helper to stringify value for matching
   const getValueString = (value: any) => {
     if (Array.isArray(value)) return value.join(", ");
@@ -105,63 +87,78 @@ function CandidateScoreDisplay(props: { matchScore: number | null; scoringData: 
     return String(value);
   };
 
+  // Group and sort criteria for display
+  const displayItems = useMemo(() => {
+    if (sourcingCriteria?.criteria && sourcingCriteria.criteria.length > 0) {
+      const c = sourcingCriteria.criteria;
+      // Define groups to match header order
+      const groups = [
+        c.filter((x) => x.type === "logistics_location"),
+        c.filter((x) => ["minimum_years_of_experience", "minimum_relevant_years_of_experience"].includes(x.type)),
+        c.filter((x) => ["tool_requirement", "language_requirement"].includes(x.type)),
+        c.filter((x) => x.type === "capability_requirement"),
+        c.filter((x) => !["logistics_location", "minimum_years_of_experience", "minimum_relevant_years_of_experience", "tool_requirement", "language_requirement", "capability_requirement"].includes(x.type))
+      ];
+      return groups.flat();
+    }
+    
+    // Fallback: Use criteria_scores if no definitions
+    if (criteria_scores) {
+       return criteria_scores.map(cs => ({
+         id: cs.criterion, // Use criterion as ID fallback
+         value: cs.criterion,
+         type: 'unknown',
+         priority_level: cs.importance,
+         operator: 'include' // Default
+       }));
+    }
+    return [];
+  }, [sourcingCriteria, criteria_scores]);
+
   return (
     <div className="flex flex-col gap-3">
       {/* Visual Matching Criteria Badges */}
-      <div className="flex flex-wrap gap-1.5 items-center">
-        {/* Strategy 1: If we have Sourcing Criteria (from Header), use that order */}
-        {sourcingCriteria?.criteria && sourcingCriteria.criteria.length > 0 ? (
-          sourcingCriteria.criteria.map((sourceCrit) => {
-            const valStr = getValueString(sourceCrit.value);
-            
-            // Try to find match status in scoring data
-            const matchedScore = criteria_scores?.find(cs => 
-              cs.criterion.toLowerCase().includes(valStr.toLowerCase()) ||
-              valStr.toLowerCase().includes(cs.criterion.toLowerCase())
-            );
+      <div className="flex flex-wrap gap-1 items-center">
+        {displayItems.map((item: any) => {
+           // If it's a SourcingCriteria item (has id/value/type/priority_level)
+           const isSourcingItem = item.priority_level !== undefined; 
+           const valStr = isSourcingItem ? getValueString(item.value) : item.criterion || String(item.value);
+           
+           // Determine status
+           let status: "match" | "missing" | "neutral" = "neutral";
+           let matchedScore;
 
-            // If found in scoring, use its status. If not, assume neutral/pending? 
-            // Or if we have scoring data but no match, it might be implicit missing?
-            // Safer to only mark missing if we find a negative record, OR if we have scores at all.
-            const hasScores = criteria_scores && criteria_scores.length > 0;
-            const isFound = matchedScore?.found;
-            
-            // If we have scores, and this criterion wasn't explicitly 'found', is it missing?
-            // Usually AI returns all evaluated criteria. 
-            // Let's rely on matchedScore.found. If matchedScore is undefined, treat as neutral (maybe didn't evaluate this specific constraint).
-            
-            let status: "match" | "missing" | "neutral" = "neutral";
-            if (matchedScore) {
-              status = matchedScore.found ? "match" : "missing";
-            } else if (hasScores) {
-               // If we have scores but didn't find this specific one, usually implies it wasn't a key factor or was missed. 
-               // For now, keep neutral to avoid false negatives.
-               // Actually, user wants to see what matched/missed.
-            }
+           if (criteria_scores) {
+             matchedScore = criteria_scores.find(cs => 
+                cs.criterion.toLowerCase().includes(valStr.toLowerCase()) ||
+                valStr.toLowerCase().includes(cs.criterion.toLowerCase())
+             );
+             if (matchedScore) {
+               status = matchedScore.found ? "match" : "missing";
+             } else if (criteria_scores.length > 0) {
+                // If we have scores but can't map it, leave neutral
+             }
+           } else if (!isSourcingItem && item.found !== undefined) {
+              // It's a raw score item
+              status = item.found ? "match" : "missing";
+           }
 
-            return (
+           // Determine value string including unit for display
+           const displayValue = valStr + (item.type?.includes("years") ? "y" : "");
+
+           return (
               <CriteriaBadge 
-                key={sourceCrit.id}
-                label={valStr + (sourceCrit.type.includes("years") ? " years" : "")}
-                type={sourceCrit.type}
-                priority={sourceCrit.priority_level}
-                operator={sourceCrit.operator}
+                key={item.id || valStr}
+                label={displayValue}
+                value={displayValue} // Pass full value so 2y becomes 2Y
+                type={item.type}
+                priority={(item.priority_level || item.importance)?.toLowerCase()}
+                operator={item.operator}
                 status={status}
-                className="opacity-90"
+                compact={true}
               />
-            );
-          })
-        ) : (
-          /* Strategy 2: Fallback to showing whatever scoring data we have (Legacy / No definitions) */
-          criteria_scores?.map((c, i) => (
-             <CriteriaBadge 
-                key={i}
-                label={c.criterion}
-                priority={c.importance}
-                status={c.found ? "match" : "missing"}
-              />
-          ))
-        )}
+           );
+        })}
       </div>
     </div>
   );
