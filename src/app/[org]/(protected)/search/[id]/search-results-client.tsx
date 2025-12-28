@@ -10,7 +10,7 @@ import { CriteriaDisplay } from "@/components/search/criteria-display";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger, PopoverHeader, PopoverTitle, PopoverDescription } from "@/components/ui/popover";
-import { IconPencil, IconCalendar, IconUser, IconInfoCircle } from "@tabler/icons-react";
+import { IconPencil, IconCalendar, IconUser, IconInfoCircle, IconCopy } from "@tabler/icons-react";
 import { formatDate } from "@/lib/format";
 import SourcingLoader from "@/components/search/sourcing-custom-loader";
 import { updateSearchName } from "@/actions/search";
@@ -291,6 +291,19 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
     setIsEditingName(false);
   };
 
+  const handleCopySearchQuery = async () => {
+    try {
+      await navigator.clipboard.writeText(search.query);
+      toast("Copied to clipboard", {
+        description: "Search query has been copied.",
+      });
+    } catch (error) {
+      toast.error("Failed to copy", {
+        description: "Could not copy search query to clipboard.",
+      });
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Debug panel - only in development */}
@@ -388,7 +401,17 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
               </PopoverTrigger>
               <PopoverContent className="w-80 max-w-[calc(100vw-2rem)]">
                 <PopoverHeader>
-                  <PopoverTitle>Original Search Prompt</PopoverTitle>
+                  <div className="flex items-center justify-between gap-2">
+                    <PopoverTitle>Original Search Prompt</PopoverTitle>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={handleCopySearchQuery}
+                    >
+                      <IconCopy className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </PopoverHeader>
                 <PopoverDescription className="whitespace-pre-wrap text-sm leading-relaxed">
                   {search.query}
@@ -398,14 +421,17 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
           )}
         </div>
         
-        <CriteriaDisplay data={search.parseResponse} />
-        
         <AppliedFilters 
           params={currentParsedQuery} 
           initialQueryText={search.query} 
           onRemoveFilter={handleRemoveFilter}
         />
         
+      </div>
+
+      {/* Sticky Criteria Display */}
+      <div className="sticky top-0 z-20 bg-background border-b">
+        <CriteriaDisplay data={search.parseResponse} />
       </div>
 
       <div
