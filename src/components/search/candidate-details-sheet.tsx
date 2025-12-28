@@ -7,6 +7,13 @@ import {
   IconExternalLink,
   IconLoader2,
   IconSparkles,
+  IconCoin,
+  IconChevronRight,
+  IconCheck,
+  IconBriefcase,
+  IconTools,
+  IconBrain,
+  IconList,
 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,9 +26,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useState } from "react";
-import { formatDate, calculateDuration } from "@/lib/utils";
+import { SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { useState, useMemo } from "react";
+import { formatDate, calculateDuration, cn } from "@/lib/utils";
 import { useOpenLinkedInWithCredits } from "@/hooks/use-open-linkedin-with-credits";
+import { SourcingCriteria } from "@/types/search";
+import { CriteriaBadge } from "./criteria-badge";
 
 function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
   if (!raw) return fallback;
@@ -56,6 +66,7 @@ interface SearchCandidate {
 interface CandidateDetailsSheetProps {
   searchCandidate: SearchCandidate | null;
   onClose: () => void;
+  sourcingCriteria?: SourcingCriteria;
 }
 
 type ScoringReasoning = {
@@ -63,46 +74,282 @@ type ScoringReasoning = {
   title_analysis?: string | null;
   skills_analysis?: string | null;
   location_analysis?: string | null;
+  experience_analysis?: string | null;
 } | null;
-type ScoringData = { verdict?: string | null; reasoning?: ScoringReasoning } | null;
 
-function getMatchScoreClasses(matchScore: number) {
-  if (matchScore >= 80) return "bg-green-100 text-green-700";
-  if (matchScore >= 60) return "bg-yellow-100 text-yellow-700";
-  return "bg-red-100 text-red-700";
-}
+type ConceptScore = {
+  concept_id: string;
+  group_id: string;
+  weight: number;
+  raw_match_score: number;
+  confidence: number;
+  final_concept_score: number;
+  status: string;
+  evidence_snippet: string;
+};
 
-function CandidateAIScoring(props: { matchScore: number | null; scoringData: ScoringData }) {
-  const { matchScore, scoringData } = props;
+type ScoringResult = {
+  match_score?: number;
+  verdict?: string;
+  primary_issue?: string;
+  high_importance_missing?: string[];
+  concept_scores?: ConceptScore[];
+  reasoning?: ScoringReasoning;
+  candidate_summary?: string | null;
+  missing_critical?: string[];
+};
 
-  const verdict = scoringData?.verdict;
+type ScoringData = ScoringResult | null;
+
+function CandidateScoreDisplay(props: {
+  matchScore: number | null;
+  scoringData: ScoringData;
+  sourcingCriteria?: SourcingCriteria;
+}) {
+  const { matchScore, scoringData, sourcingCriteria } = props;
+
+  if (matchScore === null) {
+    return (
+      <div className="flex items-center gap-2 py-2">
+        <IconLoader2 className="h-5 w-5 animate-spin text-gray-400" />
+        <span className="text-xs text-gray-500">Calculating...</span>
+      </div>
+    );
+  }
+
+  const conceptScoresById = useMemo(() => {
+    const entries = (scoringData?.concept_scores ?? []).map((cs) => [cs.concept_id, cs] as const);
+    return new Map(entries);
+  }, [scoringData?.concept_scores]);
+
+  const getCriteriaKeyV3 = (criterion: any) => {
+    const conceptId = (criterion?.concept_id as string | undefined) ?? undefined;
+    const id = (criterion?.id as string | undefined) ?? undefined;
+    return conceptId ?? id ?? "";
+  };
+
+  const getCriteriaValueString = (value: any) => {
+    if (Array.isArray(value)) return value.join(", ");
+    if (value === null || value === undefined) return "";
+    return String(value);
+  };
+
+  const getCriteriaDisplayValue = (criterion: any) => {
+    const raw = getCriteriaValueString(criterion?.value);
+    const type = String(criterion?.type ?? "");
+    if (!raw) return "";
+
+    if (type.includes("minimum_years_of_experience") || type.includes("minimum_relevant_years_of_experience")) {
+      const n = Number(criterion?.value);
+      if (Number.isFinite(n)) return `${n}y+`;
+    }
+
+    return raw;
+  };
+
+  const groups = useMemo(() => {
+    const g: Record<string, any[]> = {
+      location: [],
+      experience: [],
+      skills: [],
+      capabilities: [],
+      other: []
+    };
+
+    if (sourcingCriteria?.criteria && sourcingCriteria.criteria.length > 0) {
+      const c = sourcingCriteria.criteria;
+      g.location = c.filter((x) => x.type === "logistics_location");
+      g.experience = c.filter((x) => ["minimum_years_of_experience", "minimum_relevant_years_of_experience"].includes(x.type));
+      g.skills = c.filter((x) => ["tool_requirement", "language_requirement"].includes(x.type));
+      g.capabilities = c.filter((x) => x.type === "capability_requirement");
+      g.other = c.filter((x) => !["logistics_location", "minimum_years_of_experience", "minimum_relevant_years_of_experience", "tool_requirement", "language_requirement", "capability_requirement"].includes(x.type));
+    } else if (scoringData?.concept_scores?.length) {
+      g.other = scoringData.concept_scores.map((cs) => ({
+        id: cs.concept_id,
+        value: cs.concept_id,
+        type: "unknown",
+        priority_level: "medium",
+        operator: "include",
+      }));
+    }
+    return g;
+  }, [sourcingCriteria, scoringData?.concept_scores]);
+
+  const groupConfig = useMemo(() => [
+    { key: "location", title: "Location", icon: IconMapPin },
+    { key: "experience", title: "Experience", icon: IconBriefcase },
+    { key: "skills", title: "Skills", icon: IconTools },
+    { key: "capabilities", title: "Capabilities", icon: IconBrain },
+    { key: "other", title: "Other", icon: IconList },
+  ].filter(g => groups[g.key] && groups[g.key].length > 0), [groups]);
+
+  const renderGroup = (title: string, items: any[], Icon: React.ElementType) => {
+    return (
+      <div className="flex items-center gap-2 group/category">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center justify-center size-6 rounded-md bg-muted/50 text-muted-foreground shrink-0 cursor-help transition-colors hover:bg-muted">
+                <Icon className="size-3.5" />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{title}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <div className="flex flex-wrap gap-1 items-center">
+          {items.map((item: any) => {
+            let status: "match" | "missing" | "neutral" = "neutral";
+
+            const criteriaKeyV3 = getCriteriaKeyV3(item);
+            const conceptScore = criteriaKeyV3 ? conceptScoresById.get(criteriaKeyV3) : undefined;
+            if (conceptScore) {
+              const s = String(conceptScore.status).toLowerCase();
+              const priorityLevel = String(item?.priority_level ?? "").toLowerCase();
+              if (s === "pass" || s.includes("pass")) status = "match";
+              else if (s.includes("fail")) status = "missing";
+              else if (s === "warn") {
+                status = (priorityLevel === "high" || priorityLevel === "mandatory") ? "missing" : "neutral";
+              } else {
+                status = "neutral";
+              }
+            }
+
+            const displayValue = getCriteriaDisplayValue(item) || String(item?.value ?? item?.id ?? "");
+
+            return (
+              <CriteriaBadge
+                key={item.id || criteriaKeyV3 || displayValue}
+                label={displayValue}
+                value={displayValue}
+                type={item.type}
+                priority={(item.priority_level || item.importance)?.toLowerCase()}
+                operator={item.operator}
+                status={status}
+                scoreStatus={conceptScore?.status ?? null}
+                compact={true}
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div>
-      <div className="flex items-center gap-2">
-        <IconSparkles className="h-4 w-4 text-purple-500" />
-        <span className="text-sm font-medium text-muted-foreground">AI Score:</span>
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {groupConfig.flatMap((group, index) => [
+          <div key={group.key} className="flex items-center">
+            {renderGroup(group.title, groups[group.key], group.icon)}
+          </div>,
+          index < groupConfig.length - 1 && (
+            <div
+              key={`divider-${group.key}`}
+              className="h-4 w-px bg-border/40 shrink-0 hidden sm:block"
+            />
+          ),
+        ]).filter(Boolean)}
+      </div>
+    </div>
+  );
+}
 
-        {matchScore !== null ? (
-          <div
-            className={`
-              px-2 py-1 rounded-md text-sm font-semibold
-              ${getMatchScoreClasses(matchScore)}
-            `}
-          >
-            {matchScore}
-          </div>
-        ) : (
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted text-muted-foreground text-sm">
-            <IconLoader2 className="h-3 w-3 animate-spin" />
-            <span>Calculating...</span>
-          </div>
-        )}
+function CandidateSummary(props: { matchScore: number | null; scoringData: ScoringData }) {
+  const { matchScore, scoringData } = props;
+  const candidate_summary = scoringData?.candidate_summary;
 
-        {verdict && (
-          <Badge variant="outline" className="text-xs">
-            {verdict}
-          </Badge>
+  if (matchScore === null) {
+    return (
+      <div className="pt-3 border-t border-gray-200">
+        <div className="space-y-2">
+          <div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div>
+          <div className="h-4 bg-gray-200 rounded animate-pulse w-full"></div>
+          <div className="h-4 bg-gray-200 rounded animate-pulse w-5/6"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!candidate_summary) {
+    return null;
+  }
+
+  return (
+    <div className="pt-3 border-t border-gray-200">
+      <p className="text-sm text-gray-700 leading-relaxed">{candidate_summary}</p>
+    </div>
+  );
+}
+
+function CandidateAIScoring(props: {
+  matchScore: number | null;
+  scoringData: ScoringData;
+  sourcingCriteria?: SourcingCriteria;
+}) {
+  const { matchScore, scoringData, sourcingCriteria } = props;
+
+  if (matchScore === null) {
+    return null;
+  }
+
+  const {
+    verdict,
+    primary_issue,
+    high_importance_missing,
+    concept_scores
+  } = scoringData || {};
+
+  const conceptScoresById = useMemo(() => {
+    const entries = (concept_scores ?? []).map((cs) => [cs.concept_id, cs] as const);
+    return new Map(entries);
+  }, [concept_scores]);
+
+  const passedHighCriteria = useMemo(() => {
+    const criteria = sourcingCriteria?.criteria ?? [];
+    if (!criteria.length || !concept_scores?.length) return [];
+
+    const toDisplay = (criterion: any) => {
+      if (Array.isArray(criterion?.value)) return criterion.value.join(", ");
+      if (criterion?.value === null || criterion?.value === undefined) return "";
+
+      const type = String(criterion?.type ?? "");
+      if (type.includes("minimum_years_of_experience") || type.includes("minimum_relevant_years_of_experience")) {
+        const n = Number(criterion?.value);
+        if (Number.isFinite(n)) return `${n}y+`;
+      }
+      return String(criterion.value);
+    };
+
+    return criteria
+      .filter((c: any) => String(c?.priority_level ?? "").toLowerCase() === "high")
+      .filter((c: any) => {
+        const key = (c?.concept_id as string | undefined) ?? (c?.id as string | undefined);
+        if (!key) return false;
+        return conceptScoresById.get(key)?.status === "pass";
+      })
+      .map((c: any) => toDisplay(c))
+      .filter(Boolean);
+  }, [conceptScoresById, concept_scores?.length, sourcingCriteria?.criteria]);
+
+  return (
+    <div className="pt-3">
+      <div className="flex flex-col gap-2 text-xs">
+        {/* Show strengths for high scoring candidates */}
+        {!high_importance_missing?.length &&
+          passedHighCriteria.length > 0 &&
+          matchScore >= 75 && (
+           <div className="flex gap-2 items-start">
+             <IconCheck className="w-4 h-4 shrink-0 mt-0.5" />
+             <div className="leading-relaxed">
+                <span className="font-semibold text-gray-900">Key Strengths: </span>
+                <span className="text-gray-600">
+                   {passedHighCriteria.slice(0, 5).join(", ")}
+                </span>
+             </div>
+           </div>
         )}
       </div>
     </div>
@@ -180,7 +427,7 @@ function ExperienceItem({ exp }: { exp: any }) {
   );
 }
 
-export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDetailsSheetProps) {
+export function CandidateDetailsSheet({ searchCandidate, onClose, sourcingCriteria }: CandidateDetailsSheetProps) {
   const [expandedSkills, setExpandedSkills] = useState(false);
   const { openLinkedIn, isLoading: isOpeningLinkedIn } = useOpenLinkedInWithCredits();
 
@@ -189,32 +436,33 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
   const { candidate, matchScore, scoringResult } = searchCandidate;
 
   // Parse JSON fields
-  const experiences = safeJsonParse<any[]>(candidate.experiences, []);
-  const skills = safeJsonParse<any[]>(candidate.skills, []);
-  const educations = safeJsonParse<any[]>(candidate.educations, []);
-  const certifications = safeJsonParse<any[]>(candidate.certifications, []);
-  const locationData = safeJsonParse<any>(candidate.location, null);
+  const experiences = useMemo(() => safeJsonParse<any[]>(candidate.experiences, []), [candidate.experiences]);
+  const skills = useMemo(() => safeJsonParse<any[]>(candidate.skills, []), [candidate.skills]);
+  const educations = useMemo(() => safeJsonParse<any[]>(candidate.educations, []), [candidate.educations]);
+  const certifications = useMemo(() => safeJsonParse<any[]>(candidate.certifications, []), [candidate.certifications]);
+  const locationData = useMemo(() => safeJsonParse<any>(candidate.location, null), [candidate.location]);
+  const scoringData = useMemo<ScoringData>(() => {
+    return safeJsonParse<ScoringData>(scoringResult, null);
+  }, [scoringResult]);
 
   // Extract name parts
   const fullName = candidate.fullName || "Unknown";
   const locationText = locationData?.name || locationData?.linkedinText || locationData?.city;
 
   // Get current role from experiences
-  const currentExperience = experiences[0] || {};
-  const currentRole =
-    currentExperience.role_title ||
-    currentExperience.position ||
-    currentExperience.title ||
-    candidate.headline ||
-    "----";
-  const organizationName =
-    currentExperience.organization_name ||
-    currentExperience.company ||
-    currentExperience.companyName ||
-    "";
+  const currentRoles = useMemo(() => {
+    return experiences.filter((exp: any) => {
+      const endDate = exp.endDate || exp.end_date;
+      const isPresent = endDate?.text === "Present" || endDate?.text === "present";
+      const hasNoEndDate = !endDate;
+      return isPresent || hasNoEndDate;
+    });
+  }, [experiences]);
 
-  // Parse scoring data (v3 scoring result)
-  const scoringData = safeJsonParse<any>(scoringResult, null);
+  const firstCurrentRole = currentRoles[0] || experiences[0] || {};
+  const currentRole = firstCurrentRole.role_title || firstCurrentRole.title || firstCurrentRole.position || candidate.headline || "----";
+  const organizationName = firstCurrentRole.organization_name || firstCurrentRole.companyName || firstCurrentRole.company || "";
+  const additionalCurrentRolesCount = currentRoles.length > 1 ? currentRoles.length - 1 : 0;
 
   const reasoning = scoringData?.reasoning;
   const conceptScores = scoringData?.concept_scores || [];
@@ -224,7 +472,12 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
       <div className="flex flex-col h-full bg-white">
         {/* Header with close button */}
         <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white z-10">
-          <h2 className="text-lg font-semibold">Candidate Details</h2>
+          <div className="flex flex-col gap-0.5">
+            <SheetTitle className="text-lg font-semibold">Candidate Details</SheetTitle>
+            <SheetDescription className="text-sm text-muted-foreground">
+              {fullName} {currentRole && organizationName ? `• ${currentRole} @ ${organizationName}` : currentRole ? `• ${currentRole}` : ""}
+            </SheetDescription>
+          </div>
           <Button
             variant="ghost"
             size="icon"
@@ -242,75 +495,128 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
               {/* Profile Header */}
               <div>
                 <div className="flex gap-4 mb-4">
-                  <div className="shrink-0">
-                    <ProfileAvatar
-                      className="h-16 w-16"
-                      fullName={fullName}
-                      photoUrl={candidate.photoUrl}
-                    />
+                  <div className="shrink-0 flex flex-col items-center gap-2">
+                    <div className="relative w-[72px] h-[72px] flex items-center justify-center">
+                      {matchScore !== null && (
+                        <svg className="absolute inset-0 w-full h-full transform -rotate-90" viewBox="0 0 72 72">
+                          <circle
+                            cx="36"
+                            cy="36"
+                            r="33"
+                            fill="none"
+                            stroke="#e5e7eb"
+                            strokeWidth="3"
+                          />
+                          <circle
+                            cx="36"
+                            cy="36"
+                            r="33"
+                            fill="none"
+                            stroke={
+                              matchScore >= 80 ? "#16a34a" :
+                              matchScore >= 60 ? "#2563eb" :
+                              matchScore >= 40 ? "#ca8a04" :
+                              "#ea580c"
+                            }
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeDasharray={`${2 * Math.PI * 33}`}
+                            strokeDashoffset={`${2 * Math.PI * 33 * (1 - matchScore / 100)}`}
+                            className="transition-all duration-500"
+                          />
+                        </svg>
+                      )}
+                      <ProfileAvatar
+                        className="h-16 w-16 relative z-10"
+                        fullName={fullName}
+                        photoUrl={candidate.photoUrl}
+                      />
+                      {matchScore !== null && (
+                        <div className="absolute bottom-0 right-0 z-20 bg-white rounded-full ring-2 ring-white shadow-sm">
+                          <span className={cn(
+                            "text-xs font-bold px-1.5 py-0.5 block",
+                            matchScore >= 80 ? "text-green-600" :
+                            matchScore >= 60 ? "text-blue-600" :
+                            matchScore >= 40 ? "text-yellow-600" :
+                            "text-orange-600"
+                          )}>
+                            {matchScore}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex-1 min-w-0 space-y-1.5">
-                    <h3 className="text-base font-semibold leading-tight">{fullName}</h3>
-
-                    <p className="text-sm font-medium leading-snug text-foreground/90">
-                      {currentRole} {organizationName && `@ ${organizationName}`}
-                    </p>
+                    <h3 className="text-base font-semibold leading-tight text-gray-900">{fullName}</h3>
+                    
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium leading-snug text-gray-700">
+                        {currentRole} {organizationName && `@ ${organizationName}`}
+                      </p>
+                      {additionalCurrentRolesCount > 0 && (
+                        <Badge
+                          variant="outline"
+                          className="text-xs px-2 py-0.5 h-5 font-normal border-gray-300 bg-gray-50 text-gray-700"
+                        >
+                          +{additionalCurrentRolesCount}
+                        </Badge>
+                      )}
+                    </div>
 
                     {locationText && (
-                      <p className="text-xs text-muted-foreground inline-flex items-center gap-1 leading-snug">
-                        <IconMapPin className="h-3.5 w-3.5 opacity-80" />
+                      <p className="text-xs text-gray-500 inline-flex items-center gap-1 leading-snug">
+                        <IconMapPin className="h-3.5 w-3.5" />
                         <span>{locationText}</span>
                       </p>
                     )}
                   </div>
                 </div>
 
-                <div className="mt-2">
-                  <CandidateAIScoring matchScore={matchScore} scoringData={scoringData} />
-                </div>
+                {matchScore !== null && (
+                  <>
+                    <CandidateScoreDisplay matchScore={matchScore} scoringData={scoringData} sourcingCriteria={sourcingCriteria} />
+                    <CandidateAIScoring matchScore={matchScore} scoringData={scoringData} sourcingCriteria={sourcingCriteria} />
+                  </>
+                )}
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex flex-col gap-2">
                 {candidate.linkedinUrl && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          openLinkedIn({ candidateId: candidate.id, linkedinUrl: candidate.linkedinUrl })
-                        }
-                        disabled={isOpeningLinkedIn}
-                      >
-                        <IconExternalLink className="h-4 w-4" />
-                        {isOpeningLinkedIn ? "Opening..." : "Open LinkedIn"}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {isOpeningLinkedIn ? "Opening LinkedIn..." : "1 credit"}
-                    </TooltipContent>
-                  </Tooltip>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="font-medium w-full"
+                          onClick={() =>
+                            openLinkedIn({ candidateId: candidate.id, linkedinUrl: candidate.linkedinUrl })
+                          }
+                          disabled={isOpeningLinkedIn}
+                        >
+                          {isOpeningLinkedIn ? (
+                            <IconLoader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <IconCoin className="h-4 w-4" />
+                          )}
+                          <span>Open LinkedIn</span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {isOpeningLinkedIn ? "Opening LinkedIn..." : "1 credit"}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
               </div>
 
               <Separator />
 
               {/* Summary */}
-              {candidate.summary && (
-                <>
-                  <div>
-                    <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-2">
-                      About
-                    </h2>
-                    <p className="text-sm text-foreground whitespace-pre-wrap">
-                      {candidate.summary}
-                    </p>
-                  </div>
-                  <Separator />
-                </>
-              )}
+              <CandidateSummary matchScore={matchScore} scoringData={scoringData} />
+              {scoringData?.candidate_summary && <Separator />}
 
               {/* AI Assessment - New Scoring Format */}
               {scoringData && reasoning && (

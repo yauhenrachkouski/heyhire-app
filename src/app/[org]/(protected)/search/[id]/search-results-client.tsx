@@ -430,7 +430,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
       </div>
 
       {/* Sticky Criteria Display */}
-      <div className="sticky top-0 z-20 bg-background border-b">
+      <div className="sticky top-0 z-30 bg-background border-b">
         <CriteriaDisplay data={search.parseResponse} />
       </div>
 

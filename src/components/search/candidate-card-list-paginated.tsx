@@ -249,6 +249,7 @@ export function CandidateCardListPaginated({
           <CandidateDetailsSheet
             searchCandidate={selectedCandidate}
             onClose={() => setSelectedCandidate(null)}
+            sourcingCriteria={sourcingCriteria}
           />
         </SheetContent>
       </Sheet>
