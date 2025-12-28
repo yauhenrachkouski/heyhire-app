@@ -90,9 +90,6 @@ export function CandidateCardListPaginated({
     },
   });
 
-  // Calculate paginated candidates
-  // If manual pagination (pageCount provided), assume candidates are already the correct page
-  // If not manual (legacy), slice locally
   const currentCandidates = pageCount !== undefined 
     ? candidates 
     : candidates.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
@@ -160,18 +157,15 @@ export function CandidateCardListPaginated({
     setSelectedIds(new Set());
   }, []);
 
-  // Detect new candidates for animation
   const allCandidateIds = new Set(candidates.map((c) => c.id));
   const newCandidateIds = new Set(
     [...allCandidateIds].filter(id => !previousCandidateIdsRef.current.has(id))
   );
   
-  // Update ref with current IDs
   useEffect(() => {
     previousCandidateIdsRef.current = allCandidateIds;
   }, [candidates]);
 
-  // Show skeletons if no candidates yet but expecting some
   if (candidates.length === 0 && skeletonCount === 0) {
     return (
       <div className="rounded-lg p-8 text-center bg-muted/30">
@@ -184,7 +178,6 @@ export function CandidateCardListPaginated({
 
   return (
     <div className="w-full">
-      {/* Candidates list */}
       <div className="space-y-3 mb-4">
         {currentCandidates.map((searchCandidate, index) => {
           const candidateId = searchCandidate.id;
@@ -222,7 +215,6 @@ export function CandidateCardListPaginated({
           );
         })}
         
-        {/* Skeleton cards for pending candidates */}
         {skeletonCount > 0 && (
           <>
             {Array.from({ length: skeletonCount }).map((_, index) => (
@@ -232,12 +224,10 @@ export function CandidateCardListPaginated({
         )}
       </div>
 
-      {/* Pagination */}
       <div className="mt-4">
         <DataTablePagination table={table} />
       </div>
 
-      {/* Bulk action bar */}
       {selectedIds.size > 0 && (
         <CandidateCardActionBar
           selectedIds={Array.from(selectedIds)}
@@ -254,7 +244,6 @@ export function CandidateCardListPaginated({
         />
       )}
 
-      {/* Right side: Candidate details sheet */}
       <Sheet open={!!selectedCandidate} onOpenChange={(open) => !open && setSelectedCandidate(null)}>
         <SheetContent side="right" className="w-1/2! max-w-none! p-0 overflow-hidden flex flex-col">
           <CandidateDetailsSheet

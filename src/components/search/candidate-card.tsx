@@ -103,10 +103,6 @@ function CandidateScoreDisplay(props: {
   }, [scoringData?.concept_scores]);
 
   const getCriteriaKeyV3 = (criterion: any) => {
-    // v3 parse criteria uses snake_case concept_id.
-    // v3 scoring uses concept_scores[].concept_id where:
-    // - tools/capabilities/languages -> criterion.concept_id
-    // - location/experience -> criterion.id
     const conceptId = (criterion?.concept_id as string | undefined) ?? undefined;
     const id = (criterion?.id as string | undefined) ?? undefined;
     return conceptId ?? id ?? "";
@@ -123,7 +119,6 @@ function CandidateScoreDisplay(props: {
     const type = String(criterion?.type ?? "");
     if (!raw) return "";
 
-    // Make experience requirements more explicit
     if (type.includes("minimum_years_of_experience") || type.includes("minimum_relevant_years_of_experience")) {
       const n = Number(criterion?.value);
       if (Number.isFinite(n)) return `${n}y+`;
@@ -149,7 +144,6 @@ function CandidateScoreDisplay(props: {
       g.capabilities = c.filter((x) => x.type === "capability_requirement");
       g.other = c.filter((x) => !["logistics_location", "minimum_years_of_experience", "minimum_relevant_years_of_experience", "tool_requirement", "language_requirement", "capability_requirement"].includes(x.type));
     } else if (scoringData?.concept_scores?.length) {
-      // Fallback if parse criteria is missing: show what scoring actually evaluated
       g.other = scoringData.concept_scores.map((cs) => ({
         id: cs.concept_id,
         value: cs.concept_id,
@@ -195,12 +189,10 @@ function CandidateScoreDisplay(props: {
               const s = String(conceptScore.status).toLowerCase();
               const priorityLevel = String(item?.priority_level ?? "").toLowerCase();
               if (s === "pass" || s.includes("pass")) status = "match";
-              else if (s.includes("fail")) status = "missing"; // handles fail, critical_fail, etc.
+              else if (s.includes("fail")) status = "missing";
               else if (s === "warn") {
-                // "warn" means partial/uncertain match. For high/mandatory criteria, treat as missing.
                 status = (priorityLevel === "high" || priorityLevel === "mandatory") ? "missing" : "neutral";
               } else {
-                // unknown/partial/etc.
                 status = "neutral";
               }
             }
@@ -211,7 +203,7 @@ function CandidateScoreDisplay(props: {
               <CriteriaBadge
                 key={item.id || criteriaKeyV3 || displayValue}
                 label={displayValue}
-                value={displayValue} // Pass full value so 2y becomes 2Y
+                value={displayValue}
                 type={item.type}
                 priority={(item.priority_level || item.importance)?.toLowerCase()}
                 operator={item.operator}
@@ -326,51 +318,7 @@ function CandidateAIScoring(props: {
   return (
     <div className="pt-3">
       <div className="flex flex-col gap-2 text-xs">
-        {/* Primary Analysis Text */}
-        {/* {primary_issue && (
-          <div className="flex gap-2 items-start text-gray-600">
-            <IconBrain className="w-4 h-4 shrink-0 mt-0.5" />
-            <p className="leading-relaxed text-sm">
-              <span className="font-semibold text-gray-900">Analysis: </span>
-              {primary_issue}
-            </p>
-          </div>
-        )} */}
-
-        {/* Critical Missing Requirements */}
-        {/* {high_importance_missing && high_importance_missing.length > 0 && (
-          <div className="flex gap-2 items-center">
-            <IconAlertTriangle className="w-4 h-4 shrink-0 text-destructive" />
-            <div className="flex-1 min-w-0">
-              <div className="flex flex-wrap gap-1.5 items-center">
-                <span className="text-xs font-semibold text-gray-900 mr-1">Missing critical: </span>
-                {(showAllMissing ? high_importance_missing : high_importance_missing.slice(0, 5)).map((item, index) => (
-                  <Badge
-                    key={index}
-                    variant="outline"
-                    className="bg-background hover:bg-muted/50 transition-colors font-normal px-2.5 py-1 text-sm h-7 border-border/60 cursor-default"
-                  >
-                    <span className="truncate max-w-[200px]">{item}</span>
-                  </Badge>
-                ))}
-                {high_importance_missing.length > 5 && (
-                  <Badge
-                    variant="outline"
-                    className="bg-background hover:bg-muted transition-colors font-normal px-2.5 py-1 text-sm h-7 border-border/60 cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowAllMissing(!showAllMissing);
-                    }}
-                  >
-                    {showAllMissing ? "Show less" : `+${high_importance_missing.length - 5} more`}
-                  </Badge>
-                )}
-              </div>
-            </div>
-          </div>
-        )} */}
-        
-        {/* If matched perfectly/highly, show strengths */}
+        {/* Show strengths for high scoring candidates */}
         {!high_importance_missing?.length &&
           passedHighCriteria.length > 0 &&
           matchScore >= 75 && (
@@ -434,8 +382,6 @@ export function CandidateCard({
 
   const { candidate, matchScore, scoringResult } = searchCandidate;
   
-  // console.log("[CandidateCard] Rendering candidate:", candidate.fullName, "Score:", matchScore);
-  
   const experiences = useMemo(() => safeJsonParse<any[]>(candidate.experiences, []), [candidate.experiences]);
   const skills = useMemo(() => safeJsonParse<Skill[]>(candidate.skills, []), [candidate.skills]);
   const location = useMemo(() => safeJsonParse<LocationData>(candidate.location, null), [candidate.location]);
@@ -445,7 +391,6 @@ export function CandidateCard({
 
   const fullName = candidate.fullName || "Unknown";
   
-  // Find all current roles (endDate.text === "Present" or no endDate)
   const currentRoles = useMemo(() => {
     return experiences.filter((exp: any) => {
       const endDate = exp.endDate || exp.end_date;
@@ -455,7 +400,6 @@ export function CandidateCard({
     });
   }, [experiences]);
 
-  // Get the first current role
   const firstCurrentRole = currentRoles[0] || experiences[0] || {};
   const currentRole = firstCurrentRole.role_title || firstCurrentRole.title || firstCurrentRole.position || candidate.headline || "----";
   const organizationName = firstCurrentRole.organization_name || firstCurrentRole.companyName || firstCurrentRole.company || "";
@@ -497,13 +441,10 @@ export function CandidateCard({
         {/* Middle column: Profile content */}
         <div className="flex-1 min-w-0">
           <div className="flex gap-4 mb-4">
-            {/* Avatar with integrated score */}
             <div className="shrink-0 flex flex-col items-center gap-2">
               <div className="relative w-[72px] h-[72px] flex items-center justify-center">
-                {/* Partial ring showing score percentage - positioned around avatar */}
                 {matchScore !== null && (
                   <svg className="absolute inset-0 w-full h-full transform -rotate-90" viewBox="0 0 72 72">
-                    {/* Background circle */}
                     <circle
                       cx="36"
                       cy="36"
@@ -512,7 +453,6 @@ export function CandidateCard({
                       stroke="#e5e7eb"
                       strokeWidth="3"
                     />
-                    {/* Score percentage circle */}
                     <circle
                       cx="36"
                       cy="36"
@@ -537,7 +477,6 @@ export function CandidateCard({
                   fullName={fullName}
                   photoUrl={candidate.photoUrl}
                 />
-                {/* Score number overlay on avatar */}
                 {matchScore !== null && (
                   <div className="absolute bottom-0 right-0 z-20 bg-white rounded-full ring-2 ring-white shadow-sm">
                     <span className={cn(
@@ -552,37 +491,8 @@ export function CandidateCard({
                   </div>
                 )}
               </div>
-              
-              {/* Verdict badge under avatar */}
-              {/* {matchScore !== null && (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-xs px-2 py-0.5 h-5",
-                    matchScore >= 80 ? "border-green-600 text-green-700 bg-green-50" :
-                    matchScore >= 60 ? "border-blue-600 text-blue-700 bg-blue-50" :
-                    matchScore >= 40 ? "border-yellow-600 text-yellow-700 bg-yellow-50" :
-                    "border-orange-600 text-orange-700 bg-orange-50"
-                  )}
-                >
-                  {scoringData?.verdict || (
-                    matchScore >= 80 ? "Strong Match" :
-                    matchScore >= 60 ? "Good Match" :
-                    matchScore >= 40 ? "Fair Match" :
-                    "Weak Match"
-                  )}
-                </Badge>
-              )} */}
-              
-              {/* Scoring Bars under avatar (REMOVED - now integrated into body) */}
-              {/* {matchScore !== null && scoringData?.concept_scores && scoringData.concept_scores.length > 0 && (
-                <div className="flex gap-1.5 items-center justify-center">
-                   ... 
-                </div>
-              )} */}
             </div>
 
-            {/* Name, position, location */}
             <div className="flex-1 min-w-0 space-y-1.5">
               <h3 className="text-base font-semibold leading-tight text-gray-900">{fullName}</h3>
               
@@ -609,25 +519,18 @@ export function CandidateCard({
             </div>
           </div>
 
-          {/* AI Scoring Analysis */}
           {matchScore !== null && (
             <>
-              {/* Show badges first for immediate visual feedback */}
               <CandidateScoreDisplay matchScore={matchScore} scoringData={scoringData} sourcingCriteria={sourcingCriteria} />
-              
-              {/* Then text analysis */}
               <CandidateAIScoring matchScore={matchScore} scoringData={scoringData} sourcingCriteria={sourcingCriteria} />
             </>
           )}
 
-          {/* Candidate Summary */}
           <CandidateSummary matchScore={matchScore} scoringData={scoringData} />
         </div>
 
-        {/* Right column: Vertical Action Buttons */}
         <div className="flex items-start shrink-0">
           <div className="flex flex-col gap-2">
-            {/* Primary action: LinkedIn */}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -655,7 +558,6 @@ export function CandidateCard({
               </Tooltip>
             </TooltipProvider>
 
-            {/* Secondary action: View details */}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
