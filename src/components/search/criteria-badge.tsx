@@ -78,6 +78,11 @@ export function CriteriaBadge({
     const getPriorityConfig = () => {
       switch (priority?.toLowerCase()) {
         case "mandatory":
+          return {
+            icon: IconAlertTriangle,
+            color: "text-red-600 dark:text-red-400",
+            label: "Mandatory",
+          };
         case "high":
           return {
             icon: IconArrowUp,
@@ -250,6 +255,7 @@ export function CriteriaBadge({
               !compact && "px-2.5 py-1 text-sm h-7 gap-1.5",
               config.bg,
               status === 'missing' && !compact && "opacity-70 saturate-50 hover:opacity-100 hover:saturate-100",
+              priority?.toLowerCase() === "mandatory" && "border-destructive/50 border-2 font-semibold",
               className
             )}
           >

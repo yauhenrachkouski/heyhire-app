@@ -57,15 +57,6 @@ export const jobParsingResponseV3Schema = z.object({
 export type JobParsingResponseV3 = z.infer<typeof jobParsingResponseV3Schema>;
 export type SourcingCriteria = JobParsingResponseV3;
 
-export const jobSummaryResponseSchema = z.object({
-  project_id: z.string().nullable().optional(),
-  recommendations: z.array(z.string()).optional().default([]),
-  generated_job_description: z.string().nullable().optional(),
-  next_iteration: z.number(),
-});
-
-export type JobSummaryResponse = z.infer<typeof jobSummaryResponseSchema>;
-
 // --- Strategy Schemas ---
 
 export const apifyPayloadSchema = z.object({

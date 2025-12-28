@@ -4,7 +4,6 @@ import "server-only";
 
 import {
   jobParsingResponseV3Schema,
-  jobSummaryResponseSchema,
   strategyGenerationResponseSchema,
   strategyExecutionResponseSchema,
   strategyResultsResponseSchema,
@@ -14,7 +13,6 @@ import {
   type CategoryTag,
   type Criterion,
   type Concept,
-  type JobSummaryResponse,
   type StrategyGenerationResponse,
   type StrategyExecutionResponse,
   type StrategyResultsResponse,
@@ -339,58 +337,6 @@ export async function parseJob(
   } catch (error) {
     const errorMessage = getErrorMessage(error);
     console.error("[Search] Error parsing job:", errorMessage);
-    return {
-      success: false,
-      error: errorMessage,
-    };
-  }
-}
-
-/**
- * Generate a summary of the job profile
- * POST /api/v3/jobs/summary
- */
-export async function getJobSummary(
-  params: {
-    message: string;
-    projectId?: string | null;
-    iterationCount?: number | null;
-  }
-): Promise<{ success: boolean; data?: JobSummaryResponse; error?: string }> {
-  try {
-    const message = params.message?.trim?.() ? params.message.trim() : "";
-    if (!message) {
-      throw new Error("Summary API error: message is required");
-    }
-
-    const response = await fetch(`${API_BASE_URL}/api/v3/jobs/summary`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        message,
-        project_id: params.projectId ?? null,
-        iteration_count: params.iterationCount ?? 1,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[Search] Summary API error:", response.status, errorText);
-      throw new Error(`Summary API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const validated = jobSummaryResponseSchema.parse(data);
-
-    return {
-      success: true,
-      data: validated,
-    };
-  } catch (error) {
-    const errorMessage = getErrorMessage(error);
-    console.error("[Search] Error generating summary:", errorMessage);
     return {
       success: false,
       error: errorMessage,
