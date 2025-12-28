@@ -7,7 +7,7 @@ import { headers } from "next/headers";
 import { getErrorMessage } from "@/lib/handle-error";
 import { parsedQuerySchema, type ParsedQuery, type SourcingCriteria } from "@/types/search";
 import { db } from "@/db/drizzle";
-import { search } from "@/db/schema";
+import { search, user } from "@/db/schema";
 import { eq, desc, ilike, and } from "drizzle-orm";
 import { generateId } from "@/lib/id";
 import { auth } from "@/lib/auth";
@@ -251,6 +251,11 @@ export async function getSearchById(
     createdAt: Date;
     status: string;
     progress: number | null;
+    createdBy: {
+      id: string;
+      name: string;
+      email: string;
+    } | null;
   };
   error?: string;
 }> {
@@ -260,7 +265,17 @@ export async function getSearchById(
     await requireSearchReadAccess(id);
     
     const result = await db
-      .select()
+      .select({
+        id: search.id,
+        name: search.name,
+        query: search.query,
+        params: search.params,
+        parseResponse: search.parseResponse,
+        createdAt: search.createdAt,
+        status: search.status,
+        progress: search.progress,
+        userId: search.userId,
+      })
       .from(search)
       .where(eq(search.id, id))
       .limit(1);
@@ -273,6 +288,17 @@ export async function getSearchById(
     }
     
     const s = result[0];
+    
+    // Fetch user information
+    const userRecord = await db.query.user.findFirst({
+      where: eq(user.id, s.userId),
+      columns: {
+        id: true,
+        name: true,
+        email: true,
+      },
+    });
+    
     const parsedSearch = {
       id: s.id,
       name: s.name,
@@ -282,6 +308,11 @@ export async function getSearchById(
       createdAt: s.createdAt,
       status: s.status,
       progress: s.progress,
+      createdBy: userRecord ? {
+        id: userRecord.id,
+        name: userRecord.name,
+        email: userRecord.email,
+      } : null,
     };
     
     console.log("[Search] Found search:", parsedSearch.name);

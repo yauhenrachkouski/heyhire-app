@@ -33,6 +33,7 @@ export default async function PreviewSearchPage({
       status: schema.search.status,
       progress: schema.search.progress,
       organizationId: schema.search.organizationId,
+      userId: schema.search.userId,
     })
     .from(schema.search)
     .where(eq(schema.search.id, id))
@@ -41,6 +42,16 @@ export default async function PreviewSearchPage({
   const row = rows[0]
   if (!row) notFound()
   if (row.organizationId !== organizationId) notFound()
+
+  // Fetch user information
+  const userRecord = await db.query.user.findFirst({
+    where: eq(schema.user.id, row.userId),
+    columns: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  })
 
   return (
     <>
@@ -58,6 +69,11 @@ export default async function PreviewSearchPage({
             createdAt: row.createdAt,
             status: row.status,
             progress: row.progress,
+            createdBy: userRecord ? {
+              id: userRecord.id,
+              name: userRecord.name,
+              email: userRecord.email,
+            } : null,
           }}
         />
       </div>

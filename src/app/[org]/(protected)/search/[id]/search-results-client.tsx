@@ -8,7 +8,9 @@ import { AppliedFilters } from "@/components/search/applied-filters";
 import { InlineFilters } from "@/components/search/inline-filters";
 import { CriteriaDisplay } from "@/components/search/criteria-display";
 import { Button } from "@/components/ui/button";
-import { IconPencil } from "@tabler/icons-react";
+import { Badge } from "@/components/ui/badge";
+import { IconPencil, IconCalendar, IconUser } from "@tabler/icons-react";
+import { formatDate } from "@/lib/format";
 import SourcingLoader from "@/components/search/sourcing-custom-loader";
 import { updateSearchName } from "@/actions/search";
 import { toast } from "sonner";
@@ -25,9 +27,14 @@ interface SearchResultsClientProps {
     query: string;
     params: ParsedQuery;
     parseResponse: SourcingCriteria | null;
-    createdAt: Date;
+    createdAt: Date | string;
     status: string;
     progress: number | null;
+    createdBy: {
+      id: string;
+      name: string;
+      email: string;
+    } | null;
   };
 }
 
@@ -342,6 +349,31 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
           </div>
         </div>
 
+        {/* Search metadata */}
+        <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
+          <span className="flex items-center gap-1">
+            <IconCalendar className="h-3.5 w-3.5" />
+            {formatDate(search.createdAt, { 
+              month: "short", 
+              day: "numeric", 
+              year: "numeric",
+              hour: "numeric",
+              minute: "2-digit"
+            })}
+          </span>
+          {search.createdBy && (
+            <span className="flex items-center gap-1">
+              <IconUser className="h-3.5 w-3.5" />
+              {search.createdBy.name}
+            </span>
+          )}
+          <Badge variant={realtimeStatus === 'completed' ? 'secondary' : realtimeStatus === 'error' || realtimeStatus === 'failed' ? 'destructive' : 'outline'}>
+            {realtimeStatus}
+          </Badge>
+          {isActiveSearch && realtimeProgress > 0 && (
+            <span className="text-xs font-mono">{realtimeProgress}%</span>
+          )}
+        </div>
         
         <CriteriaDisplay data={search.parseResponse} />
         

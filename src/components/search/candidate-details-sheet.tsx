@@ -109,6 +109,77 @@ function CandidateAIScoring(props: { matchScore: number | null; scoringData: Sco
   );
 }
 
+
+function ExperienceItem({ exp }: { exp: any }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const title = exp.title || exp.role_title || exp.position || "—";
+  const company = exp.company || exp.companyName || exp.organization_name;
+  const startDate = exp.startDate || exp.start_date;
+  const endDate = exp.endDate || exp.end_date;
+  const dateRange = startDate
+    ? `${formatDate(startDate)}${endDate ? ` - ${formatDate(endDate)}` : exp.isCurrent ? " - Present" : ""}`
+    : null;
+  const duration = startDate ? calculateDuration(startDate, endDate) : null;
+
+  return (
+    <div className="relative pl-6">
+      {/* Timeline Dot */}
+      <div className="absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full border border-muted-foreground bg-background" />
+
+      <div className="flex flex-col gap-1">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h4 className="text-sm font-semibold leading-none text-foreground">{title}</h4>
+            {company && <p className="text-sm text-muted-foreground mt-1 leading-snug">{company}</p>}
+          </div>
+          {exp.isCurrent && (
+            <Badge variant="default" className="text-[10px] px-1.5 h-5 shrink-0">
+              Current
+            </Badge>
+          )}
+        </div>
+
+        {dateRange && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground mt-0.5">
+            <span className="inline-flex items-center gap-1">
+              <IconCalendar className="h-3 w-3" />
+              <span>{dateRange}</span>
+            </span>
+            {duration && (
+              <span className="inline-flex items-center gap-2">
+                <span className="text-muted-foreground/60">•</span>
+                <span>{duration}</span>
+              </span>
+            )}
+          </div>
+        )}
+
+        {exp.description && (
+          <div className="mt-2 group">
+            <div
+              className={`text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed ${
+                !isExpanded ? "line-clamp-1" : ""
+              }`}
+            >
+              {exp.description}
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsExpanded(!isExpanded);
+              }}
+              className="text-xs font-medium text-muted-foreground hover:text-foreground mt-1 inline-flex items-center gap-1 hover:underline"
+            >
+              {isExpanded ? "Show less" : "Read more"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDetailsSheetProps) {
   const [expandedSkills, setExpandedSkills] = useState(false);
   const { openLinkedIn, isLoading: isOpeningLinkedIn } = useOpenLinkedInWithCredits();
