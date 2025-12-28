@@ -179,102 +179,153 @@ function ScenarioGroupList({
   getCategoryDisplayName: (category: string) => string;
   getGroupId: (groupName: string) => string;
 }) {
+  const getOperatorConfig = (operator?: string) => {
+    if (!operator) return null;
+    switch (operator) {
+      case "must_include": 
+        return { label: "Include", className: "text-emerald-700 bg-emerald-50 border-emerald-200" };
+      case "must_exclude": 
+        return { label: "Exclude", className: "text-red-700 bg-red-50 border-red-200" };
+      case "must_be_in_list": 
+        return { label: "In List", className: "text-blue-700 bg-blue-50 border-blue-200" };
+      case "must_not_be_in_list": 
+        return { label: "Not In List", className: "text-orange-700 bg-orange-50 border-orange-200" };
+      case "greater_than_or_equal": 
+        return { label: "≥", className: "text-indigo-700 bg-indigo-50 border-indigo-200" };
+      case "less_than_or_equal": 
+        return { label: "≤", className: "text-indigo-700 bg-indigo-50 border-indigo-200" };
+      default: 
+        return { label: operator.replace(/_/g, " "), className: "text-muted-foreground bg-muted border-border" };
+    }
+  };
+
+  const getGroupIcon = (groupName: string) => {
+    const groupScenarios = groupedScenarios[groupName];
+    if (!groupScenarios || groupScenarios.length === 0) {
+      return null;
+    }
+    return getCategoryIcon(groupScenarios[0].category);
+  };
+
   return (
     <div className="space-y-6 flex-1 pb-4">
       {sortedGroups.map((groupName) => (
         <div key={groupName} id={getGroupId(groupName)} className="space-y-3 scroll-mt-4">
           <h4 className="flex items-center justify-between text-xs font-bold text-foreground uppercase tracking-wider border-b border-border/30 pb-2">
-            <span>{groupName}</span>
+            <span className="flex items-center gap-2">
+              <span className="text-muted-foreground/70 shrink-0">{getGroupIcon(groupName)}</span>
+              <span>{groupName}</span>
+            </span>
             <span className="rounded-full border border-border/60 bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
               {groupedScenarios[groupName]?.length ?? 0}
             </span>
           </h4>
 
           <div className="space-y-2">
-            {groupedScenarios[groupName].map((scenario) => (
-              <div
-                key={scenario.id}
-                className={cn(
-                  "flex items-center justify-between gap-3 bg-background border border-border/50 p-2.5 rounded-lg transition-colors hover:border-border group/item",
-                  !selectedScenarios.includes(scenario.id) && "opacity-40"
-                )}
-              >
-                <button
-                  type="button"
-                  onClick={() => onScenarioToggle(scenario.id)}
-                  className="flex items-center gap-2.5 flex-1 min-w-0 text-left"
+            {groupedScenarios[groupName].map((scenario) => {
+              const operatorConfig = getOperatorConfig(scenario.operator);
+              
+              return (
+                <div
+                  key={scenario.id}
+                  className={cn(
+                    "flex items-center justify-between gap-3 bg-background border border-border/50 p-2.5 rounded-lg transition-colors hover:border-border group/item",
+                    !selectedScenarios.includes(scenario.id) && "opacity-60 bg-muted/20"
+                  )}
                 >
-                  <span className="text-muted-foreground/70 shrink-0">{getCategoryIcon(scenario.category)}</span>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                      {getCategoryDisplayName(scenario.category)}
-                    </span>
-                    <span className="text-sm font-medium line-clamp-2 wrap-break-word">
-                      {scenario.value}
-                    </span>
-                  </div>
-                </button>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <TooltipProvider>
-                    <Tooltip delayDuration={0}>
-                      <TooltipTrigger asChild>
-                        <IconInfoCircle className="size-3.5 text-muted-foreground/40 hover:text-muted-foreground cursor-help transition-colors" />
-                      </TooltipTrigger>
-                      <TooltipContent side="top" align="end">
-                        <div className="flex flex-col gap-1">
-                          <p className="font-medium border-b border-background/20 pb-1 mb-1">Match Importance</p>
-                          <div className="grid grid-cols-[32px_1fr] gap-2">
-                            <span className="font-medium opacity-70">Low</span>
-                            <span>Nice to have</span>
-                          </div>
-                          <div className="grid grid-cols-[32px_1fr] gap-2">
-                            <span className="font-medium opacity-70">Med</span>
-                            <span>Important</span>
-                          </div>
-                          <div className="grid grid-cols-[32px_1fr] gap-2">
-                            <span className="font-medium opacity-70">High</span>
-                            <span>Strong preference</span>
-                          </div>
-                          <div className="grid grid-cols-[32px_1fr] gap-2">
-                            <span className="font-medium opacity-70">Must</span>
-                            <span>Mandatory</span>
-                          </div>
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <ToggleGroup
-                    type="single"
-                    value={scenario.importance}
-                    variant="outline"
-                    onValueChange={(val) => val && onImportanceChange(scenario.id, val as any)}
-                  >
-                    <ToggleGroupItem value="low" size="sm">
-                      Low
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="medium" size="sm">
-                      Med
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="high" size="sm">
-                      High
-                    </ToggleGroupItem>
-                    <ToggleGroupItem 
-                      value="mandatory" 
-                      size="sm"
-                      className={cn(
-                        "data-[state=on]:bg-destructive/10 data-[state=on]:text-destructive data-[state=on]:border-destructive/50",
-                        "hover:bg-destructive/5 hover:text-destructive hover:border-destructive/30",
-                        "border-destructive/20"
-                      )}
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <Checkbox 
+                      checked={selectedScenarios.includes(scenario.id)}
+                      onCheckedChange={() => onScenarioToggle(scenario.id)}
+                      className="shrink-0 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground border-muted-foreground/40"
+                    />
+                    
+                    <button
+                      type="button"
+                      onClick={() => onScenarioToggle(scenario.id)}
+                      className="flex items-center gap-2.5 flex-1 min-w-0 text-left"
                     >
-                      <IconAlertTriangle className="size-3" />
-                      <span className="font-semibold">Must</span>
-                    </ToggleGroupItem>
-                  </ToggleGroup>
+                      <div className="flex flex-col min-w-0 gap-0.5">
+                        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                          {getCategoryDisplayName(scenario.category)}
+                        </span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium line-clamp-2 wrap-break-word leading-snug">
+                            {scenario.value}
+                          </span>
+                          {(scenario.operator === "must_exclude" || scenario.operator === "must_not_be_in_list") && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-semibold whitespace-nowrap rounded-sm text-red-700 bg-red-50 border-red-200">
+                              Exclude
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <TooltipProvider>
+                      <Tooltip delayDuration={0}>
+                        <TooltipTrigger asChild>
+                          <IconInfoCircle className="size-3.5 text-muted-foreground/40 hover:text-muted-foreground cursor-help transition-colors" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" align="end">
+                          <div className="flex flex-col gap-1">
+                            <p className="font-medium border-b border-background/20 pb-1 mb-1">Match Importance</p>
+                            <div className="grid grid-cols-[32px_1fr] gap-2">
+                              <span className="font-medium opacity-70">Low</span>
+                              <span>Nice to have</span>
+                            </div>
+                            <div className="grid grid-cols-[32px_1fr] gap-2">
+                              <span className="font-medium opacity-70">Med</span>
+                              <span>Important</span>
+                            </div>
+                            <div className="grid grid-cols-[32px_1fr] gap-2">
+                              <span className="font-medium opacity-70">High</span>
+                              <span>Strong preference</span>
+                            </div>
+                            <div className="grid grid-cols-[32px_1fr] gap-2">
+                              <span className="font-medium opacity-70">Must</span>
+                              <span>Mandatory</span>
+                            </div>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <ToggleGroup
+                      type="single"
+                      value={scenario.importance}
+                      variant="outline"
+                      onValueChange={(val) => val && onImportanceChange(scenario.id, val as any)}
+                      disabled={!selectedScenarios.includes(scenario.id)}
+                    >
+                      <ToggleGroupItem value="low" size="sm" className="h-7 px-2 text-xs">
+                        Low
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="medium" size="sm" className="h-7 px-2 text-xs">
+                        Med
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="high" size="sm" className="h-7 px-2 text-xs">
+                        High
+                      </ToggleGroupItem>
+                      <ToggleGroupItem 
+                        value="mandatory" 
+                        size="sm"
+                        className={cn(
+                          "h-7 px-2 text-xs",
+                          "data-[state=on]:bg-destructive/10 data-[state=on]:text-destructive data-[state=on]:border-destructive/50",
+                          "hover:bg-destructive/5 hover:text-destructive hover:border-destructive/30",
+                          "border-destructive/20"
+                        )}
+                      >
+                        <IconAlertTriangle className="size-3 mr-1" />
+                        <span className="font-semibold">Must</span>
+                      </ToggleGroupItem>
+                    </ToggleGroup>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ))}
@@ -397,6 +448,7 @@ interface Scenario {
   importance: "low" | "medium" | "high" | "mandatory";
   criterionId?: string;
   group: string; // Group name for UI display
+  operator?: string;
 }
 
 // User-friendly display names for categories
@@ -648,7 +700,7 @@ export function SearchInput({
     );
   };
 
-  const generateScenariosFromQuery = (parsed: ParsedQuery) => {
+  const generateScenariosFromQuery = (parsed: ParsedQuery, criteria?: SourcingCriteria | null) => {
     const newScenarios: Scenario[] = [];
     
     // Use tags directly as they are now fully populated by the backend mapper
@@ -659,6 +711,9 @@ export function SearchInput({
         const displayName = CATEGORY_DISPLAY_NAMES[tag.category] || tag.category.replace(/_/g, ' ');
         const group = CATEGORY_GROUPS[tag.category] || "Other";
         
+        // Find matching criterion to get operator
+        const criterion = criteria?.criteria?.find(c => c.id === tag.criterion_id);
+
         newScenarios.push({
           id,
           label: `${displayName}: ${tag.value}`,
@@ -667,6 +722,7 @@ export function SearchInput({
           importance: tag.importance || 'medium',
           criterionId: tag.criterion_id,
           group,
+          operator: criterion?.operator,
         });
       });
       return newScenarios;
@@ -730,7 +786,7 @@ export function SearchInput({
         setParsedCriteria(result.criteria ?? null);
         
         // Generate scenarios from the parsed query
-        const generated = generateScenariosFromQuery(result.data);
+        const generated = generateScenariosFromQuery(result.data, result.criteria);
         setScenarios(generated);
         setSelectedScenarios(generated.map(s => s.id)); // Select all by default
         
@@ -980,6 +1036,15 @@ export function SearchInput({
     return acc;
   }, {} as Record<string, Scenario[]>);
 
+  // Get icon for a group (uses first scenario's category icon)
+  const getGroupIcon = (groupName: string) => {
+    const groupScenarios = groupedScenarios[groupName];
+    if (!groupScenarios || groupScenarios.length === 0) {
+      return <IconSparkles className="size-3.5" />;
+    }
+    return getCategoryIcon(groupScenarios[0].category);
+  };
+
   // Sort groups by predefined order
   const sortedGroups = Object.keys(groupedScenarios).sort((a, b) => {
     const indexA = GROUP_ORDER.indexOf(a);
@@ -1165,7 +1230,10 @@ export function SearchInput({
                                 )}
                               >
                                 <span className="flex items-center justify-between gap-2">
-                                  <span>{groupName}</span>
+                                  <span className="flex items-center gap-2">
+                                    <span className="text-muted-foreground/70 shrink-0">{getGroupIcon(groupName)}</span>
+                                    <span>{groupName}</span>
+                                  </span>
                                   <span className="rounded-full border border-border/60 bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
                                     {groupedScenarios[groupName]?.length ?? 0}
                                   </span>
