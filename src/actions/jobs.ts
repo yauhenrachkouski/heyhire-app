@@ -77,7 +77,8 @@ function toStringValues(value: unknown): string[] {
 }
 
 function mapPriorityToImportance(priority: Criterion["priority_level"]): CategoryTag["importance"] {
-  if (priority === "mandatory" || priority === "high") return "high";
+  if (priority === "mandatory") return "mandatory";
+  if (priority === "high") return "high";
   if (priority === "low") return "low";
   return "medium";
 }
@@ -121,7 +122,12 @@ function mapCriteriaToParsedQuery(
       case "logistics_location":
         locations.push(...values);
         allTags.push(
-          ...values.map((value) => ({ category: "location", value, importance }))
+          ...values.map((value) => ({
+            category: "location" as const,
+            value,
+            importance,
+            criterion_id: criterion.id,
+          }))
         );
         break;
       case "logistics_work_mode":
@@ -129,56 +135,101 @@ function mapCriteriaToParsedQuery(
         break;
       case "language_requirement":
         allTags.push(
-          ...values.map((value) => ({ category: "language", value, importance }))
+          ...values.map((value) => ({
+            category: "language" as const,
+            value,
+            importance,
+            criterion_id: criterion.id,
+          }))
         );
         break;
       case "minimum_years_of_experience":
       case "minimum_relevant_years_of_experience":
         years.push(...values);
         allTags.push(
-          ...values.map((value) => ({ category: "years_of_experience", value, importance }))
+          ...values.map((value) => ({
+            category: "years_of_experience" as const,
+            value,
+            importance,
+            criterion_id: criterion.id,
+          }))
         );
         break;
       case "company_constraint":
         if (isExclude) {
           allTags.push(
-            ...values.map((value) => ({ category: "excluded_company", value, importance }))
+            ...values.map((value) => ({
+              category: "excluded_company" as const,
+              value,
+              importance,
+              criterion_id: criterion.id,
+            }))
           );
         } else {
           companies.push(...values);
           allTags.push(
-            ...values.map((value) => ({ category: "company", value, importance }))
+            ...values.map((value) => ({
+              category: "company" as const,
+              value,
+              importance,
+              criterion_id: criterion.id,
+            }))
           );
         }
         break;
       case "capability_requirement":
         skills.push(...values);
         allTags.push(
-          ...values.map((value) => ({ category: "hard_skills", value, importance }))
+          ...values.map((value) => ({
+            category: "hard_skills" as const,
+            value,
+            importance,
+            criterion_id: criterion.id,
+          }))
         );
         break;
       case "tool_requirement":
         skills.push(...values);
         allTags.push(
-          ...values.map((value) => ({ category: "tools", value, importance }))
+          ...values.map((value) => ({
+            category: "tools" as const,
+            value,
+            importance,
+            criterion_id: criterion.id,
+          }))
         );
         break;
       case "domain_requirement":
         industries.push(...values);
         allTags.push(
-          ...values.map((value) => ({ category: "industry", value, importance }))
+          ...values.map((value) => ({
+            category: "industry" as const,
+            value,
+            importance,
+            criterion_id: criterion.id,
+          }))
         );
         break;
       case "certification_requirement":
         educations.push(...values);
         allTags.push(
-          ...values.map((value) => ({ category: "education_field", value, importance }))
+          ...values.map((value) => ({
+            category: "education_field" as const,
+            value,
+            importance,
+            criterion_id: criterion.id,
+          }))
         );
         break;
       case "career_signal_constraints":
         titles.push(...values);
         allTags.push(
-          ...values.map((value) => ({ category: "job_title", value, importance }))
+          ...values.map((value) => ({
+            category: "job_title" as const,
+            value,
+            importance,
+            criterion_id: criterion.id,
+          }))
         );
         break;
       default:
@@ -300,10 +351,18 @@ export async function parseJob(
  * POST /api/v3/jobs/summary
  */
 export async function getJobSummary(
-  message: unknown,
-  projectId?: string | null
+  params: {
+    message: string;
+    projectId?: string | null;
+    iterationCount?: number | null;
+  }
 ): Promise<{ success: boolean; data?: JobSummaryResponse; error?: string }> {
   try {
+    const message = params.message?.trim?.() ? params.message.trim() : "";
+    if (!message) {
+      throw new Error("Summary API error: message is required");
+    }
+
     const response = await fetch(`${API_BASE_URL}/api/v3/jobs/summary`, {
       method: "POST",
       headers: {
@@ -311,7 +370,8 @@ export async function getJobSummary(
       },
       body: JSON.stringify({
         message,
-        project_id: projectId ?? null,
+        project_id: params.projectId ?? null,
+        iteration_count: params.iterationCount ?? 1,
       }),
     });
 

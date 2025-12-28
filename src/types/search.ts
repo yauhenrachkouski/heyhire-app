@@ -59,7 +59,9 @@ export type SourcingCriteria = JobParsingResponseV3;
 
 export const jobSummaryResponseSchema = z.object({
   project_id: z.string().nullable().optional(),
-  summary_markdown: z.string(),
+  recommendations: z.array(z.string()).optional().default([]),
+  generated_job_description: z.string().nullable().optional(),
+  next_iteration: z.number(),
 });
 
 export type JobSummaryResponse = z.infer<typeof jobSummaryResponseSchema>;
@@ -272,7 +274,10 @@ export const categoryTagSchema = z.object({
     "excluded_company"
   ]),
   value: z.string(),
-  importance: z.enum(["low", "medium", "high"]).default("medium").optional(),
+  // Matches v3 criteria priority levels (we keep "mandatory" distinct from "high")
+  importance: z.enum(["low", "medium", "high", "mandatory"]).default("medium").optional(),
+  // Optional linkage back to v3 criterion for syncing edits in UI
+  criterion_id: z.string().optional(),
 });
 
 export type CategoryTag = z.infer<typeof categoryTagSchema>;

@@ -214,7 +214,7 @@ function ScenarioGroupList({
   groupedScenarios: Record<string, Scenario[]>;
   selectedScenarios: string[];
   onScenarioToggle: (id: string) => void;
-  onImportanceChange: (id: string, importance: "low" | "medium" | "high") => void;
+  onImportanceChange: (id: string, importance: "low" | "medium" | "high" | "mandatory") => void;
   getCategoryIcon: (category: string) => React.ReactNode;
   getCategoryDisplayName: (category: string) => string;
   getGroupId: (groupName: string) => string;
@@ -274,6 +274,10 @@ function ScenarioGroupList({
                           </div>
                           <div className="grid grid-cols-[32px_1fr] gap-2">
                             <span className="font-medium opacity-70">High</span>
+                            <span>Strong preference</span>
+                          </div>
+                          <div className="grid grid-cols-[32px_1fr] gap-2">
+                            <span className="font-medium opacity-70">Must</span>
                             <span>Mandatory</span>
                           </div>
                         </div>
@@ -294,6 +298,9 @@ function ScenarioGroupList({
                     </ToggleGroupItem>
                     <ToggleGroupItem value="high" size="sm">
                       High
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="mandatory" size="sm">
+                      Must
                     </ToggleGroupItem>
                   </ToggleGroup>
                 </div>
@@ -418,7 +425,8 @@ interface Scenario {
   label: string;
   category: string;
   value: string;
-  importance: "low" | "medium" | "high";
+  importance: "low" | "medium" | "high" | "mandatory";
+  criterionId?: string;
   group: string; // Group name for UI display
 }
 
@@ -588,17 +596,63 @@ export function SearchInput({
       }
     });
     
-    // Also update tags with importance info
-    newQuery.tags = newQuery.tags.map(tag => {
-        const scenario = scenarios.find(s => s.category === tag.category);
-        if (scenario) {
-            return { ...tag, importance: scenario.importance };
-        }
-        return tag;
+    // Also update tags with importance info (prefer criterion linkage when available)
+    newQuery.tags = newQuery.tags.map((tag) => {
+      const scenario = scenarios.find((s) => {
+        if (tag.criterion_id && s.criterionId) return s.criterionId === tag.criterion_id;
+        return s.category === tag.category && s.value === tag.value;
+      });
+      if (scenario) {
+        return { ...tag, importance: scenario.importance };
+      }
+      return tag;
     });
 
     setParsedQuery(newQuery);
-    onQueryParsed(newQuery);
+    // Keep v3 criteria in sync when possible (so strategy generation uses the edited priorities)
+    const updatedCriteria = (() => {
+      if (!parsedCriteria) return undefined;
+
+      const rank: Record<Scenario["importance"], number> = {
+        low: 1,
+        medium: 2,
+        high: 3,
+        mandatory: 4,
+      };
+
+      const selectedScenarioObjs = scenarios.filter((s) => selectedScenarios.includes(s.id));
+
+      // Keep a criterion if ANY of its scenario-values remain selected
+      const selectedCriterionIds = new Set(
+        selectedScenarioObjs.map((s) => s.criterionId).filter(Boolean) as string[]
+      );
+
+      // Per criterion, use the highest selected importance
+      const maxImportanceByCriterion = new Map<string, Scenario["importance"]>();
+      for (const s of selectedScenarioObjs) {
+        if (!s.criterionId) continue;
+        const prev = maxImportanceByCriterion.get(s.criterionId);
+        if (!prev || rank[s.importance] > rank[prev]) {
+          maxImportanceByCriterion.set(s.criterionId, s.importance);
+        }
+      }
+
+      const nextCriteria = parsedCriteria.criteria
+        .filter((c) => (selectedCriterionIds.size ? selectedCriterionIds.has(c.id) : true))
+        .map((c) => {
+          const imp = maxImportanceByCriterion.get(c.id);
+          if (!imp) return c;
+          return { ...c, priority_level: imp };
+        });
+
+      return { ...parsedCriteria, criteria: nextCriteria };
+    })();
+
+    if (updatedCriteria) {
+      setParsedCriteria(updatedCriteria);
+    }
+
+    onQueryParsed(newQuery, undefined, updatedCriteria);
   }, [selectedScenarios, originalParsedQuery, scenarios]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleScenarioToggle = (id: string) => {
@@ -608,7 +662,7 @@ export function SearchInput({
     });
   };
 
-  const handleImportanceChange = (id: string, importance: "low" | "medium" | "high") => {
+  const handleImportanceChange = (id: string, importance: "low" | "medium" | "high" | "mandatory") => {
     setScenarios(prev =>
       prev.map(s => {
         if (s.id !== id) return s;
@@ -644,6 +698,7 @@ export function SearchInput({
           category: tag.category,
           value: tag.value,
           importance: tag.importance || 'medium',
+          criterionId: tag.criterion_id,
           group,
         });
       });

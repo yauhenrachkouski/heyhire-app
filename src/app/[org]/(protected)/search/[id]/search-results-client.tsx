@@ -9,7 +9,8 @@ import { InlineFilters } from "@/components/search/inline-filters";
 import { CriteriaDisplay } from "@/components/search/criteria-display";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { IconPencil, IconCalendar, IconUser } from "@tabler/icons-react";
+import { Popover, PopoverContent, PopoverTrigger, PopoverHeader, PopoverTitle, PopoverDescription } from "@/components/ui/popover";
+import { IconPencil, IconCalendar, IconUser, IconInfoCircle } from "@tabler/icons-react";
 import { formatDate } from "@/lib/format";
 import SourcingLoader from "@/components/search/sourcing-custom-loader";
 import { updateSearchName } from "@/actions/search";
@@ -372,6 +373,28 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
           </Badge>
           {isActiveSearch && realtimeProgress > 0 && (
             <span className="text-xs font-mono">{realtimeProgress}%</span>
+          )}
+          {search.query && search.query.trim() && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto py-0.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <IconInfoCircle className="h-3.5 w-3.5" />
+                  <span>Original search</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 max-w-[calc(100vw-2rem)]">
+                <PopoverHeader>
+                  <PopoverTitle>Original Search Prompt</PopoverTitle>
+                </PopoverHeader>
+                <PopoverDescription className="whitespace-pre-wrap text-sm leading-relaxed">
+                  {search.query}
+                </PopoverDescription>
+              </PopoverContent>
+            </Popover>
           )}
         </div>
         

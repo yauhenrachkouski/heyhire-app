@@ -472,66 +472,13 @@ export function CandidateDetailsSheet({ searchCandidate, onClose }: CandidateDet
               {experiences.length > 0 && (
                 <>
                   <div>
-                    <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
+                    <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-4">
                       Experience
                     </h2>
-                    <div className="space-y-3">
-                      {experiences.map((exp: any, idx: number) => {
-                        const title = exp.title || exp.role_title || exp.position || "—";
-                        const company = exp.company || exp.companyName || exp.organization_name;
-                        const startDate = exp.startDate || exp.start_date;
-                        const endDate = exp.endDate || exp.end_date;
-                        const dateRange = startDate
-                          ? `${formatDate(startDate)}${endDate ? ` - ${formatDate(endDate)}` : exp.isCurrent ? " - Present" : ""}`
-                          : null;
-                        const duration = startDate ? calculateDuration(startDate, endDate) : null;
-
-                        return (
-                          <div key={idx} className="rounded-lg border bg-muted/20 p-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0 space-y-0.5">
-                                <p className="text-sm font-semibold text-foreground leading-snug break-words">
-                                  {title}
-                                </p>
-
-                                {company && (
-                                  <p className="text-sm text-muted-foreground leading-snug break-words">
-                                    {company}
-                                  </p>
-                                )}
-                              </div>
-
-                              {exp.isCurrent && (
-                                <Badge variant="default" className="text-xs shrink-0">
-                                  Current
-                                </Badge>
-                              )}
-                            </div>
-
-                            {dateRange && (
-                              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                                <span className="inline-flex items-center gap-1">
-                                  <IconCalendar className="h-3 w-3" />
-                                  <span>{dateRange}</span>
-                                </span>
-
-                                {duration && (
-                                  <span className="inline-flex items-center gap-2">
-                                    <span className="text-muted-foreground/60">•</span>
-                                    <span className="font-medium">{duration}</span>
-                                  </span>
-                                )}
-                              </div>
-                            )}
-
-                            {exp.description && (
-                              <div className="mt-2 text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
-                                {exp.description}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                    <div className="ml-2 border-l border-muted space-y-6 pb-2">
+                      {experiences.map((exp: any, idx: number) => (
+                        <ExperienceItem key={idx} exp={exp} />
+                      ))}
                     </div>
                   </div>
                   <Separator />
