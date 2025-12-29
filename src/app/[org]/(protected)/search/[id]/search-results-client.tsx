@@ -9,7 +9,9 @@ import { InlineFilters } from "@/components/search/inline-filters";
 import { CriteriaDisplay } from "@/components/search/criteria-display";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger, PopoverHeader, PopoverTitle, PopoverDescription } from "@/components/ui/popover";
-import { IconPencil, IconCalendar, IconUser, IconInfoCircle, IconCopy, IconPlayerPlay } from "@tabler/icons-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Progress } from "@/components/ui/progress";
+import { IconPencil, IconCalendar, IconUser, IconInfoCircle, IconCopy, IconPlayerPlay, IconDatabase, IconPlus } from "@tabler/icons-react";
 import { formatDate } from "@/lib/format";
 import SourcingLoader from "@/components/search/sourcing-custom-loader";
 import { updateSearchName } from "@/actions/search";
@@ -20,6 +22,7 @@ import { useActiveOrganization } from "@/lib/auth-client";
 import { useIsReadOnly } from "@/hooks/use-is-read-only";
 import { DialogOverlay } from "@/components/ui/dialog";
 import { SearchRightSidebar } from "@/components/search/search-right-sidebar";
+import { cn } from "@/lib/utils";
 
 interface SearchResultsClientProps {
   search: {
@@ -427,19 +430,47 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
             <span className="text-xs font-mono">{realtimeProgress}%</span>
           )}
           <div className="flex items-center gap-3 group/counter" id="search-results-counter">
-            <div className="flex items-baseline gap-1 text-xs">
-              <span className="font-bold text-foreground text-sm">{totalCount}</span>
-              <span className="text-muted-foreground text-xs  uppercase">/ 1000</span>
+            <div className="flex items-center gap-1 bg-muted/30 border rounded-lg p-1 pr-1.5 shadow-sm">
+              <TooltipProvider>
+                <Tooltip delayDuration={300}>
+                  <TooltipTrigger asChild>
+                    <div className="flex flex-col gap-1 px-2.5 py-0.5 cursor-help hover:bg-muted/50 rounded-md transition-colors">
+                      <div className="flex items-center justify-between gap-3 text-xs">
+                        <span className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wide">Candidates</span>
+                        <span className="font-medium text-foreground tabular-nums">{totalCount} <span className="text-muted-foreground">/ 1,000</span></span>
+                      </div>
+                      <Progress value={Math.min((totalCount / 1000) * 100, 100)} className="h-1.5 w-32" />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                    <p>You have collected {totalCount} candidates.</p>
+                    <p className="text-muted-foreground mt-1">Maximum limit for this search is 1,000 candidates.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <div className="h-7 w-px bg-border/60 mx-1" />
+
+              <Button
+                variant={totalCount >= 1000 ? "ghost" : "default"}
+                size="sm"
+                className={cn(
+                  "h-7 text-xs font-medium px-3 rounded-md transition-all",
+                  totalCount >= 1000 
+                    ? "text-muted-foreground bg-transparent hover:bg-transparent cursor-not-allowed" 
+                    : "shadow-sm hover:shadow-md"
+                )}
+                onClick={handleContinueSearch}
+                disabled={totalCount >= 1000}
+              >
+                {totalCount >= 1000 ? "Limit Reached" : (
+                  <>
+                    <span>Get +100</span>
+                    <IconPlus className="ml-1.5 h-3.5 w-3.5" stroke={2.5} />
+                  </>
+                )}
+              </Button>
             </div>
-            <Button
-              variant="default"
-              size="sm"
-              className="h-7 rounded-full px-3 bg-foreground text-background hover:bg-foreground/90 transition-all shadow-sm"
-              onClick={handleContinueSearch}
-            >
-              <span className="text-xs font-medium">Get 100 more</span>
-              <IconPlayerPlay className="h-3 w-3 fill-current" />
-            </Button>
           </div>
         </div>
         
