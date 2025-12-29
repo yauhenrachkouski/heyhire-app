@@ -210,6 +210,7 @@ function CandidateScoreDisplay(props: {
                 status={status}
                 scoreStatus={conceptScore?.status ?? null}
                 compact={true}
+                hideIcon={true}
               />
             );
           })}
@@ -220,7 +221,7 @@ function CandidateScoreDisplay(props: {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
         {groupConfig.flatMap((group, index) => [
           <div key={group.key} className="flex items-center">
             {renderGroup(group.title, groups[group.key], group.icon)}
@@ -363,6 +364,7 @@ interface CandidateCardProps {
   searchCandidate: SearchCandidate;
   sourcingCriteria?: SourcingCriteria;
   isSelected?: boolean;
+  isActive?: boolean;
   onSelect?: (checked: boolean | "indeterminate") => void;
   onShowCandidate?: () => void;
   onEmail?: () => void;
@@ -374,6 +376,7 @@ export function CandidateCard({
   searchCandidate,
   sourcingCriteria,
   isSelected = false,
+  isActive = false,
   onSelect,
   onShowCandidate,
   onCardClick,
@@ -419,13 +422,16 @@ export function CandidateCard({
           onCardClick();
         }
       }}
-      className={`group relative rounded-lg border bg-white p-4 transition-all outline-none ${
-        isSelected ? "ring-2 ring-black border-black" : "border-gray-200"
-      } ${
+      className={cn(
+        "group relative rounded-lg bg-white p-4 transition-all outline-none",
+        // Default border
+        isActive ? "border-2 border-primary" : "border border-gray-200",
+        // Checkbox selection: treat as separate state (stronger)
+        isSelected ? "ring-2 ring-black ring-inset border-2 border-black" : "",
         onCardClick
-          ? "cursor-pointer hover:border-black focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+          ? "cursor-pointer hover:border-black focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-inset"
           : ""
-      }`}
+      )}
     >
       <div className="flex gap-4">
         {/* Left column: Checkbox */}
@@ -537,6 +543,7 @@ export function CandidateCard({
                   <Button
                     size="sm"
                     variant="default"
+                    type="button"
                     className="font-medium w-full"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -558,25 +565,28 @@ export function CandidateCard({
               </Tooltip>
             </TooltipProvider>
 
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="gap-2 w-full"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onShowCandidate?.();
-                    }}
-                  >
-                    <span>View details</span>
-                    <IconChevronRight className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Open detailed candidate card</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            {!isActive && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      type="button"
+                      className="gap-2 w-full"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onShowCandidate?.()
+                      }}
+                    >
+                      <span>View details</span>
+                      <IconChevronRight className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Open detailed candidate card</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
         </div>
       </div>

@@ -17,12 +17,9 @@ import { cn } from "@/lib/utils";
 interface InlineFiltersProps {
   onScoreRangeChange?: (min: number, max: number) => void;
   onSortChange?: (sort: string) => void;
-  totalCount?: number;
-  filteredCount?: number;
-  isFiltered?: boolean;
 }
 
-export function InlineFilters({ onScoreRangeChange, onSortChange, totalCount, filteredCount, isFiltered }: InlineFiltersProps) {
+export function InlineFilters({ onScoreRangeChange, onSortChange }: InlineFiltersProps) {
   const [minScore, setMinScore] = useState<number>(0); // Start with "All" candidates by default
   const [isCustom, setIsCustom] = useState<boolean>(false);
   const [sortBy, setSortBy] = useState<string>("date-desc"); // Default: newest first
@@ -115,20 +112,6 @@ export function InlineFilters({ onScoreRangeChange, onSortChange, totalCount, fi
           </div>
         )}
       </div>
-
-      {totalCount !== undefined && totalCount > 0 && (
-        <span className="text-sm text-muted-foreground whitespace-nowrap">
-          {isFiltered ? (
-            <>
-              {filteredCount} of {totalCount} people {totalCount === 1 ? 'profile' : 'profiles'}
-            </>
-          ) : (
-            <>
-              {totalCount} people {totalCount === 1 ? 'profile' : 'profiles'}
-            </>
-          )}
-        </span>
-      )}
 
       <div className="ml-auto">
         <Select value={sortBy} onValueChange={handleSortChange}>

@@ -3,10 +3,9 @@
 import { useCallback, useState, useEffect, useRef, useMemo } from "react";
 import { useReactTable, getCoreRowModel, getPaginationRowModel } from "@tanstack/react-table";
 import posthog from "posthog-js";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { CandidateCard } from "./candidate-card";
-import { CandidateDetailsSheet } from "./candidate-details-sheet";
 import { DataTablePagination } from "@/components/data-table/data-table-pagination";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { CandidateCardActionBar } from "./candidate-card-action-bar";
 import { SkeletonCard } from "./skeleton-card";
 import { useActiveOrganization } from "@/lib/auth-client";
@@ -60,8 +59,12 @@ export function CandidateCardListPaginated({
   skeletonCount = 0,
 }: CandidateCardListPaginatedProps) {
   const { data: activeOrg } = useActiveOrganization();
-  const [selectedCandidate, setSelectedCandidate] = useState<SearchCandidate | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const selectedCandidateId = searchParams.get("candidateId");
   
   // Track previous candidate IDs to detect new candidates for animation
   const previousCandidateIdsRef = useRef<Set<string>>(new Set());
@@ -100,8 +103,12 @@ export function CandidateCardListPaginated({
       organization_id: activeOrg?.id,
       candidate_id: candidate.candidate.id,
     });
-    setSelectedCandidate(candidate);
-  }, [activeOrg?.id, searchId]);
+    
+    // Update URL to show sidebar
+    const params = new URLSearchParams(searchParams);
+    params.set("candidateId", candidate.id);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [activeOrg?.id, searchId, searchParams, pathname, router]);
 
   const handleEmail = useCallback(() => {
     console.log("[Candidates] Send email - not implemented yet");
@@ -183,18 +190,19 @@ export function CandidateCardListPaginated({
           const candidateId = searchCandidate.id;
           const isSelected = selectedIds.has(candidateId);
           const isNewCandidate = newCandidateIds.has(candidateId);
+          const isActive = selectedCandidateId === candidateId;
 
           return (
             <div 
               key={candidateId}
-              className={`cursor-pointer transition-all rounded-lg ${
-                selectedCandidate?.id === candidateId
-                  && "ring-2 ring-black ring-offset-0 border-none"
-              } ${
-                isNewCandidate 
-                  ? "animate-in fade-in slide-in-from-bottom-4 duration-300" 
-                  : ""
-              }`}
+              className={[
+                "cursor-pointer transition-all rounded-lg",
+                // Active highlight should never be clipped (inset vs ring-offset)
+                isActive ? "ring-2 ring-primary ring-inset" : "",
+                // Also show highlight when keyboard focus is inside the card
+                "focus-within:ring-2 focus-within:ring-primary focus-within:ring-inset",
+                isNewCandidate ? "animate-in fade-in slide-in-from-bottom-4 duration-300" : "",
+              ].filter(Boolean).join(" ")}
               style={
                 isNewCandidate 
                   ? { animationDelay: `${Math.min(index * 50, 300)}ms` } 
@@ -205,6 +213,7 @@ export function CandidateCardListPaginated({
                 searchCandidate={searchCandidate}
                 sourcingCriteria={sourcingCriteria}
                 isSelected={isSelected}
+                isActive={isActive}
                 onSelect={(selected) => handleSelectCandidate(candidateId, selected)}
                 onShowCandidate={() => handleShowCandidate(searchCandidate)}
                 onCardClick={() => handleShowCandidate(searchCandidate)}
@@ -243,16 +252,6 @@ export function CandidateCardListPaginated({
           onClearSelection={handleClearSelection}
         />
       )}
-
-      <Sheet open={!!selectedCandidate} onOpenChange={(open) => !open && setSelectedCandidate(null)}>
-        <SheetContent side="right" className="w-1/2! max-w-none! p-0 overflow-hidden flex flex-col">
-          <CandidateDetailsSheet
-            searchCandidate={selectedCandidate}
-            onClose={() => setSelectedCandidate(null)}
-            sourcingCriteria={sourcingCriteria}
-          />
-        </SheetContent>
-      </Sheet>
     </div>
   );
 }

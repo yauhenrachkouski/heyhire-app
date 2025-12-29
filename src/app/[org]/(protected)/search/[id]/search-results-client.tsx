@@ -10,7 +10,7 @@ import { CriteriaDisplay } from "@/components/search/criteria-display";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger, PopoverHeader, PopoverTitle, PopoverDescription } from "@/components/ui/popover";
-import { IconPencil, IconCalendar, IconUser, IconInfoCircle, IconCopy } from "@tabler/icons-react";
+import { IconPencil, IconCalendar, IconUser, IconInfoCircle, IconCopy, IconPlayerPlay } from "@tabler/icons-react";
 import { formatDate } from "@/lib/format";
 import SourcingLoader from "@/components/search/sourcing-custom-loader";
 import { updateSearchName } from "@/actions/search";
@@ -20,6 +20,7 @@ import posthog from 'posthog-js';
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useIsReadOnly } from "@/hooks/use-is-read-only";
 import { DialogOverlay } from "@/components/ui/dialog";
+import { SearchRightSidebar } from "@/components/search/search-right-sidebar";
 
 interface SearchResultsClientProps {
   search: {
@@ -67,9 +68,13 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
     console.log("[SearchResultsClient] Search changed to:", search.id);
     setSearchName(search.name);
     setCurrentParsedQuery(search.params);
+  }, [search.id, search.name, search.params]);
+
+  useEffect(() => {
     setScoreRange([0, 100]);
     setPageIndex(0);
-  }, [search.id, search.name, search.params]);
+    setSortBy("date-desc");
+  }, [search.id]);
 
   useEffect(() => {
     if (isEditingName && titleRef.current) {
@@ -304,6 +309,12 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
     }
   };
 
+  const handleContinueSearch = () => {
+    toast("Continue search", {
+      description: "This is a sample action to continue the search.",
+    });
+  };
+
   return (
     <div className="space-y-4">
       {/* Debug panel - only in development */}
@@ -381,12 +392,6 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
               {search.createdBy.name}
             </span>
           )}
-          <Badge variant={realtimeStatus === 'completed' ? 'secondary' : realtimeStatus === 'error' || realtimeStatus === 'failed' ? 'destructive' : 'outline'}>
-            {realtimeStatus}
-          </Badge>
-          {isActiveSearch && realtimeProgress > 0 && (
-            <span className="text-xs font-mono">{realtimeProgress}%</span>
-          )}
           {search.query && search.query.trim() && (
             <Popover>
               <PopoverTrigger asChild>
@@ -419,6 +424,25 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
               </PopoverContent>
             </Popover>
           )}
+          <Badge variant={realtimeStatus === 'completed' ? 'secondary' : realtimeStatus === 'error' || realtimeStatus === 'failed' ? 'destructive' : 'outline'}>
+            {realtimeStatus}
+          </Badge>
+          {isActiveSearch && realtimeProgress > 0 && (
+            <span className="text-xs font-mono">{realtimeProgress}%</span>
+          )}
+          <div className="flex items-center gap-2">
+            <span className="text-sm">
+              {totalCount} / 1000
+            </span>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-6 w-6"
+              onClick={handleContinueSearch}
+            >
+              <IconPlayerPlay className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
         
         <AppliedFilters 
@@ -434,13 +458,15 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
         <CriteriaDisplay data={search.parseResponse} />
       </div>
 
-      <div
-        className={
-          shouldShowProgressBar
-            ? "relative min-h-[min(420px,60svh)] max-h-[calc(100svh-200px)] overflow-hidden"
-            : "relative"
-        }
-      >
+      <div className="flex w-full min-h-0 gap-4">
+        <div
+          className={
+            shouldShowProgressBar
+              ? "flex-1 relative min-h-[min(420px,60svh)] max-h-[calc(100svh-200px)] overflow-hidden"
+              : "flex-1 relative"
+          }
+          id="search-results-container"
+        >
         {shouldShowProgressBar && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
             <div className="w-full max-w-[400px] h-[200px] mb-8">
@@ -487,9 +513,6 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
                   });
                   setSortBy(sort);
                 }}
-                totalCount={totalCount}
-                filteredCount={filteredCount}
-                isFiltered={isFiltered}
               />
             </div>
       
@@ -534,6 +557,8 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
           </div>
         </div>
       </div>
+        <SearchRightSidebar />
     </div>
+  </div>
   );
 }

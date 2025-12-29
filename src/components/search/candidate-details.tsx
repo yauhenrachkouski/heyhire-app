@@ -26,7 +26,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { useState, useMemo } from "react";
 import { formatDate, calculateDuration, cn } from "@/lib/utils";
 import { useOpenLinkedInWithCredits } from "@/hooks/use-open-linkedin-with-credits";
@@ -57,13 +56,22 @@ interface SearchCandidate {
     skills: string | null;
     educations: string | null;
     certifications: string | null;
+    recommendations: string | null;
+    languages: string | null;
+    projects: string | null;
+    publications: string | null;
+    volunteering: string | null;
+    courses: string | null;
+    patents: string | null;
+    honorsAndAwards: string | null;
+    causes: string | null;
   };
   matchScore: number | null;
   notes: string | null;
   scoringResult?: string | null;
 }
 
-interface CandidateDetailsSheetProps {
+interface CandidateDetailsProps {
   searchCandidate: SearchCandidate | null;
   onClose: () => void;
   sourcingCriteria?: SourcingCriteria;
@@ -230,6 +238,7 @@ function CandidateScoreDisplay(props: {
                 status={status}
                 scoreStatus={conceptScore?.status ?? null}
                 compact={true}
+                hideIcon={true}
               />
             );
           })}
@@ -240,7 +249,7 @@ function CandidateScoreDisplay(props: {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
         {groupConfig.flatMap((group, index) => [
           <div key={group.key} className="flex items-center">
             {renderGroup(group.title, groups[group.key], group.icon)}
@@ -427,7 +436,7 @@ function ExperienceItem({ exp }: { exp: any }) {
   );
 }
 
-export function CandidateDetailsSheet({ searchCandidate, onClose, sourcingCriteria }: CandidateDetailsSheetProps) {
+export function CandidateDetails({ searchCandidate, onClose, sourcingCriteria }: CandidateDetailsProps) {
   const [expandedSkills, setExpandedSkills] = useState(false);
   const { openLinkedIn, isLoading: isOpeningLinkedIn } = useOpenLinkedInWithCredits();
 
@@ -440,6 +449,15 @@ export function CandidateDetailsSheet({ searchCandidate, onClose, sourcingCriter
   const skills = useMemo(() => safeJsonParse<any[]>(candidate.skills, []), [candidate.skills]);
   const educations = useMemo(() => safeJsonParse<any[]>(candidate.educations, []), [candidate.educations]);
   const certifications = useMemo(() => safeJsonParse<any[]>(candidate.certifications, []), [candidate.certifications]);
+  const recommendations = useMemo(() => safeJsonParse<any[]>(candidate.recommendations, []), [candidate.recommendations]);
+  const languages = useMemo(() => safeJsonParse<any[]>(candidate.languages, []), [candidate.languages]);
+  const projects = useMemo(() => safeJsonParse<any[]>(candidate.projects, []), [candidate.projects]);
+  const publications = useMemo(() => safeJsonParse<any[]>(candidate.publications, []), [candidate.publications]);
+  const volunteering = useMemo(() => safeJsonParse<any[]>(candidate.volunteering, []), [candidate.volunteering]);
+  const courses = useMemo(() => safeJsonParse<any[]>(candidate.courses, []), [candidate.courses]);
+  const patents = useMemo(() => safeJsonParse<any[]>(candidate.patents, []), [candidate.patents]);
+  const honorsAndAwards = useMemo(() => safeJsonParse<any[]>(candidate.honorsAndAwards, []), [candidate.honorsAndAwards]);
+  const causes = useMemo(() => safeJsonParse<any[]>(candidate.causes, []), [candidate.causes]);
   const locationData = useMemo(() => safeJsonParse<any>(candidate.location, null), [candidate.location]);
   const scoringData = useMemo<ScoringData>(() => {
     return safeJsonParse<ScoringData>(scoringResult, null);
@@ -469,28 +487,23 @@ export function CandidateDetailsSheet({ searchCandidate, onClose, sourcingCriter
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col h-full bg-white">
-        {/* Header with close button */}
-        <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white z-10">
-          <div className="flex flex-col gap-0.5">
-            <SheetTitle className="text-lg font-semibold">Candidate Details</SheetTitle>
-            <SheetDescription className="text-sm text-muted-foreground">
-              {fullName} {currentRole && organizationName ? `• ${currentRole} @ ${organizationName}` : currentRole ? `• ${currentRole}` : ""}
-            </SheetDescription>
-          </div>
+      <div className="relative flex flex-col h-full bg-white">
+        {/* Floating close button (no header row) */}
+        <div className="sticky top-2 z-20 flex justify-end px-2 pt-2">
           <Button
             variant="ghost"
             size="icon"
             onClick={onClose}
-            className="h-8 w-8"
+            className="h-8 w-8 bg-white/80 backdrop-blur supports-backdrop-filter:bg-white/60"
           >
             <IconX className="h-4 w-4" />
+            <span className="sr-only">Close</span>
           </Button>
         </div>
 
         {/* Scrollable content */}
         <ScrollArea className="flex-1 overflow-hidden">
-          <div className="p-4">
+          <div className="p-4 pt-2">
             <div className="space-y-6">
               {/* Profile Header */}
               <div>
@@ -614,9 +627,24 @@ export function CandidateDetailsSheet({ searchCandidate, onClose, sourcingCriter
 
               <Separator />
 
-              {/* Summary */}
+              {/* AI Summary */}
               <CandidateSummary matchScore={matchScore} scoringData={scoringData} />
               {scoringData?.candidate_summary && <Separator />}
+
+              {/* About */}
+              {candidate.summary && (
+                <>
+                  <div>
+                    <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
+                      About
+                    </h2>
+                    <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
+                      {candidate.summary}
+                    </p>
+                  </div>
+                  <Separator />
+                </>
+              )}
 
               {/* AI Assessment - New Scoring Format */}
               {scoringData && reasoning && (
@@ -673,10 +701,10 @@ export function CandidateDetailsSheet({ searchCandidate, onClose, sourcingCriter
                           <div className="space-y-2">
                             {conceptScores.slice(0, 8).map((cs: any, idx: number) => (
                               <div key={idx} className="flex items-start justify-between gap-2 text-xs">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-medium">{cs.concept_id}</span>
-                                    <Badge variant="outline" className="text-xs">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-medium break-all">{cs.concept_id}</span>
+                                    <Badge variant="outline" className="text-xs shrink-0">
                                       {cs.status}
                                     </Badge>
                                     {String(cs.status).toLowerCase() === "pass" ? (
@@ -710,70 +738,6 @@ export function CandidateDetailsSheet({ searchCandidate, onClose, sourcingCriter
                 </>
               )}
 
-              {/* Certifications */}
-              {certifications.length > 0 && (
-                <>
-                  <div>
-                    <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
-                      Certifications
-                    </h2>
-                    <div className="space-y-3">
-                      {certifications.map((cert: any, idx: number) => (
-                        <div key={idx} className="rounded-lg border bg-muted/20 p-3">
-                          <p className="text-sm font-semibold text-foreground leading-snug break-words">
-                            {cert.title}
-                          </p>
-
-                          {cert.issuedBy && (
-                            <p className="text-sm text-muted-foreground leading-snug break-words mt-0.5">
-                              {cert.issuedBy}
-                            </p>
-                          )}
-
-                          {cert.issuedAt && (
-                            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                              <span className="inline-flex items-center gap-1">
-                                <IconCalendar className="h-3 w-3" />
-                                <span>{cert.issuedAt}</span>
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <Separator />
-                </>
-              )}
-
-              {/* Skills */}
-              {skills.length > 0 && (
-                <>
-                  <div>
-                    <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
-                      Skills ({skills.length})
-                    </h2>
-                    <div className="flex flex-wrap gap-2">
-                      {(skills as string[]).slice(0, expandedSkills ? skills.length : 8).map((skill, idx) => (
-                        <Badge key={idx} variant="outline" className="text-xs">
-                          {typeof skill === "string" ? skill : (skill as any)?.name || ""}
-                        </Badge>
-                      ))}
-                      {skills.length > 8 && !expandedSkills && (
-                        <Badge
-                          variant="outline"
-                          className="text-xs cursor-pointer hover:opacity-80"
-                          onClick={() => setExpandedSkills(true)}
-                        >
-                          +{skills.length - 8} more
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  <Separator />
-                </>
-              )}
-
               {/* Experience */}
               {experiences.length > 0 && (
                 <>
@@ -793,39 +757,393 @@ export function CandidateDetailsSheet({ searchCandidate, onClose, sourcingCriter
 
               {/* Education */}
               {educations.length > 0 && (
-                <div>
-                  <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
-                    Education
-                  </h2>
-                  <div className="space-y-3">
-                    {educations.map((edu: any, idx: number) => (
-                      <div key={idx} className="rounded-lg border bg-muted/20 p-3">
-                        <p className="text-sm font-semibold text-foreground leading-snug break-words">
-                          {edu.school || edu.school_name || edu.title}
-                        </p>
-
-                        {edu.degree && (
-                          <p className="text-sm text-foreground/90 leading-snug break-words mt-0.5">
-                            {edu.degree}
-                            {edu.fieldOfStudy && ` in ${edu.fieldOfStudy}`}
+                <>
+                  <div>
+                    <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
+                      Education
+                    </h2>
+                    <div className="space-y-3">
+                      {educations.map((edu: any, idx: number) => (
+                        <div key={idx} className="rounded-lg border bg-muted/20 p-3">
+                          <p className="text-sm font-semibold text-foreground leading-snug wrap-break-word">
+                            {edu.school || edu.school_name || edu.title}
                           </p>
-                        )}
 
-                        {(edu.startDate || edu.endDate) && (
-                          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                            <span className="inline-flex items-center gap-1">
-                              <IconCalendar className="h-3 w-3" />
-                              <span>
-                                {formatDate(edu.startDate)}
-                                {edu.endDate ? ` - ${formatDate(edu.endDate)}` : ""}
+                          {edu.degree && (
+                            <p className="text-sm text-foreground/90 leading-snug wrap-break-word mt-0.5">
+                              {edu.degree}
+                              {edu.fieldOfStudy && ` in ${edu.fieldOfStudy}`}
+                            </p>
+                          )}
+
+                          {(edu.startDate || edu.endDate) && (
+                            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                              <span className="inline-flex items-center gap-1">
+                                <IconCalendar className="h-3 w-3" />
+                                <span>
+                                  {formatDate(edu.startDate)}
+                                  {edu.endDate ? ` - ${formatDate(edu.endDate)}` : ""}
+                                </span>
                               </span>
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                  <Separator />
+                </>
+              )}
+
+              {/* Certifications */}
+              {certifications.length > 0 && (
+                <>
+                  <div>
+                    <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
+                      Licenses & Certifications
+                    </h2>
+                    <div className="space-y-3">
+                      {certifications.map((cert: any, idx: number) => (
+                        <div key={idx} className="rounded-lg border bg-muted/20 p-3">
+                          <p className="text-sm font-semibold text-foreground leading-snug wrap-break-word">
+                            {cert.title || cert.name}
+                          </p>
+
+                          {cert.issuedBy && (
+                            <p className="text-sm text-muted-foreground leading-snug wrap-break-word mt-0.5">
+                              {cert.issuedBy || cert.authority}
+                            </p>
+                          )}
+
+                          {cert.issuedAt && (
+                            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                              <span className="inline-flex items-center gap-1">
+                                <IconCalendar className="h-3 w-3" />
+                                <span>{cert.issuedAt || cert.date}</span>
+                              </span>
+                            </div>
+                          )}
+                          
+                          {cert.url && (
+                             <a 
+                               href={cert.url}
+                               target="_blank" 
+                               rel="noopener noreferrer"
+                               className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                             >
+                               Show credential <IconExternalLink className="h-3 w-3" />
+                             </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Separator />
+                </>
+              )}
+
+              {/* Projects */}
+              {projects.length > 0 && (
+                <>
+                  <div>
+                    <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
+                      Projects
+                    </h2>
+                    <div className="space-y-4">
+                      {projects.map((proj: any, idx: number) => (
+                        <div key={idx} className="group">
+                          <div className="flex items-start justify-between gap-2">
+                             <div>
+                                <h4 className="text-sm font-semibold text-foreground">
+                                  {proj.title}
+                                </h4>
+                                {(proj.startDate || proj.endDate) && (
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    {formatDate(proj.startDate)}
+                                    {proj.endDate ? ` - ${formatDate(proj.endDate)}` : ""}
+                                  </p>
+                                )}
+                             </div>
+                             {proj.url && (
+                               <a 
+                                 href={proj.url} 
+                                 target="_blank" 
+                                 rel="noopener noreferrer"
+                                 className="text-muted-foreground hover:text-foreground p-1"
+                               >
+                                 <IconExternalLink className="h-4 w-4" />
+                               </a>
+                             )}
+                          </div>
+                          {proj.description && (
+                            <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed line-clamp-3 group-hover:line-clamp-none transition-all">
+                              {proj.description}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Separator />
+                </>
+              )}
+
+              {/* Volunteering */}
+              {volunteering.length > 0 && (
+                <>
+                  <div>
+                    <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
+                      Volunteering
+                    </h2>
+                    <div className="space-y-4">
+                      {volunteering.map((vol: any, idx: number) => (
+                        <div key={idx}>
+                          <h4 className="text-sm font-semibold text-foreground">{vol.role || vol.title}</h4>
+                          <p className="text-sm text-muted-foreground">{vol.company || vol.organization}</p>
+                          {(vol.startDate || vol.endDate) && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {formatDate(vol.startDate)}
+                              {vol.endDate ? ` - ${formatDate(vol.endDate)}` : ""}
+                            </p>
+                          )}
+                          {vol.description && (
+                            <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+                              {vol.description}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Separator />
+                </>
+              )}
+
+              {/* Skills */}
+              {skills.length > 0 && (
+                <>
+                  <div>
+                    <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
+                      Skills ({skills.length})
+                    </h2>
+                    <div className="flex flex-wrap gap-2">
+                      {(skills as string[]).slice(0, expandedSkills ? skills.length : 12).map((skill, idx) => (
+                        <Badge key={idx} variant="secondary" className="text-xs font-normal">
+                          {typeof skill === "string" ? skill : (skill as any)?.name || ""}
+                        </Badge>
+                      ))}
+                      {skills.length > 12 && !expandedSkills && (
+                        <Badge
+                          variant="outline"
+                          className="text-xs cursor-pointer hover:bg-muted"
+                          onClick={() => setExpandedSkills(true)}
+                        >
+                          +{skills.length - 12} more
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  <Separator />
+                </>
+              )}
+
+              {/* Recommendations */}
+              {recommendations.length > 0 && (
+                <>
+                  <div>
+                    <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
+                      Recommendations
+                    </h2>
+                    <div className="space-y-4">
+                      {recommendations.map((rec: any, idx: number) => (
+                        <div key={idx} className="bg-muted/30 rounded-lg p-3 text-sm">
+                           <div className="mb-2">
+                              {rec.text ? (
+                                <p className="text-foreground/90 italic leading-relaxed">"{rec.text}"</p>
+                              ) : rec.recommendationText ? (
+                                <p className="text-foreground/90 italic leading-relaxed">"{rec.recommendationText}"</p>
+                              ) : null}
+                           </div>
+                           {(rec.author || rec.recommender) && (
+                             <div className="flex items-center gap-2 mt-2">
+                               <div className="h-px flex-1 bg-border/50"></div>
+                               <span className="text-xs font-medium text-muted-foreground">
+                                 {rec.author || rec.recommender}
+                               </span>
+                             </div>
+                           )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Separator />
+                </>
+              )}
+
+              {/* Honors & Awards */}
+              {honorsAndAwards.length > 0 && (
+                <>
+                  <div>
+                    <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
+                      Honors & Awards
+                    </h2>
+                    <div className="space-y-3">
+                      {honorsAndAwards.map((award: any, idx: number) => (
+                        <div key={idx}>
+                          <h4 className="text-sm font-semibold text-foreground">{award.title}</h4>
+                          <p className="text-sm text-muted-foreground">{award.issuer}</p>
+                          {award.date && (
+                            <p className="text-xs text-muted-foreground mt-0.5">{formatDate(award.date)}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Separator />
+                </>
+              )}
+
+              {/* Languages */}
+              {languages.length > 0 && (
+                <>
+                  <div>
+                    <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
+                      Languages
+                    </h2>
+                    <div className="space-y-2">
+                      {languages.map((lang: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between text-sm">
+                           <span className="font-medium text-foreground">
+                             {lang.name || lang.language}
+                           </span>
+                           <span className="text-muted-foreground text-xs">
+                             {lang.proficiency || lang.level}
+                           </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Separator />
+                </>
+              )}
+
+              {/* Publications */}
+              {publications.length > 0 && (
+                <>
+                  <div>
+                    <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
+                      Publications
+                    </h2>
+                    <div className="space-y-4">
+                      {publications.map((pub: any, idx: number) => (
+                        <div key={idx}>
+                          <div className="flex items-start justify-between gap-2">
+                             <div>
+                                <h4 className="text-sm font-semibold text-foreground">
+                                  {pub.title || pub.name}
+                                </h4>
+                                <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-1">
+                                  {pub.publisher && <span className="font-medium">{pub.publisher}</span>}
+                                  {pub.publisher && (pub.date || pub.publishedOn) && <span>•</span>}
+                                  {(pub.date || pub.publishedOn) && (
+                                    <span>{formatDate(pub.date || pub.publishedOn)}</span>
+                                  )}
+                                </div>
+                             </div>
+                             {pub.url && (
+                               <a 
+                                 href={pub.url} 
+                                 target="_blank" 
+                                 rel="noopener noreferrer"
+                                 className="text-muted-foreground hover:text-foreground p-1"
+                               >
+                                 <IconExternalLink className="h-4 w-4" />
+                               </a>
+                             )}
+                          </div>
+                          {pub.description && (
+                            <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+                              {pub.description}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Separator />
+                </>
+              )}
+
+              {/* Patents */}
+              {patents.length > 0 && (
+                <>
+                  <div>
+                    <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
+                      Patents
+                    </h2>
+                    <div className="space-y-3">
+                      {patents.map((pat: any, idx: number) => (
+                        <div key={idx}>
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <h4 className="text-sm font-semibold text-foreground">{pat.title}</h4>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {pat.number ? `Patent #${pat.number}` : ""}
+                                {pat.number && pat.date ? " • " : ""}
+                                {pat.date ? formatDate(pat.date) : ""}
+                              </p>
+                            </div>
+                            {pat.url && (
+                              <a href={pat.url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground p-1">
+                                <IconExternalLink className="h-4 w-4" />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Separator />
+                </>
+              )}
+
+              {/* Courses */}
+              {courses.length > 0 && (
+                <>
+                  <div>
+                    <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
+                      Courses
+                    </h2>
+                    <div className="flex flex-wrap gap-2">
+                      {courses.map((course: any, idx: number) => (
+                        <div key={idx} className="text-sm text-foreground bg-muted/30 px-2 py-1 rounded">
+                          <span className="font-medium">{course.name || course.title}</span>
+                          {course.number && <span className="text-muted-foreground ml-1">({course.number})</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Separator />
+                </>
+              )}
+
+              {/* Causes */}
+              {causes.length > 0 && (
+                <>
+                  <div>
+                    <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">
+                      Causes
+                    </h2>
+                    <div className="flex flex-wrap gap-2">
+                      {causes.map((cause: any, idx: number) => (
+                        <Badge key={idx} variant="outline" className="text-xs">
+                          {typeof cause === "string" ? cause : cause.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <Separator />
+                </>
               )}
             </div>
           </div>
@@ -834,3 +1152,4 @@ export function CandidateDetailsSheet({ searchCandidate, onClose, sourcingCriter
     </TooltipProvider>
   );
 }
+

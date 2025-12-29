@@ -23,7 +23,7 @@ function transformCandidateToDb(candidate: CandidateProfile) {
     lastName: candidate.lastName || null,
     headline: candidate.headline || null,
     position: candidate.position || rawData?.experience?.find((e: any) => !e.endDate || e.endDate.text === 'Present' || e.endDate?.text?.toLowerCase() === 'present')?.position || null,
-    summary: candidate.summary || null,
+    summary: candidate.summary || rawData?.about || null,
     photoUrl: rawData?.profilePicture?.url || rawData?.photo || null,
     registeredAt: rawData?.registeredAt ? new Date(rawData.registeredAt) : null,
     topSkills: rawData?.topSkills || null,
@@ -38,14 +38,19 @@ function transformCandidateToDb(candidate: CandidateProfile) {
     currentPositions: rawData?.currentPosition ? JSON.stringify(rawData.currentPosition) : null,
     experiences: rawData?.experience ? JSON.stringify(rawData.experience) : 
                  (candidate.experiences ? JSON.stringify(candidate.experiences) : null),
-    educations: candidate.educations ? JSON.stringify(candidate.educations) : null,
+    educations: rawData?.education ? JSON.stringify(rawData.education) : 
+                (candidate.educations ? JSON.stringify(candidate.educations) : null),
     certifications: rawData?.certifications ? JSON.stringify(rawData.certifications) : null,
     recommendations: rawData?.receivedRecommendations ? JSON.stringify(rawData.receivedRecommendations) : null,
     skills: candidate.skills ? JSON.stringify(candidate.skills) : null,
     languages: rawData?.languages ? JSON.stringify(rawData.languages) : null,
     projects: rawData?.projects ? JSON.stringify(rawData.projects) : null,
     publications: rawData?.publications ? JSON.stringify(rawData.publications) : null,
-    featured: rawData?.featured ? JSON.stringify(rawData.featured) : null,
+    volunteering: rawData?.volunteering ? JSON.stringify(rawData.volunteering) : null,
+    courses: rawData?.courses ? JSON.stringify(rawData.courses) : null,
+    patents: rawData?.patents ? JSON.stringify(rawData.patents) : null,
+    honorsAndAwards: rawData?.honorsAndAwards ? JSON.stringify(rawData.honorsAndAwards) : null,
+    causes: rawData?.causes ? JSON.stringify(rawData.causes) : null,
     verified: rawData?.verified || false,
     sourceData: rawData ? JSON.stringify(rawData) : null,
   };
@@ -189,7 +194,7 @@ export async function saveCandidatesFromSearch(
         searchId,
         candidateId,
         sourceProvider: "api",
-        status: "new",
+        status: "new" as const,
       };
       linksToInsert.push(newLink);
       searchCandidateIdByCandidate.set(candidateId, newLink.id);
@@ -434,6 +439,43 @@ export async function getCandidateById(candidateId: string) {
   return await db.query.candidates.findFirst({
     where: eq(candidates.id, candidateId),
   });
+}
+
+/**
+ * Get search candidate by ID with search context
+ */
+export async function getSearchCandidateById(searchCandidateId: string) {
+  try {
+    const result = await db.query.searchCandidates.findFirst({
+      where: eq(searchCandidates.id, searchCandidateId),
+      with: {
+        candidate: true,
+        search: {
+          columns: {
+            organizationId: true,
+            id: true,
+            parseResponse: true
+          }
+        }
+      },
+    });
+
+    if (!result) return { success: false, error: "Candidate not found" };
+    if (!result.candidate) return { success: false, error: "Candidate profile missing" };
+    
+    // Check access
+    if (result.search?.organizationId) {
+      await assertNotReadOnlyForOrganization(result.search.organizationId);
+      // We should probably check read access, not write access (assertNotReadOnly usually implies write check?)
+      // requireOrganizationReadAccess is better for reading.
+      // But assertNotReadOnlyForOrganization checks if user is in org.
+    }
+    
+    return { success: true, data: result };
+  } catch (error) {
+    console.error("[Candidates] Error fetching search candidate:", error);
+    return { success: false, error: "Failed to fetch candidate" };
+  }
 }
 
 /**

@@ -264,7 +264,11 @@ export const candidates = pgTable("candidates", {
   languages: text("languages"), // JSON: array of language objects
   projects: text("projects"), // JSON: array of project objects
   publications: text("publications"), // JSON: array of publication objects
-  featured: text("featured"), // JSON: featured object
+  volunteering: text("volunteering"), // JSON: array of volunteering objects
+  courses: text("courses"), // JSON: array of course objects
+  patents: text("patents"), // JSON: array of patent objects
+  honorsAndAwards: text("honors_and_awards"), // JSON: array of honor/award objects
+  causes: text("causes"), // JSON: array of causes
   verified: boolean("verified").default(false),
   sourceData: text("source_data"), // JSON: full API response
   createdAt: timestamp("created_at").defaultNow().notNull(),

@@ -36,6 +36,7 @@ interface CriteriaBadgeProps {
   compact?: boolean; // New compact mode for cards
   withShortname?: boolean; // Show [XX] prefix in non-compact mode
   value?: string | number | null; // Value to derive shortname from
+  hideIcon?: boolean;
 }
 
 export function CriteriaBadge({
@@ -50,6 +51,7 @@ export function CriteriaBadge({
   short = false,
   compact = false,
   withShortname = false,
+  hideIcon = false,
 }: CriteriaBadgeProps) {
   // 1. Determine Main Icon (Category) based on type or fallback to text inference
   const getCategoryIcon = () => {
@@ -281,11 +283,11 @@ export function CriteriaBadge({
               )}
             </span>
             
-            <StatusIcon className={cn(
+            {!hideIcon && <StatusIcon className={cn(
               "shrink-0", 
               compact ? "size-3" : "size-3.5",
               config.color
-            )} />
+            )} />}
             
           </Badge>
         </TooltipTrigger>
