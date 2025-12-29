@@ -429,48 +429,42 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
           {isActiveSearch && realtimeProgress > 0 && (
             <span className="text-xs font-mono">{realtimeProgress}%</span>
           )}
-          <div className="flex items-center gap-3 group/counter" id="search-results-counter">
-            <div className="flex items-center gap-1 bg-muted/30 border rounded-lg p-1 pr-1.5 shadow-sm">
-              <TooltipProvider>
-                <Tooltip delayDuration={300}>
-                  <TooltipTrigger asChild>
-                    <div className="flex flex-col gap-1 px-2.5 py-0.5 cursor-help hover:bg-muted/50 rounded-md transition-colors">
-                      <div className="flex items-center justify-between gap-3 text-xs">
-                        <span className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wide">Candidates</span>
-                        <span className="font-medium text-foreground tabular-nums">{totalCount} <span className="text-muted-foreground">/ 1,000</span></span>
-                      </div>
-                      <Progress value={Math.min((totalCount / 1000) * 100, 100)} className="h-1.5 w-32" />
+          <div className="h-4 w-px bg-border" />
+          <div className="flex items-center gap-3" id="search-results-counter">
+            <TooltipProvider>
+              <Tooltip delayDuration={300}>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-3 cursor-help group/progress select-none">
+                    <div className="flex items-baseline gap-1 text-sm font-medium text-muted-foreground transition-colors group-hover/progress:text-foreground">
+                      <span className="text-foreground tabular-nums">{totalCount}</span>
+                      <span className="text-xs text-muted-foreground/50">/</span>
+                      <span className="text-xs">1,000</span>
                     </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="text-xs max-w-[200px]">
-                    <p>You have collected {totalCount} candidates.</p>
-                    <p className="text-muted-foreground mt-1">Maximum limit for this search is 1,000 candidates.</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+                    <Progress value={Math.min((totalCount / 1000) * 100, 100)} className="h-2 w-20" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  <p>You have collected {totalCount} candidates.</p>
+                  <p className="text-muted-foreground">Maximum limit for this search is 1,000 candidates.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
 
-              <div className="h-7 w-px bg-border/60 mx-1" />
+            
 
-              <Button
-                variant={totalCount >= 1000 ? "ghost" : "default"}
-                size="sm"
-                className={cn(
-                  "h-7 text-xs font-medium px-3 rounded-md transition-all",
-                  totalCount >= 1000 
-                    ? "text-muted-foreground bg-transparent hover:bg-transparent cursor-not-allowed" 
-                    : "shadow-sm hover:shadow-md"
-                )}
-                onClick={handleContinueSearch}
-                disabled={totalCount >= 1000}
-              >
-                {totalCount >= 1000 ? "Limit Reached" : (
-                  <>
-                    <span>Get +100</span>
-                    <IconPlus className="ml-1.5 h-3.5 w-3.5" stroke={2.5} />
-                  </>
-                )}
-              </Button>
-            </div>
+            <Button
+              variant={totalCount >= 1000 ? "secondary" : "default"}
+              size="xs"
+              onClick={handleContinueSearch}
+              disabled={totalCount >= 1000}
+            >
+              {totalCount >= 1000 ? "Limit Reached" : (
+                <>
+                  <span>Get +100</span>
+                  {/* <IconPlus className="" stroke={2.5} /> */}
+                </>
+              )}
+            </Button>
           </div>
         </div>
         
