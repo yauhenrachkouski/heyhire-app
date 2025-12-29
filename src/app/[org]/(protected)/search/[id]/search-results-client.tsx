@@ -8,7 +8,6 @@ import { AppliedFilters } from "@/components/search/applied-filters";
 import { InlineFilters } from "@/components/search/inline-filters";
 import { CriteriaDisplay } from "@/components/search/criteria-display";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger, PopoverHeader, PopoverTitle, PopoverDescription } from "@/components/ui/popover";
 import { IconPencil, IconCalendar, IconUser, IconInfoCircle, IconCopy, IconPlayerPlay } from "@tabler/icons-react";
 import { formatDate } from "@/lib/format";
@@ -424,23 +423,22 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
               </PopoverContent>
             </Popover>
           )}
-          <Badge variant={realtimeStatus === 'completed' ? 'secondary' : realtimeStatus === 'error' || realtimeStatus === 'failed' ? 'destructive' : 'outline'}>
-            {realtimeStatus}
-          </Badge>
           {isActiveSearch && realtimeProgress > 0 && (
             <span className="text-xs font-mono">{realtimeProgress}%</span>
           )}
-          <div className="flex items-center gap-2">
-            <span className="text-sm">
-              {totalCount} / 1000
-            </span>
+          <div className="flex items-center gap-3 group/counter" id="search-results-counter">
+            <div className="flex items-baseline gap-1 text-xs">
+              <span className="font-bold text-foreground text-sm">{totalCount}</span>
+              <span className="text-muted-foreground text-xs  uppercase">/ 1000</span>
+            </div>
             <Button
-              variant="outline"
-              size="icon"
-              className="h-6 w-6"
+              variant="default"
+              size="sm"
+              className="h-7 rounded-full px-3 bg-foreground text-background hover:bg-foreground/90 transition-all shadow-sm"
               onClick={handleContinueSearch}
             >
-              <IconPlayerPlay className="h-3.5 w-3.5" />
+              <span className="text-xs font-medium">Get 100 more</span>
+              <IconPlayerPlay className="h-3 w-3 fill-current" />
             </Button>
           </div>
         </div>
