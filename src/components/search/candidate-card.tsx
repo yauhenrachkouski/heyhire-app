@@ -457,7 +457,7 @@ export function CandidateCard({
                       r="33"
                       fill="none"
                       stroke="#e5e7eb"
-                      strokeWidth="3"
+                      strokeWidth="4"
                     />
                     <circle
                       cx="36"
@@ -465,12 +465,11 @@ export function CandidateCard({
                       r="33"
                       fill="none"
                       stroke={
-                        matchScore >= 80 ? "#16a34a" :
-                        matchScore >= 60 ? "#2563eb" :
-                        matchScore >= 40 ? "#ca8a04" :
-                        "#ea580c"
+                        matchScore >= 71 ? "#10b981" :
+                        matchScore >= 41 ? "#f59e0b" :
+                        "#ef4444"
                       }
-                      strokeWidth="3"
+                      strokeWidth="4"
                       strokeLinecap="round"
                       strokeDasharray={`${2 * Math.PI * 33}`}
                       strokeDashoffset={`${2 * Math.PI * 33 * (1 - matchScore / 100)}`}
@@ -487,10 +486,9 @@ export function CandidateCard({
                   <div className="absolute bottom-0 right-0 z-20 bg-white rounded-full ring-2 ring-white shadow-sm">
                     <span className={cn(
                       "text-xs font-bold px-1.5 py-0.5 block",
-                      matchScore >= 80 ? "text-green-600" :
-                      matchScore >= 60 ? "text-blue-600" :
-                      matchScore >= 40 ? "text-yellow-600" :
-                      "text-orange-600"
+                      matchScore >= 71 ? "text-green-600" :
+                      matchScore >= 41 ? "text-amber-600" :
+                      "text-red-600"
                     )}>
                       {matchScore}
                     </span>
