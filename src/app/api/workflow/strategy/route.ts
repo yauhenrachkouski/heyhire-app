@@ -10,6 +10,7 @@ import {
 } from "@/types/search";
 
 const API_BASE_URL = "http://57.131.25.45";
+const STRATEGY_MAX_ITEMS = 25;
 
 interface StrategyWorkflowPayload {
   strategyId: string;
@@ -24,7 +25,22 @@ interface StrategyWorkflowPayload {
  */
 export const { POST } = serve<StrategyWorkflowPayload>(
   async (context: WorkflowContext<StrategyWorkflowPayload>) => {
-    const { strategyId, searchId, strategy, rawText } = context.requestPayload;
+    // IMPORTANT: Don't destructure directly; Upstash can call the endpoint in ways
+    // where requestPayload is temporarily missing. Avoid throwing before first step.
+    const payload = context.requestPayload as StrategyWorkflowPayload | undefined;
+    if (!payload?.strategyId || !payload.searchId || !payload.strategy || !payload.rawText) {
+      console.error("[Strategy Workflow] Missing/invalid request payload");
+      return { error: "Invalid request payload", aborted: true };
+    }
+
+    const { strategyId, searchId, rawText } = payload;
+    const strategyToExecute: SourcingStrategyItem = {
+      ...payload.strategy,
+      apify_payload: {
+        ...payload.strategy.apify_payload,
+        maxItems: STRATEGY_MAX_ITEMS,
+      },
+    };
 
     console.log("[Strategy Workflow] Starting for strategy:", strategyId);
 
@@ -47,7 +63,7 @@ export const { POST } = serve<StrategyWorkflowPayload>(
       headers: { "Content-Type": "application/json" },
       body: {
         project_id: searchId,
-        strategies: [strategy], // Single strategy
+        strategies: [strategyToExecute], // Single strategy
       },
       retries: 2,
     });

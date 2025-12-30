@@ -625,7 +625,7 @@ export function CandidateDetails({ searchCandidate, onClose, sourcingCriteria }:
                 )}
               </div>
 
-              <Separator />
+              {/* <Separator /> */}
 
               {/* AI Summary */}
               <CandidateSummary matchScore={matchScore} scoringData={scoringData} />

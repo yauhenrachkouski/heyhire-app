@@ -4,7 +4,6 @@ import { Client } from "@upstash/qstash";
 import { db } from "@/db/drizzle";
 import { search, sourcingStrategies } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
-import { generateId } from "@/lib/id";
 import { realtime } from "@/lib/realtime";
 import {
   strategyGenerationResponseSchema,
@@ -15,6 +14,7 @@ import {
 } from "@/types/search";
 
 const API_BASE_URL = "http://57.131.25.45";
+const STRATEGY_MAX_ITEMS = 25;
 
 // QStash client for triggering scoring workflow
 const qstashClient = new Client({
@@ -143,9 +143,16 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       return { success: false, error: "Strategy generation response invalid" };
     }
 
-    let strategies = generateData.strategies;
+    // Always clamp the amount we request/save per strategy.
+    const allGeneratedStrategies = generateData.strategies.map((s) => ({
+      ...s,
+      apify_payload: {
+        ...s.apify_payload,
+        maxItems: STRATEGY_MAX_ITEMS,
+      },
+    }));
 
-    if (strategies.length === 0) {
+    if (allGeneratedStrategies.length === 0) {
       await context.run("handle-no-strategies", async () => {
         await db
           .update(search)
@@ -159,23 +166,25 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       throw new Error("No strategies were generated");
     }
 
-    // Debug mode: limit to 1 strategy
-    if (process.env.DEBUG_SOURCING) {
-      strategies = strategies.slice(0, 1);
-    }
+    // In debug mode we still SAVE all strategies, but only AUTO-EXECUTE the first.
+    // This lets us manually run other strategies from the UI for testing.
+    const strategiesToExecute = process.env.DEBUG_SOURCING
+      ? allGeneratedStrategies.slice(0, 1)
+      : allGeneratedStrategies;
 
-    console.log("[Workflow] Generated", strategies.length, "strategies");
+    const strategyIds = allGeneratedStrategies.map((s) => s.id);
+    const executedStrategyIds = strategiesToExecute.map((s) => s.id);
+
+    console.log("[Workflow] Generated", allGeneratedStrategies.length, "strategies");
+    console.log("[Workflow] Will auto-execute", strategiesToExecute.length, "strategies");
 
     // Step 3: Save strategies to database
-    const strategyIds = await context.run("save-strategies", async () => {
-      const ids: string[] = [];
-      
-      for (const strategy of strategies) {
-        const strategyId = generateId();
-        ids.push(strategyId);
-        
+    await context.run("save-strategies", async () => {
+      for (const strategy of allGeneratedStrategies) {
+        // IMPORTANT: persist the strategy with the SAME id we send to the sourcing API,
+        // so candidates can return `source_strategy_ids` that match DB ids.
         await db.insert(sourcingStrategies).values({
-          id: strategyId,
+          id: strategy.id,
           searchId: searchId,
           name: strategy.name,
           description: strategy.description,
@@ -186,12 +195,11 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       
       await realtime.channel(channel).emit( "status.updated", {
         status: "generating",
-        message: `Generated ${ids.length} sourcing strategies`,
+        message: `Generated ${strategyIds.length} sourcing strategies`,
         progress: 20
       });
 
-      console.log("[Workflow] Saved", ids.length, "strategies to database");
-      return ids;
+      console.log("[Workflow] Saved", strategyIds.length, "strategies to database");
     });
 
     // Step 4: Update progress
@@ -202,7 +210,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
         .where(eq(search.id, searchId));
     });
 
-    // Step 5: Execute all strategies via external API
+    // Step 5: Execute selected strategies via external API
     const executeResponse = await context.call<{
       task_id: string;
       status: string;
@@ -213,7 +221,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       headers: { "Content-Type": "application/json" },
       body: {
         project_id: searchId,
-        strategies: strategies,
+        strategies: strategiesToExecute,
       },
       retries: 3,
     });
@@ -227,7 +235,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
         await db
           .update(sourcingStrategies)
           .set({ status: "error", error: "Execution failed" })
-          .where(inArray(sourcingStrategies.id, strategyIds));
+          .where(inArray(sourcingStrategies.id, executedStrategyIds));
         
         await realtime.channel(channel).emit( "search.failed", {
           error: `Strategy execution failed: ${executeResponse.status}`
@@ -259,7 +267,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
         await db
           .update(sourcingStrategies)
           .set({ status: "error", error: "Execution response invalid" })
-          .where(inArray(sourcingStrategies.id, strategyIds));
+          .where(inArray(sourcingStrategies.id, executedStrategyIds));
           
         await realtime.channel(channel).emit( "search.failed", {
           error: "Strategy execution response invalid"
@@ -279,7 +287,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       await db
         .update(sourcingStrategies)
         .set({ taskId: taskId, status: "executing" })
-        .where(inArray(sourcingStrategies.id, strategyIds));
+        .where(inArray(sourcingStrategies.id, executedStrategyIds));
       
       await db
         .update(search)
@@ -360,7 +368,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
           await db
             .update(sourcingStrategies)
             .set({ status: "polling" })
-            .where(inArray(sourcingStrategies.id, strategyIds));
+            .where(inArray(sourcingStrategies.id, executedStrategyIds));
 
           await realtime.channel(channel).emit( "progress.updated", {
             progress,
@@ -384,7 +392,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
           await db
             .update(sourcingStrategies)
             .set({ status: "error", error: pollData.error || "Search failed" })
-            .where(inArray(sourcingStrategies.id, strategyIds));
+            .where(inArray(sourcingStrategies.id, executedStrategyIds));
           
           await realtime.channel(channel).emit( "search.failed", {
             error: pollData.error || "Search execution failed"
@@ -403,7 +411,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
         await db
           .update(sourcingStrategies)
           .set({ status: "error", error: "Polling timeout" })
-          .where(inArray(sourcingStrategies.id, strategyIds));
+          .where(inArray(sourcingStrategies.id, executedStrategyIds));
         
         await realtime.channel(channel).emit( "search.failed", {
           error: "Search timed out after 5 minutes"
@@ -481,7 +489,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
             status: "completed", 
             candidatesFound: candidatesData.length 
           })
-          .where(inArray(sourcingStrategies.id, strategyIds));
+          .where(inArray(sourcingStrategies.id, executedStrategyIds));
         console.log("[Workflow] Updated strategies status to completed");
       } catch (error) {
         console.error("[Workflow] Error updating strategies status:", error);
@@ -555,7 +563,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
     return {
       success: true,
       searchId,
-      strategiesCount: strategies.length,
+      strategiesCount: strategyIds.length,
       candidatesCount: candidatesData.length,
     };
   },

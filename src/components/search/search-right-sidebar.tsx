@@ -61,7 +61,7 @@ function CandidateDetailsSkeleton() {
               <Skeleton className="h-9 w-full rounded-md" />
             </div>
 
-            <Separator />
+            {/* <Separator /> */}
 
             {/* Summary skeleton */}
             <div className="space-y-2">
@@ -70,7 +70,7 @@ function CandidateDetailsSkeleton() {
               <Skeleton className="h-4 w-5/6" />
             </div>
 
-            <Separator />
+            {/* <Separator /> */}
 
             {/* About section skeleton */}
             <div>

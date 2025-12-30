@@ -471,17 +471,10 @@ export async function getSearchCandidateById(searchCandidateId: string) {
       // But assertNotReadOnlyForOrganization checks if user is in org.
     }
     
-    // Transform JSON strings to objects
+    // Don't parse JSON - the component will handle it with safeJsonParse
     const candidate = result.candidate;
     const transformedCandidate = {
       ...candidate,
-      // Parse JSON fields safely
-      location: candidate.location ? JSON.parse(candidate.location) : null,
-      currentPositions: candidate.currentPositions ? JSON.parse(candidate.currentPositions) : [],
-      experiences: candidate.experiences ? JSON.parse(candidate.experiences) : [],
-      educations: candidate.educations ? JSON.parse(candidate.educations) : [],
-      certifications: candidate.certifications ? JSON.parse(candidate.certifications) : [],
-      skills: candidate.skills ? JSON.parse(candidate.skills) : [],
       sourceData: null, // Don't send huge source data to client
     };
 
