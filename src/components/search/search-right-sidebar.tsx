@@ -179,9 +179,9 @@ export function SearchRightSidebar() {
             sourcingCriteria={sourcingCriteria}
           />
         ) : (
-          <div className="flex flex-col items-center justify-center h-full gap-4">
+          <div className="flex flex-col items-center justify-center h-full gap-4 p-4">
             <p className="text-muted-foreground">Candidate not found</p>
-            <Button variant="outline" onClick={handleClose}>
+            <Button variant="outline" size="sm" onClick={handleClose}>
               Close
             </Button>
           </div>

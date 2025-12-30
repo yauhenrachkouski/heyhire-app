@@ -449,13 +449,13 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
             </TooltipProvider>
 
             <Button
-              variant={totalCount >= 1000 ? "secondary" : "default"}
+              variant={totalCount >= 1000 || isActiveSearch ? "secondary" : "default"}
               size="sm"
               className="h-7 text-xs"
               onClick={handleContinueSearch}
-              disabled={totalCount >= 1000}
+              disabled={totalCount >= 1000 || isActiveSearch}
             >
-              {totalCount >= 1000 ? "Limit Reached" : "Get +100"}
+              {totalCount >= 1000 ? "Limit Reached" : isActiveSearch ? "Searching..." : "Get +100"}
             </Button>
           </div>
         </div>

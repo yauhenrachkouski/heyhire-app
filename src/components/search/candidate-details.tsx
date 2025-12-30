@@ -346,20 +346,6 @@ function CandidateAIScoring(props: {
   return (
     <div className="pt-3">
       <div className="flex flex-col gap-2 text-xs">
-        {/* Show strengths for high scoring candidates */}
-        {!high_importance_missing?.length &&
-          passedHighCriteria.length > 0 &&
-          matchScore >= 75 && (
-           <div className="flex gap-2 items-start">
-             <IconCheck className="w-4 h-4 shrink-0 mt-0.5" />
-             <div className="leading-relaxed">
-                <span className="font-semibold text-gray-900">Key Strengths: </span>
-                <span className="text-gray-600">
-                   {passedHighCriteria.slice(0, 5).join(", ")}
-                </span>
-             </div>
-           </div>
-        )}
       </div>
     </div>
   );
@@ -488,26 +474,13 @@ export function CandidateDetails({ searchCandidate, onClose, sourcingCriteria }:
   return (
     <TooltipProvider>
       <div className="relative flex flex-col h-full bg-white">
-        {/* Floating close button (no header row) */}
-        <div className="sticky top-2 z-20 flex justify-end px-2 pt-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            className="h-8 w-8 bg-white/80 backdrop-blur supports-backdrop-filter:bg-white/60"
-          >
-            <IconX className="h-4 w-4" />
-            <span className="sr-only">Close</span>
-          </Button>
-        </div>
-
         {/* Scrollable content */}
         <ScrollArea className="flex-1 overflow-hidden">
-          <div className="p-4 pt-2">
+          <div className="p-4">
             <div className="space-y-6">
               {/* Profile Header */}
               <div>
-                <div className="flex gap-4 mb-4">
+                <div className="flex gap-4 mb-4 items-start">
                   <div className="shrink-0 flex flex-col items-center gap-2">
                     <div className="relative w-[72px] h-[72px] flex items-center justify-center">
                       {matchScore !== null && (
@@ -561,7 +534,18 @@ export function CandidateDetails({ searchCandidate, onClose, sourcingCriteria }:
                   </div>
 
                   <div className="flex-1 min-w-0 space-y-1.5">
-                    <h3 className="text-base font-semibold leading-tight text-gray-900">{fullName}</h3>
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="text-base font-semibold leading-tight text-gray-900">{fullName}</h3>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={onClose}
+                        className="h-6 w-6 shrink-0"
+                      >
+                        <IconX className="h-4 w-4" />
+                        <span className="sr-only">Close</span>
+                      </Button>
+                    </div>
                     
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-medium leading-snug text-gray-700">
