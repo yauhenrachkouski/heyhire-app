@@ -95,6 +95,9 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
     }
   }, [isEditingName]);
 
+  // Track active search status for polling
+  const activeSearchStatusRef = useRef<string>(search.status);
+  
   // Poll for candidates with server-side filtering
   const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: searchCandidatesKeys.list(search.id, {
@@ -122,8 +125,11 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
       }
       return await response.json();
     },
-    // Disable polling, rely on realtime or manual refetch
-    refetchInterval: false,
+    // Poll every 2 seconds during active search to get updated candidate counts
+    refetchInterval: (query) => {
+      const isActive = ['created', 'processing', 'pending', 'generating', 'generated', 'executing', 'polling'].includes(activeSearchStatusRef.current);
+      return isActive ? 2000 : false;
+    },
     enabled: !!search.id,
     // Keep previous data during refetch to prevent blank screen
     placeholderData: (previousData) => previousData,
@@ -210,6 +216,22 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
     onScoringCompleted: handleScoringCompleted,
   });
 
+  // Update ref when status changes to enable/disable polling
+  useEffect(() => {
+    activeSearchStatusRef.current = realtimeStatus;
+  }, [realtimeStatus]);
+
+  // Calculate if search is in an active/running state
+  const isActiveSearch = ['created', 'processing', 'pending', 'generating', 'generated', 'executing', 'polling'].includes(realtimeStatus);
+
+  // Refetch candidates when search status changes to ensure we have latest count
+  useEffect(() => {
+    if (isActiveSearch) {
+      console.log("[SearchResultsClient] Search is active, refetching candidates");
+      refetch();
+    }
+  }, [realtimeStatus, isActiveSearch, refetch]);
+
   const candidates = data?.candidates || [];
   const pagination = data?.pagination;
   const progress = data?.progress;
@@ -220,9 +242,6 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
   const isScoringComplete = progress?.isScoringComplete ?? (totalCandidates > 0 && scoredCount === totalCandidates);
   const isScoring = scoringState.isScoring;
   
-  // Calculate if search is in an active/running state
-  const isActiveSearch = ['created', 'processing', 'pending', 'generating', 'generated', 'executing', 'polling'].includes(realtimeStatus);
-  
   // Show progress bar logic
   const isInitialLoading = isLoading && !data;
   const shouldShowProgressBar = (isActiveSearch && candidates.length === 0) || (isInitialLoading && isActiveSearch);
@@ -230,7 +249,9 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
   // Only show skeletons if we are actively loading data AND not showing the progress bar
   const effectiveSkeletonCount = (shouldShowProgressBar || (isLoading && !data)) ? limit : 0;
 
-  const totalCount = progress?.total || pagination?.total || 0;
+  // Use progress.total (from DB count) as the source of truth for candidate count
+  // This shows the exact number of candidates parsed to DB
+  const totalCount = progress?.total ?? 0;
 
   const handleRemoveFilter = (category: keyof ParsedQuery) => {
     setCurrentParsedQuery(prevParams => ({
@@ -384,9 +405,6 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
               </PopoverContent>
             </Popover>
           )}
-          {isActiveSearch && realtimeProgress > 0 && (
-            <span className="text-xs font-mono">{realtimeProgress}%</span>
-          )}
           <div className="h-4 w-px bg-border" />
           <div className="flex items-center gap-3" id="search-results-counter">
             <TooltipProvider>
@@ -394,16 +412,33 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
                 <TooltipTrigger asChild>
                   <div className="flex items-center gap-3 cursor-help group/progress select-none">
                     <div className="flex items-baseline gap-1 text-sm font-medium text-muted-foreground transition-colors group-hover/progress:text-foreground">
-                      <span className="text-foreground tabular-nums">{totalCount}</span>
+                      <span className="text-foreground tabular-nums">{totalCount.toLocaleString()}</span>
                       <span className="text-xs text-muted-foreground/50">/</span>
                       <span className="text-xs">1,000</span>
                     </div>
-                    <Progress value={Math.min((totalCount / 1000) * 100, 100)} className="h-2 w-20" />
+                    {isActiveSearch ? (
+                      <div className="h-2 w-20 bg-muted rounded-full overflow-hidden relative">
+                        <div 
+                          className="h-full w-1/3 bg-primary rounded-full absolute"
+                          style={{
+                            animation: 'shimmer 1.5s ease-in-out infinite',
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <Progress 
+                        value={Math.min((totalCount / 1000) * 100, 100)} 
+                        className="h-2 w-20 transition-all duration-500 ease-out" 
+                      />
+                    )}
                   </div>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="text-xs">
-                  <p>You have collected {totalCount} candidates.</p>
+                  <p>You have collected {totalCount.toLocaleString()} candidates.</p>
                   <p className="text-muted-foreground">Maximum limit for this search is 1,000 candidates.</p>
+                  {isActiveSearch && (
+                    <p className="text-muted-foreground mt-1">Status: {realtimeStatus}</p>
+                  )}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -451,11 +486,6 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
                 {realtimeMessage || "Searching for candidates..."}
               </h3>
               <p className="text-sm text-muted-foreground max-w-sm">This process runs in the background. You can leave and come back later.</p>
-              {realtimeProgress > 0 && (
-                <p className="text-xs text-muted-foreground/70 font-mono">
-                  {realtimeProgress}%
-                </p>
-              )}
             </div>
           </div>
         )}
