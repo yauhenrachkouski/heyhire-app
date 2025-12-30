@@ -82,7 +82,7 @@ export function CriteriaBadge({
         case "mandatory":
           return {
             icon: IconAlertTriangle,
-            color: "text-red-600 dark:text-red-400",
+            color: "text-black dark:text-white",
             label: "Mandatory",
           };
         case "high":
@@ -257,7 +257,7 @@ export function CriteriaBadge({
               !compact && "px-2.5 py-1 text-sm h-7 gap-1.5",
               config.bg,
               status === 'missing' && !compact && "opacity-70 saturate-50 hover:opacity-100 hover:saturate-100",
-              priority?.toLowerCase() === "mandatory" && "border-destructive/50 border-2 font-semibold",
+              priority?.toLowerCase() === "mandatory" && "border-black dark:border-white border-2 font-semibold",
               className
             )}
           >
@@ -283,7 +283,7 @@ export function CriteriaBadge({
               )}
             </span>
             
-            {!hideIcon && <StatusIcon className={cn(
+            {!hideIcon && priority?.toLowerCase() !== "mandatory" && <StatusIcon className={cn(
               "shrink-0", 
               compact ? "size-3" : "size-3.5",
               config.color

@@ -291,9 +291,9 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
   };
 
   return (
-    <div className="space-y-4">
+    <div>
       {/* Debug panel */}
-      {process.env.NODE_ENV !== 'production' && (
+      {/* {process.env.NODE_ENV !== 'production' && (
         <div className="fixed bottom-4 right-4 z-50 p-3 bg-black/80 text-white text-xs rounded-lg max-w-xs font-mono space-y-0.5">
           <div className="font-bold mb-1">🔍 Debug Panel</div>
           <div>Status: <span className={realtimeStatus === 'completed' ? 'text-green-400' : realtimeStatus === 'error' ? 'text-red-400' : 'text-yellow-400'}>{realtimeStatus}</span></div>
@@ -304,7 +304,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
           <div>Is Scoring: {isScoring ? '✓' : '✗'}</div>
           <div>Scored: {scoredCount}/{totalCandidates}</div>
         </div>
-      )}
+      )} */}
       
       {/* Shared Header */}
       <div>
@@ -460,7 +460,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
           </div>
         )}
 
-        <div className={shouldShowProgressBar ? "opacity-20 pointer-events-none transition-opacity" : "transition-opacity"}>
+        <div className={shouldShowProgressBar ? "opacity-20 pointer-events-none transition-opacity" : "transition-opacity mt-4"}>
           <div className="space-y-4">
             <div className="space-y-3">
               {/* Inline Filters */}

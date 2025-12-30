@@ -126,7 +126,7 @@ export function CriteriaDisplay({ data }: CriteriaDisplayProps) {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3 py-3 w-full">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-4 py-4 w-full">
         {groupItems.flatMap((group, index) => [
           <div key={group.key} className="flex items-center">
             {renderGroup(group.title, group.items, group.icon)}

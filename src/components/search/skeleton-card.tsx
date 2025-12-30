@@ -1,138 +1,61 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { IconMail, IconPhone, IconPlus, IconEye } from "@tabler/icons-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface SkeletonCardProps {
   index?: number;
 }
 
-// Fake candidate data for preview
-const fakeNames = [
-  "Alex Johnson",
-  "Sarah Chen",
-  "Michael Rodriguez",
-  "Emma Williams",
-  "James Smith",
-  "Lisa Anderson",
-  "David Brown",
-  "Jessica Lee",
-  "Robert Miller",
-  "Nicole Davis",
-];
-
-const fakeHeadlines = [
-  "Senior Software Engineer at Tech Corp",
-  "Full Stack Developer at Startup Inc",
-  "Product Engineer at Innovation Labs",
-  "Frontend Developer at Design Studio",
-  "Backend Developer at Cloud Services",
-];
-
-const fakeRoles = [
-  "Senior Engineer",
-  "Staff Engineer",
-  "Engineering Manager",
-  "Tech Lead",
-  "Architect",
-  "Principal Engineer",
-];
-
-const fakeSkills = [
-  ["React", "TypeScript", "Node.js"],
-  ["Python", "Django", "PostgreSQL"],
-  ["Vue", "JavaScript", "AWS"],
-  ["Java", "Spring Boot", "Microservices"],
-  ["Go", "Kubernetes", "Docker"],
-];
-
 export function SkeletonCard({ index = 0 }: SkeletonCardProps) {
-  const name = fakeNames[index % fakeNames.length];
-  const headline = fakeHeadlines[index % fakeHeadlines.length];
-  const role = fakeRoles[index % fakeRoles.length];
-  const skills = fakeSkills[index % fakeSkills.length];
-  const initials = name
-    .split(" ")
-    .map((n) => n.charAt(0))
-    .join("")
-    .toUpperCase();
-
   return (
-    <div className="flex items-start justify-between gap-4 rounded-lg border bg-card p-4 animate-pulse opacity-40 blur-xs">
-      {/* Avatar */}
-      <div className="flex-shrink-0">
-        <Avatar className="h-12 w-12">
-          <AvatarFallback className="font-semibold text-sm">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
-      </div>
-
-      {/* Left section: Candidate info */}
-      <div className="flex-1 min-w-0">
-        {/* Name */}
-        <div className="flex items-center gap-2 mb-2">
-          <span className="font-semibold text-primary truncate">{name.split(" ")[0]}</span>
-          <span className="font-semibold text-foreground truncate">{name.split(" ")[1]}</span>
+    <div className="group relative rounded-lg bg-white p-4 border border-gray-200">
+      <div className="flex gap-4">
+        {/* Left column: Checkbox */}
+        <div className="flex items-start pt-1 shrink-0">
+          <Skeleton className="h-4 w-4 rounded" />
         </div>
 
-        {/* Current role instead of headline */}
-        <div className="mb-3">
-          <p className="text-sm text-foreground">{role}</p>
+        {/* Middle column: Profile content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex gap-4 mb-4">
+            {/* Avatar skeleton */}
+            <div className="shrink-0 flex flex-col items-center gap-2">
+              <div className="relative w-[72px] h-[72px] flex items-center justify-center">
+                <Skeleton className="h-16 w-16 rounded-full" />
+              </div>
+            </div>
+
+            {/* Name and role skeleton */}
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-4 w-56" />
+              <Skeleton className="h-3 w-32" />
+            </div>
+          </div>
+
+          {/* Criteria badges skeleton */}
+          <div className="flex flex-wrap gap-1 items-center mb-3">
+            <Skeleton className="h-6 w-20 rounded-full" />
+            <Skeleton className="h-6 w-24 rounded-full" />
+            <Skeleton className="h-6 w-16 rounded-full" />
+            <Skeleton className="h-6 w-28 rounded-full" />
+          </div>
+
+          {/* Summary skeleton */}
+          <div className="pt-3 border-t border-gray-200 space-y-2">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-5/6" />
+          </div>
         </div>
 
-        {/* Skills */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <p className="text-xs font-medium text-muted-foreground">Skills:</p>
-          {skills.slice(0, 5).map((skill, idx) => (
-            <Badge key={idx} variant="secondary" className="text-xs">
-              {skill}
-            </Badge>
-          ))}
-          {skills.length > 5 && (
-            <Badge variant="outline" className="text-xs">
-              +{skills.length - 5}
-            </Badge>
-          )}
+        {/* Right column: Action buttons */}
+        <div className="flex items-start shrink-0">
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-9 w-32 rounded-md" />
+            <Skeleton className="h-9 w-32 rounded-md" />
+          </div>
         </div>
-      </div>
-
-      {/* Right section: Action buttons */}
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="h-8 w-8"
-          disabled
-        >
-          <IconPlus className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="h-8 w-8"
-          disabled
-        >
-          <IconEye className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="h-8 w-8"
-          disabled
-        >
-          <IconMail className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="h-8 w-8"
-          disabled
-        >
-          <IconPhone className="h-4 w-4" />
-        </Button>
       </div>
     </div>
   );
