@@ -4,7 +4,6 @@ import {
   IconLoader2,
   IconMapPin,
   IconAlertTriangle,
-  IconCheck,
   IconBrain,
   IconCoin,
   IconChevronRight,
@@ -13,7 +12,7 @@ import {
   IconTools,
   IconList
 } from "@tabler/icons-react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProfileAvatar } from "@/components/custom/profile-avatar";
@@ -221,7 +220,7 @@ function CandidateScoreDisplay(props: {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 mb-4">
         {groupConfig.flatMap((group, index) => [
           <div key={group.key} className="flex items-center">
             {renderGroup(group.title, groups[group.key], group.icon)}
@@ -270,72 +269,7 @@ function CandidateAIScoring(props: {
   scoringData: ScoringData;
   sourcingCriteria?: SourcingCriteria;
 }) {
-  const { matchScore, scoringData, sourcingCriteria } = props;
-  const [showAllMissing, setShowAllMissing] = useState(false);
-
-  if (matchScore === null) {
-    return null;
-  }
-
-  const {
-    verdict,
-    primary_issue,
-    high_importance_missing,
-    concept_scores
-  } = scoringData || {};
-
-  const conceptScoresById = useMemo(() => {
-    const entries = (concept_scores ?? []).map((cs) => [cs.concept_id, cs] as const);
-    return new Map(entries);
-  }, [concept_scores]);
-
-  const passedHighCriteria = useMemo(() => {
-    const criteria = sourcingCriteria?.criteria ?? [];
-    if (!criteria.length || !concept_scores?.length) return [];
-
-    const toDisplay = (criterion: any) => {
-      if (Array.isArray(criterion?.value)) return criterion.value.join(", ");
-      if (criterion?.value === null || criterion?.value === undefined) return "";
-
-      const type = String(criterion?.type ?? "");
-      if (type.includes("minimum_years_of_experience") || type.includes("minimum_relevant_years_of_experience")) {
-        const n = Number(criterion?.value);
-        if (Number.isFinite(n)) return `${n}y+`;
-      }
-      return String(criterion.value);
-    };
-
-    return criteria
-      .filter((c: any) => String(c?.priority_level ?? "").toLowerCase() === "high")
-      .filter((c: any) => {
-        const key = (c?.concept_id as string | undefined) ?? (c?.id as string | undefined);
-        if (!key) return false;
-        return conceptScoresById.get(key)?.status === "pass";
-      })
-      .map((c: any) => toDisplay(c))
-      .filter(Boolean);
-  }, [conceptScoresById, concept_scores?.length, sourcingCriteria?.criteria]);
-
-  return (
-    <div className="pt-3">
-      <div className="flex flex-col gap-2 text-xs">
-        {/* Show strengths for high scoring candidates */}
-        {!high_importance_missing?.length &&
-          passedHighCriteria.length > 0 &&
-          matchScore >= 75 && (
-           <div className="flex gap-2 items-start">
-             <IconCheck className="w-4 h-4 shrink-0 mt-0.5" />
-             <div className="leading-relaxed">
-                <span className="font-semibold text-gray-900">Key Strengths: </span>
-                <span className="text-gray-600">
-                   {passedHighCriteria.slice(0, 5).join(", ")}
-                </span>
-             </div>
-           </div>
-        )}
-      </div>
-    </div>
-  );
+  return null;
 }
 
 
