@@ -459,10 +459,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
               disabled={totalCount >= 1000}
             >
               {totalCount >= 1000 ? "Limit Reached" : (
-                <>
-                  <span>Get +100</span>
-                  {/* <IconPlus className="" stroke={2.5} /> */}
-                </>
+                  "Get +100"
               )}
             </Button>
           </div>
