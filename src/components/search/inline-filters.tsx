@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Slider } from "@/components/ui/slider";
 import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
 import {
@@ -15,14 +15,31 @@ import { IconSparkles, IconSortAscending, IconSortDescending } from "@tabler/ico
 import { cn } from "@/lib/utils";
 
 interface InlineFiltersProps {
+  scoreRange?: [number, number];
+  sortBy?: string;
   onScoreRangeChange?: (min: number, max: number) => void;
   onSortChange?: (sort: string) => void;
 }
 
-export function InlineFilters({ onScoreRangeChange, onSortChange }: InlineFiltersProps) {
-  const [minScore, setMinScore] = useState<number>(0); // Start with "All" candidates by default
-  const [isCustom, setIsCustom] = useState<boolean>(false);
-  const [sortBy, setSortBy] = useState<string>("date-desc"); // Default: newest first
+export function InlineFilters({ 
+  scoreRange = [0, 100], 
+  sortBy = "date-desc", 
+  onScoreRangeChange, 
+  onSortChange 
+}: InlineFiltersProps) {
+  // Use local state only for the slider while dragging to avoid jitter
+  // But initialize from props
+  const [localMinScore, setLocalMinScore] = useState<number>(scoreRange[0]);
+  const [isCustom, setIsCustom] = useState<boolean>(scoreRange[0] > 0 && ![0, 50, 70, 80].includes(scoreRange[0]));
+
+  // Sync local state when props change (from URL)
+  useEffect(() => {
+    setLocalMinScore(scoreRange[0]);
+    // Determine if custom based on value, unless we are already in custom mode
+    const isStandard = [0, 50, 70, 80].includes(scoreRange[0]);
+    if (!isStandard) setIsCustom(true);
+    else if (scoreRange[0] === 0 && isCustom) setIsCustom(false); // Only exit custom if explicitly 0
+  }, [scoreRange]);
 
   const sortLabel =
     sortBy === "date-desc"
@@ -41,7 +58,7 @@ export function InlineFilters({ onScoreRangeChange, onSortChange }: InlineFilter
   const handleScoreChange = (values: number[]) => {
     const newMin = values[0] ?? 0;
     // Update UI immediately for smooth interaction
-    setMinScore(newMin);
+    setLocalMinScore(newMin);
     setIsCustom(true); // Mark as custom when using slider
     // But debounce the API call
     debouncedScoreChange(newMin);
@@ -56,21 +73,21 @@ export function InlineFilters({ onScoreRangeChange, onSortChange }: InlineFilter
     }
     
     const score = parseInt(value, 10);
-    setMinScore(score);
+    setLocalMinScore(score);
     setIsCustom(false);
     // Preset selection doesn't need debounce, apply immediately
     onScoreRangeChange?.(score, 100);
   };
 
   const handleSortChange = (value: string) => {
-    setSortBy(value);
     onSortChange?.(value);
   };
 
   // Determine the current select value
   const getSelectValue = () => {
     if (isCustom) return "custom";
-    return minScore.toString();
+    if ([0, 50, 70, 80].includes(localMinScore)) return localMinScore.toString();
+    return "custom";
   };
 
   const toggleItemClass = "px-4 min-w-12 data-[state=on]:bg-black data-[state=on]:text-white hover:data-[state=on]:bg-black/90";
@@ -102,12 +119,12 @@ export function InlineFilters({ onScoreRangeChange, onSortChange }: InlineFilter
               min={0}
               max={100}
               step={5}
-              value={[minScore, 100]}
+              value={[localMinScore, 100]}
               onValueChange={handleScoreChange}
               className="w-24 [&>[data-slot=slider-thumb]:last-child]:hidden [&>[data-slot=slider-track]>[data-slot=slider-range]]:bg-black"
             />
             <span className="text-sm font-medium whitespace-nowrap w-8 text-right tabular-nums">
-              {minScore}+
+              {localMinScore}+
             </span>
           </div>
         )}

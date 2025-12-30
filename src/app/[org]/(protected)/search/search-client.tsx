@@ -10,7 +10,7 @@ import type { ParsedQuery, SourcingCriteria } from "@/types/search";
 import { useSession, useActiveOrganization } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { recentSearchesKeys } from "@/lib/search-query-keys";
+import { recentSearchesKeys } from "@/lib/query-keys/search";
 
 interface SearchClientProps {
   viewMode?: "table" | "cards"; // Kept for compatibility but unused

@@ -14,6 +14,8 @@ import { IconX } from "@tabler/icons-react";
 import { CandidateDetails } from "./candidate-details";
 import { getSearchCandidateById } from "@/actions/candidates";
 
+import { searchCandidatesKeys } from "@/lib/query-keys/search";
+
 export function SearchRightSidebar() {
   const searchParams = useSearchParams();
   const candidateId = searchParams.get("candidateId");
@@ -34,15 +36,16 @@ export function SearchRightSidebar() {
 
   // Fetch candidate details
   const { data: candidateResult, isLoading } = useQuery({
-    queryKey: ["search-candidate-details", candidateId],
+    queryKey: searchCandidatesKeys.detail(candidateId || ""),
     queryFn: async () => {
       if (!candidateId) return null;
       return await getSearchCandidateById(candidateId);
     },
     enabled: !!candidateId,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
-  const searchCandidate = candidateResult?.data;
+  const searchCandidate = candidateResult?.success ? candidateResult.data : null;
   const sourcingCriteria = React.useMemo(() => {
     if (!searchCandidate?.search?.parseResponse) return undefined;
     try {

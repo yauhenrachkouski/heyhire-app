@@ -471,7 +471,27 @@ export async function getSearchCandidateById(searchCandidateId: string) {
       // But assertNotReadOnlyForOrganization checks if user is in org.
     }
     
-    return { success: true, data: result };
+    // Transform JSON strings to objects
+    const candidate = result.candidate;
+    const transformedCandidate = {
+      ...candidate,
+      // Parse JSON fields safely
+      location: candidate.location ? JSON.parse(candidate.location) : null,
+      currentPositions: candidate.currentPositions ? JSON.parse(candidate.currentPositions) : [],
+      experiences: candidate.experiences ? JSON.parse(candidate.experiences) : [],
+      educations: candidate.educations ? JSON.parse(candidate.educations) : [],
+      certifications: candidate.certifications ? JSON.parse(candidate.certifications) : [],
+      skills: candidate.skills ? JSON.parse(candidate.skills) : [],
+      sourceData: null, // Don't send huge source data to client
+    };
+
+    return { 
+      success: true, 
+      data: {
+        ...result,
+        candidate: transformedCandidate
+      }
+    };
   } catch (error) {
     console.error("[Candidates] Error fetching search candidate:", error);
     return { success: false, error: "Failed to fetch candidate" };
@@ -686,12 +706,17 @@ export async function updateCandidateStatus(
  */
 export async function getSearchProgress(searchId: string) {
   await requireSearchReadAccess(searchId);
-  const results = await db.query.searchCandidates.findMany({
-    where: eq(searchCandidates.searchId, searchId),
-  });
+  
+  const [result] = await db
+    .select({
+      total: count(),
+      scored: count(searchCandidates.matchScore),
+    })
+    .from(searchCandidates)
+    .where(eq(searchCandidates.searchId, searchId));
 
-  const total = results.length;
-  const scored = results.filter(r => r.matchScore !== null).length;
+  const total = result?.total || 0;
+  const scored = result?.scored || 0;
   const unscored = total - scored;
 
   return {

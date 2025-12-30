@@ -15,7 +15,7 @@ import {
 } from "@/actions/members";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/handle-error";
-import { membersKeys } from "./members-query-keys";
+import { membersKeys } from "@/lib/query-keys/members";
 
 // Query hook
 export function useMembersQuery(

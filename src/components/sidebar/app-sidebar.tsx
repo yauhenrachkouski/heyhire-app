@@ -40,7 +40,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import type { subscription } from "@/db/schema"
 import { useQuery } from "@tanstack/react-query"
-import { recentSearchesKeys } from "@/lib/search-query-keys"
+import { recentSearchesKeys } from "@/lib/query-keys/search"
 
 type SubscriptionType = typeof subscription.$inferSelect
 

@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { getMembers } from "@/actions/members";
 import { MembersTableClient } from "./members-table-client";
-import { membersKeys } from "./members-query-keys";
+import { membersKeys } from "@/lib/query-keys/members";
 import { MembersPageHeader } from "./members-page-header";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";

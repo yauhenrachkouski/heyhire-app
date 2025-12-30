@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger, PopoverHeader, PopoverTitle, PopoverDescription } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
-import { IconPencil, IconCalendar, IconUser, IconInfoCircle, IconCopy, IconPlayerPlay, IconDatabase, IconPlus } from "@tabler/icons-react";
+import { IconPencil, IconCalendar, IconUser, IconInfoCircle, IconCopy } from "@tabler/icons-react";
 import { formatDate } from "@/lib/format";
 import SourcingLoader from "@/components/search/sourcing-custom-loader";
 import { updateSearchName } from "@/actions/search";
@@ -20,9 +20,9 @@ import { useSearchRealtime } from "@/hooks/use-search-realtime";
 import posthog from 'posthog-js';
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useIsReadOnly } from "@/hooks/use-is-read-only";
-import { DialogOverlay } from "@/components/ui/dialog";
 import { SearchRightSidebar } from "@/components/search/search-right-sidebar";
-import { cn } from "@/lib/utils";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { searchCandidatesKeys } from "@/lib/query-keys/search";
 
 interface SearchResultsClientProps {
   search: {
@@ -46,6 +46,9 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
   console.log("[SearchResultsClient] Rendering for search:", search.id);
   
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
 
   const { data: activeOrg } = useActiveOrganization();
   const isReadOnly = useIsReadOnly();
@@ -55,28 +58,36 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
   const [searchName, setSearchName] = useState(search.name);
   const titleRef = useRef<HTMLHeadingElement>(null);
 
-  // Score filter state - default to All candidates (0+)
-  const [scoreRange, setScoreRange] = useState<[number, number]>([0, 100]);
+  // Derive state from URL params
+  const scoreMin = searchParams.get("scoreMin") ? parseInt(searchParams.get("scoreMin")!) : 0;
+  const scoreMax = searchParams.get("scoreMax") ? parseInt(searchParams.get("scoreMax")!) : 100;
+  const page = searchParams.get("page") ? parseInt(searchParams.get("page")!) : 1;
+  const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!) : 10;
+  const sortBy = searchParams.get("sortBy") || "date-desc";
   
-  // Pagination state
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
-  
-  // Sort state - default to newest first
-  const [sortBy, setSortBy] = useState<string>("date-desc");
+  // React Table uses 0-based index
+  const pageIndex = page - 1;
 
-  // Reset all state when search changes (backup for key prop)
+  // Helper to update URL params
+  const updateUrl = useCallback((updates: Record<string, string | number | undefined>) => {
+    const params = new URLSearchParams(searchParams.toString());
+    
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === undefined || value === null) {
+        params.delete(key);
+      } else {
+        params.set(key, value.toString());
+      }
+    });
+
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [pathname, router, searchParams]);
+
   useEffect(() => {
     console.log("[SearchResultsClient] Search changed to:", search.id);
     setSearchName(search.name);
     setCurrentParsedQuery(search.params);
   }, [search.id, search.name, search.params]);
-
-  useEffect(() => {
-    setScoreRange([0, 100]);
-    setPageIndex(0);
-    setSortBy("date-desc");
-  }, [search.id]);
 
   useEffect(() => {
     if (isEditingName && titleRef.current) {
@@ -86,31 +97,35 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
 
   // Poll for candidates with server-side filtering
   const { data, isLoading, isFetching, error, refetch } = useQuery({
-    queryKey: ['search-candidates', search.id, scoreRange[0], scoreRange[1], pageIndex, pageSize, sortBy],
+    queryKey: searchCandidatesKeys.list(search.id, {
+      scoreMin,
+      scoreMax,
+      page: pageIndex,
+      limit,
+      sortBy,
+    }),
     queryFn: async () => {
-      console.log("[SearchResultsClient] Fetching candidates for search:", search.id, "with score range:", scoreRange);
+      console.log("[SearchResultsClient] Fetching candidates for search:", search.id);
       const url = new URL(`/api/search/${search.id}/candidates`, window.location.origin);
-      // Only pass scoreMin/scoreMax if user is actively filtering (not at default 0-100)
-      if (scoreRange[0] !== 0 || scoreRange[1] !== 100) {
-        url.searchParams.set('scoreMin', scoreRange[0].toString());
-        url.searchParams.set('scoreMax', scoreRange[1].toString());
+      
+      if (scoreMin !== 0 || scoreMax !== 100) {
+        url.searchParams.set('scoreMin', scoreMin.toString());
+        url.searchParams.set('scoreMax', scoreMax.toString());
       }
       url.searchParams.set('page', (pageIndex + 1).toString());
-      url.searchParams.set('limit', pageSize.toString());
+      url.searchParams.set('limit', limit.toString());
       url.searchParams.set('sortBy', sortBy);
       
       const response = await fetch(url.toString());
       if (!response.ok) {
         throw new Error('Failed to fetch candidates');
       }
-      const data = await response.json();
-      console.log("[SearchResultsClient] Received data:", data);
-      return data;
+      return await response.json();
     },
     // Disable polling, rely on realtime or manual refetch
     refetchInterval: false,
     enabled: !!search.id,
-    // Keep previous data during refetch to prevent blank screen during HMR
+    // Keep previous data during refetch to prevent blank screen
     placeholderData: (previousData) => previousData,
     // Cache data for 30 seconds to prevent unnecessary refetches
     staleTime: 30 * 1000,
@@ -126,7 +141,6 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
     const result = await refetch();
     
     // If no candidates returned but API says there should be some, retry after a short delay
-    // This handles potential DB replication lag
     if (candidatesCount > 0 && (!result.data?.candidates || result.data.candidates.length === 0)) {
       console.log("[SearchResultsClient] No candidates returned, retrying in 500ms...");
       setTimeout(() => {
@@ -145,7 +159,13 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
     
     // Update the specific candidate in the query cache
     queryClient.setQueryData(
-      ['search-candidates', search.id, scoreRange[0], scoreRange[1], pageIndex, pageSize, sortBy],
+      searchCandidatesKeys.list(search.id, {
+        scoreMin,
+        scoreMax,
+        page: pageIndex,
+        limit,
+        sortBy,
+      }),
       (oldData: any) => {
         if (!oldData?.candidates) return oldData;
         
@@ -164,14 +184,15 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
         };
       }
     );
-  }, [queryClient, search.id, scoreRange, pageIndex, pageSize, sortBy]);
+  }, [queryClient, search.id, scoreMin, scoreMax, pageIndex, limit, sortBy]);
 
   // Handle scoring completion
   const handleScoringCompleted = useCallback((data: { scored: number; errors: number }) => {
     console.log("[SearchResultsClient] Scoring completed. Scored:", data.scored, "Errors:", data.errors);
-    // Refetch to ensure we have the latest data
-    refetch();
-  }, [refetch]);
+    queryClient.invalidateQueries({
+      queryKey: searchCandidatesKeys.details(search.id)
+    });
+  }, [queryClient, search.id]);
 
   const {
     status: realtimeStatus,
@@ -189,69 +210,38 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
     onScoringCompleted: handleScoringCompleted,
   });
 
-  // Debug logging for realtime state
-  console.log("[SearchResultsClient] Realtime state:", {
-    status: realtimeStatus,
-    progress: realtimeProgress,
-    connectionStatus,
-  });
-
   const candidates = data?.candidates || [];
   const pagination = data?.pagination;
   const progress = data?.progress;
   
-  // Calculate scoring progress - prefer realtime state, fallback to API response
+  // Calculate scoring progress
   const scoredCount = scoringState.isScoring ? scoringState.scored : (progress?.scored || 0);
   const totalCandidates = scoringState.isScoring ? scoringState.total : (progress?.total || candidates.length);
-  const unscoredCount = totalCandidates - scoredCount;
-  const scoringPercentage = totalCandidates > 0 ? Math.round((scoredCount / totalCandidates) * 100) : 0;
-  const isScoringComplete = progress?.isScoringComplete ?? (unscoredCount === 0 && totalCandidates > 0);
+  const isScoringComplete = progress?.isScoringComplete ?? (totalCandidates > 0 && scoredCount === totalCandidates);
   const isScoring = scoringState.isScoring;
   
-  // Calculate if search is in an active/running state - used for UI
+  // Calculate if search is in an active/running state
   const isActiveSearch = ['created', 'processing', 'pending', 'generating', 'generated', 'executing', 'polling'].includes(realtimeStatus);
   
-  // Candidates are already sorted from the server
-  const sortedCandidates = candidates;
-  
-  // Calculate skeleton count for pending candidates
-  // Only show skeletons if we are actively loading data AND not showing the progress bar
-  
-  // Show progress bar if:
-  // 1. Search is in an active status AND no candidates yet, OR
-  // 2. Initial loading (no data yet) and search is active
+  // Show progress bar logic
   const isInitialLoading = isLoading && !data;
   const shouldShowProgressBar = (isActiveSearch && candidates.length === 0) || (isInitialLoading && isActiveSearch);
   
-  const skeletonCount = (isLoading && !shouldShowProgressBar) ? pageSize : 0;
-  
-  // Check if filter is active (not showing all candidates)
-  // Note: Default is 70+, so we consider it filtered unless it's set to show "All" (0+)
-  const isFiltered = scoreRange[0] !== 0;
-  const filteredCount = pagination?.total || candidates.length;
-  const totalCount = progress?.total || 0;
+  // Only show skeletons if we are actively loading data AND not showing the progress bar
+  const effectiveSkeletonCount = (shouldShowProgressBar || (isLoading && !data)) ? limit : 0;
 
-  console.log("[SearchResultsClient] Status:", realtimeStatus);
-  console.log("[SearchResultsClient] Progress:", realtimeProgress);
-  console.log("[SearchResultsClient] Candidates count:", candidates.length);
-  console.log("[SearchResultsClient] isFetching:", isFetching);
-
-  // Always show skeletons if we are actively searching/loading and have no candidates yet
-  // or even if we have candidates but want to show loading state underneath overlay
-  const effectiveSkeletonCount = (shouldShowProgressBar || isLoading) ? pageSize : 0;
+  const totalCount = progress?.total || pagination?.total || 0;
 
   const handleRemoveFilter = (category: keyof ParsedQuery) => {
     setCurrentParsedQuery(prevParams => ({
       ...prevParams,
-      [category]: undefined, // Set the removed category to undefined
+      [category]: undefined,
     }));
   };
 
   const handleSaveName = async () => {
     if (isReadOnly) {
-      if (titleRef.current) {
-        titleRef.current.innerText = search.name;
-      }
+      if (titleRef.current) titleRef.current.innerText = search.name;
       setIsEditingName(false);
       return;
     }
@@ -260,16 +250,12 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
 
     if (newName === search.name) {
       setIsEditingName(false);
-      return; // No change, just exit editing mode
+      return;
     }
 
     if (!newName) {
-      toast.error("Search name cannot be empty", {
-        description: "Please enter a name for your search.",
-      });
-      if (titleRef.current) {
-        titleRef.current.innerText = search.name; // Revert content if empty
-      }
+      toast.error("Search name cannot be empty");
+      if (titleRef.current) titleRef.current.innerText = search.name;
       setIsEditingName(false);
       return;
     }
@@ -282,18 +268,11 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
         from_name: prevName,
         to_name: newName,
       });
-      toast("Search name updated", {
-        description: `Name changed to "${newName}"`,
-      });
-      setSearchName(newName); // Update local state with new name
-      // No need to revalidate path here, as the name change will be reflected via search prop update
+      toast.success("Search name updated");
+      setSearchName(newName);
     } else {
-      toast.error("Failed to update search name", {
-        description: result.error || "An unexpected error occurred",
-      });
-      if (titleRef.current) {
-        titleRef.current.innerText = search.name; // Revert to old name on error
-      }
+      toast.error("Failed to update search name", { description: result.error });
+      if (titleRef.current) titleRef.current.innerText = search.name;
     }
     setIsEditingName(false);
   };
@@ -301,63 +280,55 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
   const handleCopySearchQuery = async () => {
     try {
       await navigator.clipboard.writeText(search.query);
-      toast("Copied to clipboard", {
-        description: "Search query has been copied.",
-      });
-    } catch (error) {
-      toast.error("Failed to copy", {
-        description: "Could not copy search query to clipboard.",
-      });
+      toast.success("Copied to clipboard");
+    } catch {
+      toast.error("Failed to copy");
     }
   };
 
   const handleContinueSearch = () => {
-    toast("Continue search", {
-      description: "This is a sample action to continue the search.",
-    });
+    toast.info("Continue search functionality coming soon");
   };
 
   return (
     <div className="space-y-4">
-      {/* Debug panel - only in development */}
+      {/* Debug panel */}
+      {process.env.NODE_ENV !== 'production' && (
         <div className="fixed bottom-4 right-4 z-50 p-3 bg-black/80 text-white text-xs rounded-lg max-w-xs font-mono space-y-0.5">
           <div className="font-bold mb-1">🔍 Debug Panel</div>
-          <div>Search Status: <span className={realtimeStatus === 'completed' ? 'text-green-400' : realtimeStatus === 'error' ? 'text-red-400' : 'text-yellow-400'}>{realtimeStatus}</span></div>
-          <div>Search Progress: {realtimeProgress}%</div>
+          <div>Status: <span className={realtimeStatus === 'completed' ? 'text-green-400' : realtimeStatus === 'error' ? 'text-red-400' : 'text-yellow-400'}>{realtimeStatus}</span></div>
+          <div>Progress: {realtimeProgress}%</div>
           <div>Connection: <span className={connectionStatus === 'connected' ? 'text-green-400' : 'text-red-400'}>{connectionStatus}</span></div>
           <div>Candidates: {candidates.length}</div>
           <div className="border-t border-white/20 my-1 pt-1">Scoring:</div>
-          <div>Is Scoring: <span className={isScoring ? 'text-yellow-400' : 'text-gray-400'}>{isScoring ? '✓' : '✗'}</span></div>
-          <div>Scored: {scoredCount}/{totalCandidates} ({scoringPercentage}%)</div>
-          <div>Scoring Complete: {isScoringComplete ? '✓' : '✗'}</div>
+          <div>Is Scoring: {isScoring ? '✓' : '✗'}</div>
+          <div>Scored: {scoredCount}/{totalCandidates}</div>
         </div>
-      
+      )}
       
       {/* Shared Header */}
       <div>
         <div className="flex items-start justify-between gap-4">
           <div 
-            className="group flex items-center gap-2" // Add group for hover effect
-            onMouseEnter={() => !isEditingName} // Prevent hover effect when editing
+            className="group flex items-center gap-2"
+            onMouseEnter={() => !isEditingName}
             onMouseLeave={() => !isEditingName}
           >
             <h1 
               ref={titleRef}
               className="text-2xl font-bold max-w-[calc(100%-40px)] truncate"
               contentEditable={isEditingName && !isReadOnly}
-              suppressContentEditableWarning={true} // Suppress React warning for contentEditable
+              suppressContentEditableWarning={true}
               onBlur={handleSaveName}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
-                  e.preventDefault(); // Prevent new line
-                  e.currentTarget.blur(); // Trigger onBlur to save
+                  e.preventDefault();
+                  e.currentTarget.blur();
                 }
                 if (e.key === "Escape") {
-                  if (titleRef.current) {
-                    titleRef.current.innerText = search.name; // Revert on escape
-                  }
+                  if (titleRef.current) titleRef.current.innerText = search.name;
                   setIsEditingName(false);
-                  e.currentTarget.blur(); // Exit editing mode
+                  e.currentTarget.blur();
                 }
               }}
             >
@@ -368,7 +339,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
                 variant="ghost"
                 size="icon"
                 onClick={() => setIsEditingName(true)}
-                className="opacity-0 group-hover:opacity-100 transition-opacity" // Show on hover
+                className="opacity-0 group-hover:opacity-100 transition-opacity"
               >
                 <IconPencil className="h-4 w-4" />
               </Button>
@@ -381,11 +352,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
           <span className="flex items-center gap-1">
             <IconCalendar className="h-3.5 w-3.5" />
             {formatDate(search.createdAt, { 
-              month: "short", 
-              day: "numeric", 
-              year: "numeric",
-              hour: "numeric",
-              minute: "2-digit"
+              month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit"
             })}
           </span>
           {search.createdBy && (
@@ -397,11 +364,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
           {search.query && search.query.trim() && (
             <Popover>
               <PopoverTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto py-0.5 px-2 text-xs text-muted-foreground hover:text-foreground"
-                >
+                <Button variant="ghost" size="sm" className="h-auto py-0.5 px-2 text-xs text-muted-foreground hover:text-foreground">
                   <IconInfoCircle className="h-3.5 w-3.5" />
                   <span>Original search</span>
                 </Button>
@@ -410,12 +373,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
                 <PopoverHeader>
                   <div className="flex items-center justify-between gap-2">
                     <PopoverTitle>Original Search Prompt</PopoverTitle>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={handleCopySearchQuery}
-                    >
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleCopySearchQuery}>
                       <IconCopy className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -450,17 +408,14 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
               </Tooltip>
             </TooltipProvider>
 
-            
-
             <Button
               variant={totalCount >= 1000 ? "secondary" : "default"}
-              size="xs"
+              size="sm"
+              className="h-7 text-xs"
               onClick={handleContinueSearch}
               disabled={totalCount >= 1000}
             >
-              {totalCount >= 1000 ? "Limit Reached" : (
-                  "Get +100"
-              )}
+              {totalCount >= 1000 ? "Limit Reached" : "Get +100"}
             </Button>
           </div>
         </div>
@@ -470,7 +425,6 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
           initialQueryText={search.query} 
           onRemoveFilter={handleRemoveFilter}
         />
-        
       </div>
 
       {/* Sticky Criteria Display */}
@@ -511,17 +465,19 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
             <div className="space-y-3">
               {/* Inline Filters */}
               <InlineFilters 
+                scoreRange={[scoreMin, scoreMax]}
+                sortBy={sortBy}
                 onScoreRangeChange={(min, max) => {
                   posthog.capture('search_filter_applied', {
                     search_id: search.id,
                     organization_id: activeOrg?.id,
                     filter_type: 'score_range',
-                    from_score_min: scoreRange[0],
-                    from_score_max: scoreRange[1],
+                    from_score_min: scoreMin,
+                    from_score_max: scoreMax,
                     score_min: min,
                     score_max: max,
                   });
-                  setScoreRange([min, max]);
+                  updateUrl({ scoreMin: min, scoreMax: max, page: 1 });
                 }}
                 onSortChange={(sort) => {
                   posthog.capture('search_filter_applied', {
@@ -531,7 +487,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
                     from_sort_by: sortBy,
                     sort_by: sort,
                   });
-                  setSortBy(sort);
+                  updateUrl({ sortBy: sort, page: 1 });
                 }}
               />
             </div>
@@ -549,17 +505,19 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
               {realtimeStatus !== "error" && realtimeStatus !== "failed" && (
                 <>
                   <CandidateCardListPaginated
-                    candidates={sortedCandidates}
+                    candidates={candidates}
                     searchId={search.id}
                     sourcingCriteria={search.parseResponse || undefined}
                     viewMode="cards"
                     skeletonCount={effectiveSkeletonCount}
                     pageIndex={pageIndex}
-                    pageSize={pageSize}
+                    pageSize={limit}
                     pageCount={pagination?.totalPages || 0}
-                    onPaginationChange={({ pageIndex, pageSize }) => {
-                      setPageIndex(pageIndex);
-                      setPageSize(pageSize);
+                    onPaginationChange={({ pageIndex: newPageIndex, pageSize: newPageSize }) => {
+                      updateUrl({ 
+                        page: newPageIndex + 1, 
+                        limit: newPageSize 
+                      });
                     }}
                   />
                   

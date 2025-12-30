@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, integer, pgEnum, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, integer, pgEnum, unique, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 // Enums for candidate system
@@ -176,7 +176,10 @@ export const search = pgTable("search", {
   status: text("status").default("created").notNull(), // created, processing, completed, error
   taskId: text("task_id"),
   progress: integer("progress").default(0),
-});
+}, (table) => ({
+  // Index for fetching recent searches by organization
+  organizationCreatedIdx: index("search_organization_created_idx").on(table.organizationId, table.createdAt.desc()),
+}));
 
 export const sourcingStrategies = pgTable("sourcing_strategies", {
   id: text("id").primaryKey(),
@@ -196,7 +199,10 @@ export const sourcingStrategies = pgTable("sourcing_strategies", {
     .defaultNow()
     .$onUpdate(() => new Date())
     .notNull(),
-});
+}, (table) => ({
+  // Index for fetching strategies by search
+  searchIdx: index("sourcing_strategies_search_idx").on(table.searchId),
+}));
 
 export const creditTransactions = pgTable("credit_transactions", {
   id: text("id").primaryKey(),
@@ -215,7 +221,10 @@ export const creditTransactions = pgTable("credit_transactions", {
   description: text("description").notNull(),
   metadata: text("metadata"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  // Index for fetching transactions by organization
+  organizationCreatedIdx: index("credit_transactions_organization_created_idx").on(table.organizationId, table.createdAt.desc()),
+}));
 
 export const stripeWebhookEvents = pgTable(
   "stripe_webhook_events",
@@ -304,6 +313,10 @@ export const searchCandidates = pgTable("search_candidates", {
     .notNull(),
 }, (table) => ({
   uniqueSearchCandidate: unique().on(table.searchId, table.candidateId),
+  // Index for sorting by createdAt (newest first)
+  searchCreatedIdx: index("search_candidates_search_created_idx").on(table.searchId, table.createdAt.desc()),
+  // Index for sorting by matchScore (highest first) - useful for top matches
+  searchScoreIdx: index("search_candidates_search_score_idx").on(table.searchId, table.matchScore.desc()),
 }));
 
 export const searchCandidateStrategies = pgTable("search_candidate_strategies", {
@@ -317,6 +330,8 @@ export const searchCandidateStrategies = pgTable("search_candidate_strategies", 
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   uniqueSearchCandidateStrategy: unique().on(table.searchCandidateId, table.strategyId),
+  // Index for FK lookups
+  strategyIdx: index("search_candidate_strategies_strategy_idx").on(table.strategyId),
 }));
 
 // Relations for Better Auth
