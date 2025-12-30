@@ -45,6 +45,7 @@ const schema = {
       score: z.number(),
       scored: z.number(),
       total: z.number(),
+      scoringResult: z.any().optional(),
     }),
     completed: z.object({
       scored: z.number(),

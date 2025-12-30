@@ -280,6 +280,7 @@ export async function POST(request: Request) {
       score: roundedScore,
       scored,
       total,
+      scoringResult: result, // Include full scoring result for immediate UI update
     });
 
     // Check if all candidates are scored

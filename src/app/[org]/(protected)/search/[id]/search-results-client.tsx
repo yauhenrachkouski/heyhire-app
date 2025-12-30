@@ -160,7 +160,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
   }, []);
 
   // Handle individual candidate score updates via realtime
-  const handleScoringProgress = useCallback((data: { candidateId: string; searchCandidateId: string; score: number; scored: number; total: number }) => {
+  const handleScoringProgress = useCallback((data: { candidateId: string; searchCandidateId: string; score: number; scored: number; total: number; scoringResult?: any }) => {
     console.log("[SearchResultsClient] Score update:", data.searchCandidateId, "=", data.score);
     
     // Update the specific candidate in the query cache
@@ -179,7 +179,12 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
           ...oldData,
           candidates: oldData.candidates.map((c: any) => 
             c.id === data.searchCandidateId 
-              ? { ...c, matchScore: data.score }
+              ? { 
+                  ...c, 
+                  matchScore: data.score,
+                  // Update detailed scoring result if available
+                  scoringResult: data.scoringResult ? JSON.stringify(data.scoringResult) : c.scoringResult 
+                }
               : c
           ),
           progress: {

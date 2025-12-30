@@ -23,7 +23,7 @@ interface UseSearchRealtimeOptions {
   initialProgress: number;
   onCompleted?: (candidatesCount: number) => void;
   onFailed?: (error: string) => void;
-  onScoringProgress?: (data: { candidateId: string; searchCandidateId: string; score: number; scored: number; total: number }) => void;
+  onScoringProgress?: (data: { candidateId: string; searchCandidateId: string; score: number; scored: number; total: number; scoringResult?: any }) => void;
   onScoringCompleted?: (data: { scored: number; errors: number }) => void;
 }
 
@@ -121,7 +121,7 @@ export function useSearchRealtime({
           errors: 0,
         });
       } else if (payload.event === "scoring.progress") {
-        const data = payload.data as { candidateId: string; searchCandidateId: string; score: number; scored: number; total: number };
+        const data = payload.data as { candidateId: string; searchCandidateId: string; score: number; scored: number; total: number; scoringResult?: any };
         console.log("[useSearchRealtime] Scoring progress:", data.scored, "/", data.total, "- Score:", data.score);
         setScoringState((prev) => ({
           ...prev,
