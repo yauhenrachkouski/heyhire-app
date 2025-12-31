@@ -68,14 +68,36 @@ export function CandidateCardListInfinite({
   const previousCandidateIdsRef = useRef<Set<string>>(new Set());
 
   // Infinite scroll trigger
-  const loadMoreRef = useRef(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
   const isInView = useInView(loadMoreRef, { margin: "0px 0px 200px 0px" });
 
+  // Trigger fetch when element is in view
   useEffect(() => {
     if (isInView && hasNextPage && !isFetchingNextPage) {
       fetchNextPage();
     }
   }, [isInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // Fallback: Check if loadMore element is already in viewport after candidates load
+  // This handles the case when sourcing loader was covering the scroll area
+  // and IntersectionObserver didn't fire because the element position didn't change
+  useEffect(() => {
+    if (!hasNextPage || isFetchingNextPage || candidates.length === 0) return;
+    
+    // Small delay to let DOM render after sourcing loader disappears
+    const timer = setTimeout(() => {
+      if (!loadMoreRef.current) return;
+      
+      const rect = loadMoreRef.current.getBoundingClientRect();
+      const isVisible = rect.top < window.innerHeight + 200; // Same margin as useInView
+      
+      if (isVisible && hasNextPage && !isFetchingNextPage) {
+        fetchNextPage();
+      }
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [candidates.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const handleShowCandidate = useCallback((candidate: SearchCandidate) => {
     posthog.capture("candidate_details_viewed", {

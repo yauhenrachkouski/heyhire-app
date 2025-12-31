@@ -141,16 +141,12 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
   const progressQuery = useQuery<SearchProgress>({
     queryKey: searchCandidatesKeys.progress(search.id),
     queryFn: async () => {
-      console.log("[SearchResultsClient] Fetching progress for search:", search.id);
       const response = await fetch(`/api/search/${search.id}/progress`);
       if (!response.ok) throw new Error('Failed to fetch progress');
       return response.json();
     },
-    // Use SSR data for initial state
+    // Use SSR data for initial state - no immediate refetch needed
     initialData: initialData?.progress,
-    // Mark SSR data as stale so background refetch happens
-    initialDataUpdatedAt: initialData?.progress ? 0 : undefined,
-    staleTime: 30 * 1000,
     gcTime: 5 * 60 * 1000,
   });
 
@@ -193,11 +189,8 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
       }],
       pageParams: [null],
     } : undefined,
-    // Mark SSR data as stale so it refetches when switching back to default filters
-    initialDataUpdatedAt: (initialData && filtersMatchSSRDefaults) ? 0 : undefined,
-    // Give some staleTime to prevent excessive refetches during scoring
+    // Rely on default staleTime from query provider (60s)
     // Filter changes create new queryKey, so they still get fresh results
-    staleTime: 10 * 1000,
     gcTime: 5 * 60 * 1000,
   });
 
@@ -256,6 +249,7 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
     scoring: scoringState,
     connectionStatus,
     setOptimisticStatus,
+    hasOptimisticUpdate,
   } = useSearchRealtime({
     searchId: search.id,
     initialStatus: search.status,
@@ -268,7 +262,11 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
 
   // Sync realtime status from progressQuery when server says completed but client thinks active
   // This catches missed realtime events (connection issues) via the existing progressQuery refetch cycle
+  // Skip if we have an optimistic update pending (e.g., user clicked "Get +100")
   useEffect(() => {
+    // Don't override optimistic updates - let realtime events handle the transition
+    if (hasOptimisticUpdate()) return;
+    
     const serverStatus = progressQuery.data?.searchStatus;
     const isClientActive = ['created', 'processing', 'pending', 'generating', 'generated', 'executing', 'polling'].includes(realtimeStatus);
     
@@ -276,7 +274,7 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
       console.log('[SearchResultsClient] Syncing status from progressQuery: completed');
       setOptimisticStatus('completed', 'Search completed', 100);
     }
-  }, [progressQuery.data?.searchStatus, realtimeStatus, setOptimisticStatus]);
+  }, [progressQuery.data?.searchStatus, realtimeStatus, setOptimisticStatus, hasOptimisticUpdate]);
 
   // ========== Derived state ==========
   const isActiveSearch = ['created', 'processing', 'pending', 'generating', 'generated', 'executing', 'polling'].includes(realtimeStatus);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useRealtime } from "@upstash/realtime/client";
 import type { RealtimeEvents } from "@/lib/realtime";
 
@@ -54,20 +54,8 @@ export function useSearchRealtime({
     errors: 0,
   });
 
-  // Sync state with server-side props when they change (e.g., on page refetch)
-  // This handles cases where realtime events are missed (connection issues, etc.)
-  useEffect(() => {
-    // Only sync if server status is "completed" but we think we're still active
-    // This prevents reverting optimistic updates during normal operation
-    if (initialStatus === "completed" && ACTIVE_STATUSES.includes(state.status)) {
-      console.log("[useSearchRealtime] Syncing with server: search completed");
-      setState({
-        status: initialStatus,
-        progress: initialProgress,
-        message: "Search completed",
-      });
-    }
-  }, [initialStatus, initialProgress]); // Intentionally exclude state.status from deps
+  // Track if we have an optimistic update that shouldn't be overridden by sync effects
+  const hasOptimisticUpdateRef = useRef(false);
 
   // Connect for active searches OR when scoring is in progress
   const isSearchActive = ACTIVE_STATUSES.includes(state.status);
@@ -87,6 +75,9 @@ export function useSearchRealtime({
     events: ["status.updated", "progress.updated", "search.completed", "search.failed", "scoring.started", "scoring.progress", "scoring.completed", "scoring.failed"],
     onData: useCallback((payload: RealtimePayload) => {
       console.log("[useSearchRealtime] Received event:", payload.event, "data:", JSON.stringify(payload.data));
+      
+      // Clear optimistic flag - we're now getting real updates from the server
+      hasOptimisticUpdateRef.current = false;
       
       // Search events
       if (payload.event === "status.updated") {
@@ -166,6 +157,13 @@ export function useSearchRealtime({
   });
 
   const setOptimisticStatus = useCallback((status: string, message: string = "", progress?: number) => {
+    // Mark that we have an optimistic update - prevents sync effects from reverting it
+    if (ACTIVE_STATUSES.includes(status)) {
+      hasOptimisticUpdateRef.current = true;
+    } else {
+      hasOptimisticUpdateRef.current = false;
+    }
+    
     setState((prev) => ({
       ...prev,
       status,
@@ -175,11 +173,15 @@ export function useSearchRealtime({
     }));
   }, []);
 
+  // Getter for optimistic update state - used by sync effects to avoid overriding
+  const hasOptimisticUpdate = useCallback(() => hasOptimisticUpdateRef.current, []);
+
   return {
     ...state,
     scoring: scoringState,
     connectionStatus,
     isActive: isSearchActive,
     setOptimisticStatus,
+    hasOptimisticUpdate,
   };
 }

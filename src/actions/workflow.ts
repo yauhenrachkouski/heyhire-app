@@ -20,6 +20,14 @@ export async function analyzeAndContinueSearch(searchId: string) {
 
     console.log("[Workflow] Analyzing strategies for search:", searchId);
 
+    // Immediately mark search as processing in DB so page refresh shows correct state
+    await db.update(search)
+      .set({ 
+        status: "processing", 
+        progress: 5 
+      })
+      .where(eq(search.id, searchId));
+
     // 1. Get performance stats for each strategy
     // We want: strategyId, strategyName, median score, candidate count
     
@@ -157,6 +165,15 @@ export async function analyzeAndContinueSearch(searchId: string) {
   } catch (error) {
     const errorMessage = getErrorMessage(error);
     console.error("[Workflow] Error continuing search:", errorMessage);
+    
+    // Reset status to completed on error (don't leave it stuck in processing)
+    await db.update(search)
+      .set({ 
+        status: "completed", 
+        progress: 100 
+      })
+      .where(eq(search.id, searchId));
+    
     return { success: false, error: errorMessage };
   }
 }
