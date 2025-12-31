@@ -1,6 +1,8 @@
 import { getCandidatesForSearch, getSearchProgress } from "@/actions/candidates";
 import { NextRequest } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -46,6 +48,8 @@ export async function GET(
     
     // Get scoring progress stats
     // Cursor requests are "load more" during infinite scroll; avoid re-counting on every scroll call.
+    // However, if we need to update the total count (e.g. after insert), we should ensure we get it.
+    // Ideally, the client invalidates the query which fetches page 0 (cursor=''), so we get progress.
     const shouldIncludeProgress = cursorParam === null || cursorParam.length === 0;
     const scoringProgress = shouldIncludeProgress ? await getSearchProgress(searchId) : null;
     

@@ -150,10 +150,19 @@ export function useSearchRealtime({
     }, [onCompleted, onFailed, onScoringProgress, onScoringCompleted]),
   });
 
+  const setOptimisticStatus = useCallback((status: string, message: string = "") => {
+    setState((prev) => ({
+      ...prev,
+      status,
+      message,
+    }));
+  }, []);
+
   return {
     ...state,
     scoring: scoringState,
     connectionStatus,
     isActive: isSearchActive,
+    setOptimisticStatus,
   };
 }

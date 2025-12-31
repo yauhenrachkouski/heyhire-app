@@ -15,14 +15,14 @@ const LINKEDIN_OPEN_DESCRIPTION = "Open LinkedIn profile";
 type CandidatesCursor =
   | {
       sortBy: "date-desc" | "date-asc";
-      // Store the raw search_candidates.id - we'll lookup the row to get exact createdAt
       lastId: string;
+      createdAt: string; // ISO date string
     }
   | {
       sortBy: "score-desc" | "score-asc";
       scoreKey: number; // matchScore with nulls coerced
-      // Store the raw search_candidates.id - we'll lookup the row to get exact createdAt
       lastId: string;
+      createdAt: string; // ISO date string
     };
 
 function encodeCursor(cursor: CandidatesCursor): string {
@@ -605,25 +605,29 @@ export async function getCandidatesForSearch(
   switch (sortBy) {
     case "date-desc":
       orderBy = [desc(searchCandidates.createdAt), desc(searchCandidates.id)];
-      if (useCursor && parsedCursor?.sortBy === "date-desc") {
-        // Use subquery to get exact timestamp from DB to avoid timezone issues
-        // This ensures we compare against the exact DB value, not a JS-converted value
+      if (useCursor && parsedCursor?.sortBy === "date-desc" && parsedCursor.createdAt) {
         cursorConditions.push(
-          sql`(${searchCandidates.createdAt}, ${searchCandidates.id}) < (
-            (SELECT created_at FROM search_candidates WHERE id = ${parsedCursor.lastId}),
-            ${parsedCursor.lastId}
-          )`,
+          or(
+            lt(searchCandidates.createdAt, new Date(parsedCursor.createdAt)),
+            and(
+              eq(searchCandidates.createdAt, new Date(parsedCursor.createdAt)),
+              lt(searchCandidates.id, parsedCursor.lastId)
+            )
+          )
         );
       }
       break;
     case "date-asc":
       orderBy = [asc(searchCandidates.createdAt), asc(searchCandidates.id)];
-      if (useCursor && parsedCursor?.sortBy === "date-asc") {
+      if (useCursor && parsedCursor?.sortBy === "date-asc" && parsedCursor.createdAt) {
         cursorConditions.push(
-          sql`(${searchCandidates.createdAt}, ${searchCandidates.id}) > (
-            (SELECT created_at FROM search_candidates WHERE id = ${parsedCursor.lastId}),
-            ${parsedCursor.lastId}
-          )`,
+          or(
+            gt(searchCandidates.createdAt, new Date(parsedCursor.createdAt)),
+            and(
+              eq(searchCandidates.createdAt, new Date(parsedCursor.createdAt)),
+              gt(searchCandidates.id, parsedCursor.lastId)
+            )
+          )
         );
       }
       break;
@@ -635,13 +639,20 @@ export async function getCandidatesForSearch(
         desc(searchCandidates.createdAt),
         desc(searchCandidates.id),
       ];
-      if (useCursor && parsedCursor?.sortBy === "score-desc") {
+      if (useCursor && parsedCursor?.sortBy === "score-desc" && parsedCursor.createdAt) {
         cursorConditions.push(
-          sql`(coalesce(${searchCandidates.matchScore}, -1), ${searchCandidates.createdAt}, ${searchCandidates.id}) < (
-            ${parsedCursor.scoreKey},
-            (SELECT created_at FROM search_candidates WHERE id = ${parsedCursor.lastId}),
-            ${parsedCursor.lastId}
-          )`,
+          or(
+            lt(sql`coalesce(${searchCandidates.matchScore}, -1)`, parsedCursor.scoreKey),
+            and(
+              eq(sql`coalesce(${searchCandidates.matchScore}, -1)`, parsedCursor.scoreKey),
+              lt(searchCandidates.createdAt, new Date(parsedCursor.createdAt))
+            ),
+            and(
+              eq(sql`coalesce(${searchCandidates.matchScore}, -1)`, parsedCursor.scoreKey),
+              eq(searchCandidates.createdAt, new Date(parsedCursor.createdAt)),
+              lt(searchCandidates.id, parsedCursor.lastId)
+            )
+          )
         );
       }
       break;
@@ -652,13 +663,20 @@ export async function getCandidatesForSearch(
         asc(searchCandidates.createdAt),
         asc(searchCandidates.id),
       ];
-      if (useCursor && parsedCursor?.sortBy === "score-asc") {
+      if (useCursor && parsedCursor?.sortBy === "score-asc" && parsedCursor.createdAt) {
         cursorConditions.push(
-          sql`(coalesce(${searchCandidates.matchScore}, 101), ${searchCandidates.createdAt}, ${searchCandidates.id}) > (
-            ${parsedCursor.scoreKey},
-            (SELECT created_at FROM search_candidates WHERE id = ${parsedCursor.lastId}),
-            ${parsedCursor.lastId}
-          )`,
+          or(
+            gt(sql`coalesce(${searchCandidates.matchScore}, 101)`, parsedCursor.scoreKey),
+            and(
+              eq(sql`coalesce(${searchCandidates.matchScore}, 101)`, parsedCursor.scoreKey),
+              gt(searchCandidates.createdAt, new Date(parsedCursor.createdAt))
+            ),
+            and(
+              eq(sql`coalesce(${searchCandidates.matchScore}, 101)`, parsedCursor.scoreKey),
+              eq(searchCandidates.createdAt, new Date(parsedCursor.createdAt)),
+              gt(searchCandidates.id, parsedCursor.lastId)
+            )
+          )
         );
       }
       break;
@@ -672,7 +690,18 @@ export async function getCandidatesForSearch(
     const results = await db.query.searchCandidates.findMany({
       where: and(...conditions, ...cursorConditions),
       with: {
-        candidate: true,
+        candidate: {
+          columns: {
+            id: true,
+            fullName: true,
+            headline: true,
+            photoUrl: true,
+            location: true,
+            linkedinUrl: true,
+            linkedinUsername: true,
+            experiences: true,
+          }
+        },
       },
       limit: pagePlusOne,
       orderBy,
@@ -713,12 +742,11 @@ export async function getCandidatesForSearch(
     const last = enrichedResults[enrichedResults.length - 1];
     let nextCursor: string | null = null;
     if (hasMore && last) {
-      // Store just the row ID - we'll use a subquery to get exact createdAt from DB
-      // This avoids timezone issues with Postgres timestamp without time zone
       if (sortBy === "date-desc" || sortBy === "date-asc") {
         nextCursor = encodeCursor({
           sortBy,
           lastId: last.id,
+          createdAt: last.createdAt.toISOString(),
         });
       } else {
         const scoreKey =
@@ -729,6 +757,7 @@ export async function getCandidatesForSearch(
           sortBy,
           scoreKey,
           lastId: last.id,
+          createdAt: last.createdAt.toISOString(),
         });
       }
     }
@@ -757,7 +786,18 @@ export async function getCandidatesForSearch(
   const results = await db.query.searchCandidates.findMany({
     where: and(...conditions),
     with: {
-      candidate: true,
+      candidate: {
+        columns: {
+          id: true,
+          fullName: true,
+          headline: true,
+          photoUrl: true,
+          location: true,
+          linkedinUrl: true,
+          linkedinUsername: true,
+          experiences: true,
+        }
+      },
     },
     limit,
     offset,
