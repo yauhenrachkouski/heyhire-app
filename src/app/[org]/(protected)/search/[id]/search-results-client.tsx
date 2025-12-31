@@ -8,6 +8,7 @@ import { CandidateCardListInfinite } from "@/components/search/candidate-card-li
 import { AppliedFilters } from "@/components/search/applied-filters";
 import { InlineFilters } from "@/components/search/inline-filters";
 import { CriteriaDisplay } from "@/components/search/criteria-display";
+import { SkeletonCard } from "@/components/search/skeleton-card";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger, PopoverHeader, PopoverTitle, PopoverDescription } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -27,14 +28,8 @@ import { useIsReadOnly } from "@/hooks/use-is-read-only";
 import { SearchRightSidebar } from "@/components/search/search-right-sidebar";
 import { searchCandidatesKeys } from "@/lib/query-keys/search";
 
-// Defaults used in server-side rendering (page.tsx)
-// These must match the defaults used when fetching initialData on the server
-const SSR_DEFAULTS = {
-  scoreMin: 0,
-  scoreMax: 100,
-  limit: 20,
-  sortBy: "date-desc",
-};
+// Statuses that mean the SOURCING is still actively running (not scoring)
+const SOURCING_ACTIVE_STATUSES = ["created", "processing", "pending", "generating", "generated", "executing", "polling"];
 
 interface SearchResultsClientProps {
   search: {
@@ -73,6 +68,13 @@ interface SearchResultsClientProps {
       searchStatus?: string;
       searchProgress?: number;
     };
+    // Filters used by SSR - client must match these to use initialData
+    ssrFilters?: {
+      scoreMin: number;
+      scoreMax: number;
+      limit: number;
+      sortBy: string;
+    };
   };
 }
 
@@ -90,7 +92,10 @@ interface SearchProgress {
 }
 
 export function SearchResultsClient({ search, initialData }: SearchResultsClientProps) {
-  console.log("[SearchResultsClient] Rendering for search:", search.id, "initialData:", !!initialData);
+  console.log("[SearchResultsClient] Rendering for search:", search.id, 
+    "hasInitialData:", !!initialData, 
+    "candidates:", initialData?.candidates?.length ?? 0,
+    "ssrFilters:", initialData?.ssrFilters);
   
   const queryClient = useQueryClient();
 
@@ -103,10 +108,12 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
   const titleRef = useRef<HTMLHeadingElement>(null);
 
   // NUQS state management - URL-synced filter state
-  const [scoreMin, setScoreMin] = useQueryState("scoreMin", parseAsInteger.withDefault(0).withOptions({ shallow: true, history: "push" }));
-  const [scoreMax, setScoreMax] = useQueryState("scoreMax", parseAsInteger.withDefault(100).withOptions({ shallow: true, history: "push" }));
-  const [limit, setLimit] = useQueryState("limit", parseAsInteger.withDefault(20).withOptions({ shallow: true, history: "push" }));
-  const [sortBy, setSortBy] = useQueryState("sortBy", parseAsString.withDefault("date-desc").withOptions({ shallow: true, history: "push" }));
+  // Use SSR filters as default values to prevent hydration mismatch
+  const ssrFilters = initialData?.ssrFilters;
+  const [scoreMin, setScoreMin] = useQueryState("scoreMin", parseAsInteger.withDefault(ssrFilters?.scoreMin ?? 0).withOptions({ shallow: true, history: "push" }));
+  const [scoreMax, setScoreMax] = useQueryState("scoreMax", parseAsInteger.withDefault(ssrFilters?.scoreMax ?? 100).withOptions({ shallow: true, history: "push" }));
+  const [limit, setLimit] = useQueryState("limit", parseAsInteger.withDefault(ssrFilters?.limit ?? 20).withOptions({ shallow: true, history: "push" }));
+  const [sortBy, setSortBy] = useQueryState("sortBy", parseAsString.withDefault(ssrFilters?.sortBy ?? "date-desc").withOptions({ shallow: true, history: "push" }));
 
   // Batch URL updates
   const updateUrl = useCallback((updates: Record<string, string | number | undefined>) => {
@@ -130,12 +137,22 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
     }
   }, [isEditingName]);
 
-  // Check if current filters match SSR defaults
-  const filtersMatchSSRDefaults = 
-    scoreMin === SSR_DEFAULTS.scoreMin &&
-    scoreMax === SSR_DEFAULTS.scoreMax &&
-    limit === SSR_DEFAULTS.limit &&
-    sortBy === SSR_DEFAULTS.sortBy;
+  // Check if current client filters match what SSR used to fetch data
+  // On first render, we always use SSR data (filters are initialized from SSR values)
+  // After first render, we compare to check if user has changed filters
+  const filtersMatchSSR = ssrFilters
+    ? scoreMin === ssrFilters.scoreMin &&
+      scoreMax === ssrFilters.scoreMax &&
+      limit === ssrFilters.limit &&
+      sortBy === ssrFilters.sortBy
+    : false;
+  
+  // Debug: log filter matching on initial render
+  if (process.env.NODE_ENV === 'development' && ssrFilters) {
+    console.log("[SearchResultsClient] SSR filter match:", filtersMatchSSR, 
+      "client:", { scoreMin, scoreMax, limit, sortBy },
+      "ssr:", ssrFilters);
+  }
 
   // ========== TANSTACK QUERY: Progress (Global counts, independent of filters) ==========
   const progressQuery = useQuery<SearchProgress>({
@@ -159,6 +176,27 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
     sortBy,
   });
 
+  // Pre-compute SSR initial data structure ONCE on mount
+  // This will only be used when filters match SSR state
+  const [ssrInitialDataStructure] = useState(() => {
+    if (!initialData) return undefined;
+    
+    console.log("[SearchResultsClient] Preparing SSR initial data structure:", initialData.candidates.length, "candidates");
+    
+    return {
+      pages: [{
+        candidates: initialData.candidates,
+        pagination: initialData.pagination,
+        progress: initialData.progress,
+      }],
+      pageParams: [null],
+    };
+  });
+
+  // Only use SSR initial data when current filters match what SSR used
+  // This prevents stale SSR data from being used when user changes filters
+  const queryInitialData = filtersMatchSSR ? ssrInitialDataStructure : undefined;
+
   const candidatesQuery = useInfiniteQuery({
     queryKey: candidatesQueryKey,
     queryFn: async ({ pageParam = null }) => {
@@ -180,17 +218,8 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
     getNextPageParam: (lastPage) => lastPage?.pagination?.nextCursor ?? undefined,
     enabled: !!search.id,
     placeholderData: keepPreviousData,
-    // CRITICAL: Only use initialData when current filters match SSR state
-    initialData: (initialData && filtersMatchSSRDefaults) ? {
-      pages: [{
-        candidates: initialData.candidates,
-        pagination: initialData.pagination,
-        progress: initialData.progress,
-      }],
-      pageParams: [null],
-    } : undefined,
-    // Rely on default staleTime from query provider (60s)
-    // Filter changes create new queryKey, so they still get fresh results
+    // CRITICAL: Only use SSR data when filters match - otherwise fetch fresh
+    initialData: queryInitialData,
     gcTime: 5 * 60 * 1000,
   });
 
@@ -267,7 +296,12 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
   });
 
   // ========== Derived state ==========
-  const isActiveSearch = ['created', 'processing', 'pending', 'generating', 'generated', 'executing', 'polling'].includes(realtimeStatus);
+  // Only these statuses indicate sourcing is still running (not scoring)
+  const isSourcingActive = SOURCING_ACTIVE_STATUSES.includes(realtimeStatus);
+  
+  // For UI purposes: is the search still actively sourcing candidates?
+  // Scoring happens AFTER sourcing completes and should NOT block the UI
+  const isActiveSearch = isSourcingActive;
 
   const candidates = useMemo(() => {
     if (!candidatesQuery.data?.pages) return [];
@@ -306,14 +340,32 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
 
   // Loading states
   const isInitialLoading = candidatesQuery.isLoading && !candidatesQuery.data;
-  // Don't show blocking refetch overlay during scoring - we update scores in-place via setQueryData
-  const isRefetching = candidatesQuery.isFetching && !candidatesQuery.isFetchingNextPage && !isInitialLoading && !scoringState.isScoring;
   
-  // Show sourcing loader ONLY when search is actively running AND no candidates yet
-  const shouldShowSourcingLoader = isActiveSearch && candidates.length === 0;
+  // Is this the first ever search (no candidates have been sourced yet)?
+  // We detect this by checking if we're sourcing AND we've never had any candidates
+  const isFirstInitialSearch = isSourcingActive && totalCount === 0;
   
-  // Show skeleton loading when we have NO data yet (true initial load)
-  const shouldShowSkeletons = isInitialLoading && !initialData;
+  // Show sourcing loader ONLY during first initial search (animation with "Searching..." message)
+  const shouldShowSourcingLoader = isFirstInitialSearch;
+  
+  // Don't show blocking refetch overlay during:
+  // - Scoring (we update scores in-place via setQueryData)
+  // - Infinite scroll fetching (has its own indicator)
+  // - When there's no existing data
+  // ONLY show overlay for filter changes when we have data to dim
+  const isRefetching = 
+    candidatesQuery.isFetching && 
+    !candidatesQuery.isFetchingNextPage && 
+    !isInitialLoading && 
+    !scoringState.isScoring && 
+    !isSourcingActive && // Don't show during sourcing (realtime updates handle this)
+    candidates.length > 0; // Only when we have existing data to dim
+  
+  // Show skeleton loading when:
+  // 1. Initial load with no data
+  // 2. Filter change with no matching candidates yet (but not during first search)
+  const isFilterFetching = candidatesQuery.isFetching && !candidatesQuery.isFetchingNextPage && !isFirstInitialSearch;
+  const shouldShowSkeletons = (isInitialLoading && !initialData) || (isFilterFetching && candidates.length === 0);
 
   // ========== Handlers ==========
   const handleRemoveFilter = (category: keyof ParsedQuery) => {
@@ -569,6 +621,8 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
                     sortBy={sortBy}
                     counts={filterCounts}
                     isScoring={isScoring}
+                    showingCount={candidates.length}
+                    totalCount={filteredTotal}
                     onScoreRangeChange={(min, max) => {
                       posthog.capture('search_filter_applied', {
                         search_id: search.id,
@@ -604,13 +658,6 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
                 {/* Results */}
                 {realtimeStatus !== "error" && realtimeStatus !== "failed" && (
                   <div className="relative min-h-[200px]">
-                    {/* Filtered count display */}
-                    {candidates.length > 0 && (
-                      <div className="text-xs font-medium text-muted-foreground mb-2 px-1">
-                        Showing {candidates.length}{filteredTotal && filteredTotal !== candidates.length ? ` of ${filteredTotal}` : ""} candidates
-                      </div>
-                    )}
-
                     {/* Refetch overlay */}
                     {isRefetching && (
                       <div className="absolute inset-0 z-20 flex items-start justify-center pt-20 bg-background/50 backdrop-blur-[1px] transition-all duration-300 animate-in fade-in">
@@ -621,11 +668,11 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
                     )}
 
                     <div className={cn("transition-all duration-300", isRefetching && "opacity-50 grayscale-[0.5]")}>
-                      {/* Skeleton loading */}
+                      {/* Skeleton loading - matches candidate card structure */}
                       {shouldShowSkeletons ? (
-                        <div className="grid grid-cols-1 gap-4">
-                          {Array.from({ length: limit }).map((_, i) => (
-                            <Skeleton key={i} className="h-32 w-full rounded-lg" />
+                        <div className="space-y-3">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <SkeletonCard key={i} index={i} />
                           ))}
                         </div>
                       ) : (
@@ -642,10 +689,10 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
                             onSelectionChange={() => {}}
                           />
                           
-                          {/* Empty state */}
-                          {candidates.length === 0 && !isInitialLoading && realtimeStatus === 'completed' && (
+                          {/* Empty state - only show when not loading */}
+                          {candidates.length === 0 && !candidatesQuery.isFetching && !isFirstInitialSearch && (
                             <div className="text-center py-12 text-muted-foreground">
-                              No profiles found. Try adjusting your search criteria.
+                              No candidates found. Try adjusting your filters.
                             </div>
                           )}
                         </>

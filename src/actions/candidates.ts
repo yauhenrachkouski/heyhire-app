@@ -34,9 +34,6 @@ function decodeCursor(cursor: string): CandidatesCursor | null {
     const raw = Buffer.from(cursor, "base64url").toString("utf8");
     const parsed = JSON.parse(raw) as CandidatesCursor;
     if (!parsed || typeof parsed !== "object" || !("sortBy" in parsed)) return null;
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/0cd1b653-bec9-4bbb-b583-c1c514b1bb69',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'candidates.ts:decodeCursor',message:'Decoded cursor',data:{raw,parsed,createdAtType:typeof parsed.createdAt,createdAtValue:parsed.createdAt},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     return parsed;
   } catch {
     return null;
@@ -603,13 +600,6 @@ export async function getCandidatesForSearch(
       ? decodeCursor(options.cursor)
       : null;
 
-  // #region agent log
-  if (parsedCursor) {
-    const cursorDate = new Date(parsedCursor.createdAt);
-    fetch('http://127.0.0.1:7242/ingest/0cd1b653-bec9-4bbb-b583-c1c514b1bb69',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'candidates.ts:cursorConditions',message:'Cursor date conversion',data:{originalIso:parsedCursor.createdAt,jsDateIso:cursorDate.toISOString(),jsDateMs:cursorDate.getTime(),lastId:parsedCursor.lastId,sortBy:parsedCursor.sortBy},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A-B'})}).catch(()=>{});
-  }
-  // #endregion
-
   // Helper: Range-based cursor comparison for optimal index usage.
   // IMPORTANT: PostgreSQL timestamps have microsecond precision, but JavaScript Date has only millisecond.
   // Instead of using date_trunc() which prevents optimal index usage, we use a range-based approach:
@@ -623,9 +613,6 @@ export async function getCandidatesForSearch(
     case "date-desc":
       orderBy = [desc(searchCandidates.createdAt), desc(searchCandidates.id)];
       if (useCursor && parsedCursor?.sortBy === "date-desc" && cursorCreatedAtMs !== null) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/0cd1b653-bec9-4bbb-b583-c1c514b1bb69',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'candidates.ts:date-desc-cursor',message:'Building date-desc cursor condition (range-based)',data:{cursorCreatedAt:parsedCursor.createdAt,cursorLastId:parsedCursor.lastId,cursorDateMs:cursorCreatedAtMs},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FIX-v3'})}).catch(()=>{});
-        // #endregion
         // Range-based comparison for DESC order (preserves index usage):
         // - createdAt < cursor_floor (strictly before the millisecond)
         // - OR (createdAt within same millisecond AND id < cursorId)
@@ -700,9 +687,6 @@ export async function getCandidatesForSearch(
   // Cursor/keyset pagination path (fast for infinite scroll)
   if (useCursor) {
     const pagePlusOne = limit + 1;
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/0cd1b653-bec9-4bbb-b583-c1c514b1bb69',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'candidates.ts:beforeQuery',message:'About to execute cursor query',data:{searchId,limit:pagePlusOne,hasCursorConditions:cursorConditions.length>0,sortBy},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
     const results = await db.query.searchCandidates.findMany({
       where: and(...conditions, ...cursorConditions),
       with: {
@@ -722,12 +706,6 @@ export async function getCandidatesForSearch(
       limit: pagePlusOne,
       orderBy,
     });
-
-    // #region agent log
-    const firstResult = results[0];
-    const lastResult = results[results.length - 1];
-    fetch('http://127.0.0.1:7242/ingest/0cd1b653-bec9-4bbb-b583-c1c514b1bb69',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'candidates.ts:afterQuery',message:'Query results',data:{resultCount:results.length,firstCreatedAt:firstResult?.createdAt?.toISOString(),firstId:firstResult?.id,lastCreatedAt:lastResult?.createdAt?.toISOString(),lastId:lastResult?.id,firstCreatedAtMs:firstResult?.createdAt?.getTime(),lastCreatedAtMs:lastResult?.createdAt?.getTime()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A-C'})}).catch(()=>{});
-    // #endregion
 
     const hasMore = results.length > limit;
     const pageResults = hasMore ? results.slice(0, limit) : results;
@@ -765,9 +743,6 @@ export async function getCandidatesForSearch(
     let nextCursor: string | null = null;
     if (hasMore && last) {
       if (sortBy === "date-desc" || sortBy === "date-asc") {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/0cd1b653-bec9-4bbb-b583-c1c514b1bb69',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'candidates.ts:encodeCursor-date',message:'Encoding date cursor',data:{lastId:last.id,lastCreatedAtRaw:last.createdAt,lastCreatedAtIso:last.createdAt.toISOString(),lastCreatedAtMs:last.createdAt.getTime(),sortBy},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A-D'})}).catch(()=>{});
-        // #endregion
         nextCursor = encodeCursor({
           sortBy,
           lastId: last.id,
@@ -786,9 +761,6 @@ export async function getCandidatesForSearch(
         });
       }
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/0cd1b653-bec9-4bbb-b583-c1c514b1bb69',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'candidates.ts:returnResults',message:'Returning page results',data:{pageSize:enrichedResults.length,hasMore,nextCursorExists:!!nextCursor},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'summary'})}).catch(()=>{});
-    // #endregion
 
     let totalCount = undefined;
     if (options?.includeTotalCount) {

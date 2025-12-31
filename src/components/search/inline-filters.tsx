@@ -33,6 +33,8 @@ interface InlineFiltersProps {
     fair: number;
   };
   isScoring?: boolean;
+  showingCount?: number;
+  totalCount?: number;
 }
 
 export function InlineFilters({ 
@@ -41,7 +43,9 @@ export function InlineFilters({
   onScoreRangeChange, 
   onSortChange,
   counts,
-  isScoring = false
+  isScoring = false,
+  showingCount,
+  totalCount
 }: InlineFiltersProps) {
   // Use local state only for the slider while dragging to avoid jitter
   // But initialize from props
@@ -136,6 +140,13 @@ export function InlineFilters({
 
   return (
     <div className="flex flex-wrap items-center gap-4 w-full">
+      {/* Showing count */}
+      {showingCount !== undefined && totalCount !== undefined && totalCount > 0 && (
+        <div className="text-sm text-muted-foreground">
+          Showing <span className="font-medium text-foreground">{showingCount}</span> of <span className="font-medium text-foreground">{totalCount}</span> candidates
+        </div>
+      )}
+      
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-muted-foreground flex items-center gap-1.5 mr-1">
           <IconSparkles className="h-4 w-4" />

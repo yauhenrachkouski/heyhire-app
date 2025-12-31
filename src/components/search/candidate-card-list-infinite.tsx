@@ -8,7 +8,6 @@ import { CandidateCardActionBar } from "./candidate-card-action-bar";
 import { SkeletonCard } from "./skeleton-card";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { SourcingCriteria } from "@/types/search";
-import { useInView } from "framer-motion";
 import { IconLoader2 } from "@tabler/icons-react";
 
 // Type for candidate from database schema
@@ -67,15 +66,38 @@ export function CandidateCardListInfinite({
   // Track previous candidate IDs to detect new candidates for animation
   const previousCandidateIdsRef = useRef<Set<string>>(new Set());
 
-  // Infinite scroll trigger
+  // Infinite scroll trigger using IntersectionObserver
+  // framer-motion's useInView has issues with dynamic content, so use native observer
   const loadMoreRef = useRef<HTMLDivElement>(null);
-  const isInView = useInView(loadMoreRef, { margin: "0px 0px 200px 0px" });
+  const hasTriggeredRef = useRef(false);
 
   useEffect(() => {
-    if (isInView && hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
+    const element = loadMoreRef.current;
+    if (!element) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting && hasNextPage && !isFetchingNextPage && !hasTriggeredRef.current) {
+          hasTriggeredRef.current = true;
+          console.log("[InfiniteScroll] Triggering fetchNextPage");
+          fetchNextPage();
+        }
+      },
+      { rootMargin: "200px 0px" }
+    );
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  // Re-attach observer when candidates change (important for SSR -> client transition)
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, candidates.length]);
+
+  // Reset trigger flag when fetching completes
+  useEffect(() => {
+    if (!isFetchingNextPage) {
+      hasTriggeredRef.current = false;
     }
-  }, [isInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
+  }, [isFetchingNextPage]);
 
   const handleShowCandidate = useCallback((candidate: SearchCandidate) => {
     posthog.capture("candidate_details_viewed", {
@@ -153,14 +175,9 @@ export function CandidateCardListInfinite({
     previousCandidateIdsRef.current = allCandidateIds;
   }, [candidates]);
 
+  // Empty state is handled by parent component
   if (candidates.length === 0 && !isLoading) {
-    return (
-      <div className="rounded-lg p-8 text-center bg-muted/30">
-        <p className="text-muted-foreground">
-          No candidates found. Try adjusting your search criteria.
-        </p>
-      </div>
-    );
+    return null;
   }
 
   return (

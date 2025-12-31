@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useRealtime } from "@upstash/realtime/client";
 import type { RealtimeEvents } from "@/lib/realtime";
 
@@ -28,8 +28,11 @@ interface UseSearchRealtimeOptions {
   onScoringCompleted?: (data: { scored: number; errors: number }) => void;
 }
 
-// Statuses that indicate an active/running search
-const ACTIVE_STATUSES = ["created", "processing", "pending", "generating", "generated", "executing", "polling"];
+// Statuses that indicate sourcing is still actively running
+const SOURCING_ACTIVE_STATUSES = ["created", "processing", "pending", "generating", "generated", "executing", "polling"];
+
+// Terminal statuses that should never revert to active
+const TERMINAL_STATUSES = ["completed", "error", "failed"];
 
 export function useSearchRealtime({
   searchId,
@@ -41,6 +44,9 @@ export function useSearchRealtime({
   onScoringProgress,
   onScoringCompleted,
 }: UseSearchRealtimeOptions) {
+  // Track if we've already seen a terminal status to prevent flickering back
+  const hasReachedTerminalRef = useRef(TERMINAL_STATUSES.includes(initialStatus));
+  
   // State initialized from SSR, then realtime takes over
   const [state, setState] = useState<SearchRealtimeState>({
     status: initialStatus,
@@ -55,7 +61,7 @@ export function useSearchRealtime({
     errors: 0,
   });
 
-  const isSearchActive = ACTIVE_STATUSES.includes(state.status);
+  const isSearchActive = SOURCING_ACTIVE_STATUSES.includes(state.status);
   
   // Always connect - we need to receive scoring events even when search is completed
   const shouldConnect = true;
@@ -78,6 +84,19 @@ export function useSearchRealtime({
       // Search events
       if (payload.event === "status.updated") {
         const data = payload.data as { status: string; message: string; progress?: number };
+        
+        // CRITICAL: Once we reach a terminal status, don't allow reverting to active
+        // This prevents flickering back to loading state after completion
+        if (hasReachedTerminalRef.current && SOURCING_ACTIVE_STATUSES.includes(data.status)) {
+          console.log("[useSearchRealtime] Ignoring stale active status after terminal:", data.status);
+          return;
+        }
+        
+        // Mark as terminal if this is a terminal status
+        if (TERMINAL_STATUSES.includes(data.status)) {
+          hasReachedTerminalRef.current = true;
+        }
+        
         setState((prev) => ({
           ...prev,
           status: data.status,
@@ -86,6 +105,13 @@ export function useSearchRealtime({
         }));
       } else if (payload.event === "progress.updated") {
         const data = payload.data as { progress: number; message: string };
+        
+        // Don't update progress if we're in terminal state (prevents loader flicker)
+        if (hasReachedTerminalRef.current) {
+          console.log("[useSearchRealtime] Ignoring progress update after terminal state");
+          return;
+        }
+        
         setState((prev) => ({
           ...prev,
           progress: data.progress,
@@ -93,6 +119,7 @@ export function useSearchRealtime({
         }));
       } else if (payload.event === "search.completed") {
         const data = payload.data as { candidatesCount: number; status: string };
+        hasReachedTerminalRef.current = true;
         setState({
           status: "completed",
           progress: 100,
@@ -101,6 +128,7 @@ export function useSearchRealtime({
         onCompleted?.(data.candidatesCount);
       } else if (payload.event === "search.failed") {
         const data = payload.data as { error: string };
+        hasReachedTerminalRef.current = true;
         setState((prev) => ({
           ...prev,
           status: "error",
@@ -111,7 +139,7 @@ export function useSearchRealtime({
         const data = payload.data as { count: number; total: number };
         onCandidatesAdded?.(data);
       }
-      // Scoring events
+      // Scoring events - these should NOT affect the main search status
       else if (payload.event === "scoring.started") {
         const data = payload.data as { total: number };
         setScoringState({
@@ -146,13 +174,18 @@ export function useSearchRealtime({
     }, [onCompleted, onFailed, onCandidatesAdded, onScoringProgress, onScoringCompleted]),
   });
 
-  // Optimistic status update for immediate UI feedback
+  // Optimistic status update for immediate UI feedback (e.g., "Get +100" button)
   const setOptimisticStatus = useCallback((status: string, message: string = "", progress?: number) => {
+    // If we're explicitly starting a new active search, reset the terminal flag
+    if (SOURCING_ACTIVE_STATUSES.includes(status)) {
+      hasReachedTerminalRef.current = false;
+    }
+    
     setState((prev) => ({
       ...prev,
       status,
       message,
-      progress: progress ?? (ACTIVE_STATUSES.includes(status) ? 5 : prev.progress),
+      progress: progress ?? (SOURCING_ACTIVE_STATUSES.includes(status) ? 5 : prev.progress),
     }));
   }, []);
 

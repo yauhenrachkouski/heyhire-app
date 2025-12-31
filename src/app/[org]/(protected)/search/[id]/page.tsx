@@ -47,6 +47,7 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
 
       // Serialize data to plain objects to avoid "Date cannot be passed to client component" warnings
       // This ensures strict separation between server and client data
+      // IMPORTANT: Include the filters used so client can verify SSR data matches current URL
       initialData = JSON.parse(JSON.stringify({
         candidates: candidatesData,
         pagination,
@@ -60,6 +61,13 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
           fair: scoringProgress.fair,
           searchStatus: scoringProgress.searchStatus,
           searchProgress: scoringProgress.searchProgress,
+        },
+        // Pass SSR filters to client for validation
+        ssrFilters: {
+          scoreMin,
+          scoreMax,
+          limit,
+          sortBy,
         },
       }));
   } catch (error) {
