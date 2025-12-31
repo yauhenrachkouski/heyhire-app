@@ -1,12 +1,16 @@
 "use server";
 
 import { db } from "@/db/drizzle";
-import { candidates, searchCandidates, search, searchCandidateStrategies, sourcingStrategies } from "@/db/schema";
+import { candidates, searchCandidates, search, searchCandidateStrategies, sourcingStrategies, creditTransactions } from "@/db/schema";
 import { eq, and, gte, lte, or, isNull, inArray, count, desc, asc } from "drizzle-orm";
 import { generateId } from "@/lib/id";
 import type { CandidateProfile, ParsedQuery } from "@/types/search";
 import { scoreCandidateMatch, prepareCandidateForScoring } from "@/actions/scoring";
 import { assertNotReadOnlyForOrganization, requireSearchReadAccess } from "@/lib/request-access";
+import { getSessionWithOrg } from "@/lib/auth-helpers";
+import { CREDIT_TYPES } from "@/lib/credits";
+
+const LINKEDIN_OPEN_DESCRIPTION = "Open LinkedIn profile";
 
 /**
  * Transform API CandidateProfile to database candidate format
@@ -466,11 +470,23 @@ export async function getSearchCandidateById(searchCandidateId: string) {
     // Check access
     if (result.search?.organizationId) {
       await assertNotReadOnlyForOrganization(result.search.organizationId);
-      // We should probably check read access, not write access (assertNotReadOnly usually implies write check?)
-      // requireOrganizationReadAccess is better for reading.
-      // But assertNotReadOnlyForOrganization checks if user is in org.
     }
     
+    // Check if credits were already consumed for this candidate by this organization
+    let isRevealed = false;
+    if (result.search?.organizationId) {
+      const existingTransaction = await db.query.creditTransactions.findFirst({
+        where: and(
+          eq(creditTransactions.organizationId, result.search.organizationId),
+          eq(creditTransactions.relatedEntityId, result.candidateId),
+          eq(creditTransactions.creditType, CREDIT_TYPES.GENERAL),
+          eq(creditTransactions.type, "consumption"),
+          eq(creditTransactions.description, LINKEDIN_OPEN_DESCRIPTION)
+        ),
+      });
+      isRevealed = !!existingTransaction;
+    }
+
     // Don't parse JSON - the component will handle it with safeJsonParse
     const candidate = result.candidate;
     const transformedCandidate = {
@@ -482,7 +498,8 @@ export async function getSearchCandidateById(searchCandidateId: string) {
       success: true, 
       data: {
         ...result,
-        candidate: transformedCandidate
+        candidate: transformedCandidate,
+        isRevealed
       }
     };
   } catch (error) {
@@ -595,10 +612,39 @@ export async function getCandidatesForSearch(
     orderBy,
   });
 
-  console.log("[Candidates] Found", results.length, "candidates (Total:", total, ")");
+  // Fetch revealed candidate IDs ONLY for the candidates on this page (keeps this fast without extra indexing)
+  const candidateIdsOnPage = results.map((r) => r.candidateId);
+  const revealedCandidateIds = new Set<string>();
+
+  if (candidateIdsOnPage.length > 0) {
+    const { activeOrgId } = await getSessionWithOrg();
+    const revealedTransactions = await db.query.creditTransactions.findMany({
+      where: and(
+        eq(creditTransactions.organizationId, activeOrgId),
+        eq(creditTransactions.creditType, CREDIT_TYPES.GENERAL),
+        eq(creditTransactions.type, "consumption"),
+        eq(creditTransactions.description, LINKEDIN_OPEN_DESCRIPTION),
+        inArray(creditTransactions.relatedEntityId, candidateIdsOnPage)
+      ),
+      columns: {
+        relatedEntityId: true,
+      },
+    });
+
+    for (const t of revealedTransactions) {
+      if (t.relatedEntityId) revealedCandidateIds.add(t.relatedEntityId);
+    }
+  }
+
+  const enrichedResults = results.map(result => ({
+    ...result,
+    isRevealed: revealedCandidateIds.has(result.candidateId)
+  }));
+
+  console.log("[Candidates] Found", enrichedResults.length, "candidates (Total:", total, ")");
   
   return {
-    data: results,
+    data: enrichedResults,
     pagination: {
       total,
       page,

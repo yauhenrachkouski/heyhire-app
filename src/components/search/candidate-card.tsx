@@ -10,7 +10,8 @@ import {
   IconBan,
   IconBriefcase,
   IconTools,
-  IconList
+  IconList,
+  IconExternalLink
 } from "@tabler/icons-react";
 import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
@@ -292,6 +293,7 @@ interface SearchCandidate {
   matchScore: number | null;
   notes: string | null;
   scoringResult?: string | null;
+  isRevealed?: boolean;
 }
 
 interface CandidateCardProps {
@@ -317,7 +319,7 @@ export function CandidateCard({
 }: CandidateCardProps) {
   const { openLinkedIn, isLoading: isOpeningLinkedIn } = useOpenLinkedInWithCredits();
 
-  const { candidate, matchScore, scoringResult } = searchCandidate;
+  const { candidate, matchScore, scoringResult, isRevealed } = searchCandidate;
   
   const experiences = useMemo(() => safeJsonParse<any[]>(candidate.experiences, []), [candidate.experiences]);
   const skills = useMemo(() => safeJsonParse<Skill[]>(candidate.skills, []), [candidate.skills]);
@@ -485,6 +487,8 @@ export function CandidateCard({
                   >
                     {isOpeningLinkedIn ? (
                       <IconLoader2 className="h-4 w-4 animate-spin" />
+                    ) : isRevealed ? (
+                      <IconExternalLink className="h-4 w-4" />
                     ) : (
                       <IconCoin className="h-4 w-4" />
                     )}
@@ -492,7 +496,7 @@ export function CandidateCard({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {isOpeningLinkedIn ? "Opening LinkedIn..." : "1 credit"}
+                  {isOpeningLinkedIn ? "Opening LinkedIn..." : isRevealed ? "Already revealed (free)" : "1 credit"}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

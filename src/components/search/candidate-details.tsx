@@ -69,6 +69,7 @@ interface SearchCandidate {
   matchScore: number | null;
   notes: string | null;
   scoringResult?: string | null;
+  isRevealed?: boolean;
 }
 
 interface CandidateDetailsProps {
@@ -428,7 +429,7 @@ export function CandidateDetails({ searchCandidate, onClose, sourcingCriteria }:
 
   if (!searchCandidate) return null;
 
-  const { candidate, matchScore, scoringResult } = searchCandidate;
+  const { candidate, matchScore, scoringResult, isRevealed } = searchCandidate;
 
   // Parse JSON fields
   const experiences = useMemo(() => safeJsonParse<any[]>(candidate.experiences, []), [candidate.experiences]);
@@ -595,6 +596,8 @@ export function CandidateDetails({ searchCandidate, onClose, sourcingCriteria }:
                         >
                           {isOpeningLinkedIn ? (
                             <IconLoader2 className="h-4 w-4 animate-spin" />
+                          ) : isRevealed ? (
+                            <IconExternalLink className="h-4 w-4" />
                           ) : (
                             <IconCoin className="h-4 w-4" />
                           )}
@@ -602,7 +605,7 @@ export function CandidateDetails({ searchCandidate, onClose, sourcingCriteria }:
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
-                        {isOpeningLinkedIn ? "Opening LinkedIn..." : "1 credit"}
+                        {isOpeningLinkedIn ? "Opening LinkedIn..." : isRevealed ? "Already revealed (free)" : "1 credit"}
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
