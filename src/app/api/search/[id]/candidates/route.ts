@@ -19,8 +19,11 @@ export async function GET(
     const sortByParam = searchParams.get('sortBy');
     const cursorParam = searchParams.get("cursor");
     
-    const options: { scoreMin?: number; scoreMax?: number; page?: number; limit?: number; sortBy?: string; cursorMode?: boolean; cursor?: string | null } = {};
+    const options: { scoreMin?: number; scoreMax?: number; page?: number; limit?: number; sortBy?: string; cursorMode?: boolean; cursor?: string | null; includeTotalCount?: boolean } = {};
     
+    // Determine if we should fetch progress stats (only on first page load)
+    const isFirstPage = cursorParam === null || cursorParam.length === 0;
+
     if (scoreMinParam !== null) {
       options.scoreMin = parseInt(scoreMinParam, 10);
     }
@@ -40,6 +43,11 @@ export async function GET(
       options.cursorMode = true;
       options.cursor = cursorParam.length > 0 ? cursorParam : null;
     }
+
+    // Always request total count on first page to show "Filtered: X"
+    if (isFirstPage) {
+        options.includeTotalCount = true;
+    }
     
     console.log("[API] Fetching candidates for search:", searchId);
 
@@ -47,11 +55,7 @@ export async function GET(
     const { data: candidatesData, pagination } = await getCandidatesForSearch(searchId, options);
     
     // Get scoring progress stats
-    // Cursor requests are "load more" during infinite scroll; avoid re-counting on every scroll call.
-    // However, if we need to update the total count (e.g. after insert), we should ensure we get it.
-    // Ideally, the client invalidates the query which fetches page 0 (cursor=''), so we get progress.
-    const shouldIncludeProgress = cursorParam === null || cursorParam.length === 0;
-    const scoringProgress = shouldIncludeProgress ? await getSearchProgress(searchId) : null;
+    const scoringProgress = isFirstPage ? await getSearchProgress(searchId) : null;
     
     console.log("[API] Returning", candidatesData.length, "candidates");
 
@@ -64,6 +68,9 @@ export async function GET(
             scored: scoringProgress.scored,
             unscored: scoringProgress.unscored,
             isScoringComplete: scoringProgress.isScoringComplete,
+            excellent: scoringProgress.excellent,
+            good: scoringProgress.good,
+            fair: scoringProgress.fair,
           }
         : undefined,
     });

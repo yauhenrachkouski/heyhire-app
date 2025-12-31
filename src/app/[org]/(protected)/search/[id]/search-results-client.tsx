@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
+import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
+import { useQueryClient, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
+import { useQueryState, parseAsInteger, parseAsString } from "nuqs";
 import type { ParsedQuery, SourcingCriteria } from "@/types/search";
 import { CandidateCardListInfinite } from "@/components/search/candidate-card-list-infinite";
 import { AppliedFilters } from "@/components/search/applied-filters";
@@ -13,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Progress } from "@/components/ui/progress";
 import { IconPencil, IconCalendar, IconUser, IconInfoCircle, IconCopy, IconLoader2 } from "@tabler/icons-react";
 import { formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import SourcingLoader from "@/components/search/sourcing-custom-loader";
 import { updateSearchName } from "@/actions/search";
 import { analyzeAndContinueSearch } from "@/actions/workflow";
@@ -58,13 +60,21 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
     };
   }
   
-  export function SearchResultsClient({ search, initialData }: SearchResultsClientProps) {
+  export function SearchResultsClient(props: SearchResultsClientProps) {
+    return (
+      <Suspense fallback={<SourcingLoader />}>
+        <SearchResultsClientContent {...props} />
+      </Suspense>
+    );
+  }
+
+  function SearchResultsClientContent({ search, initialData }: SearchResultsClientProps) {
   console.log("[SearchResultsClient] Rendering for search:", search.id);
   
   const queryClient = useQueryClient();
-  const searchParams = useSearchParams();
+  // const searchParams = useSearchParams(); // Removed in favor of NUQS
   const router = useRouter();
-  const pathname = usePathname();
+  // const pathname = usePathname(); // Removed in favor of NUQS
 
   const { data: activeOrg } = useActiveOrganization();
   const isReadOnly = useIsReadOnly();
@@ -74,26 +84,24 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
   const [searchName, setSearchName] = useState(search.name);
   const titleRef = useRef<HTMLHeadingElement>(null);
 
-  // Derive state from URL params
-  const scoreMin = searchParams.get("scoreMin") ? parseInt(searchParams.get("scoreMin")!) : 0;
-  const scoreMax = searchParams.get("scoreMax") ? parseInt(searchParams.get("scoreMax")!) : 100;
-  const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!) : 20;
-  const sortBy = searchParams.get("sortBy") || "date-desc";
+  // NUQS state management
+  // Use shallow history to avoid polluting browser history with filter changes
+  const [scoreMin, setScoreMin] = useQueryState("scoreMin", parseAsInteger.withDefault(0).withOptions({ shallow: true, history: "push" }));
+  const [scoreMax, setScoreMax] = useQueryState("scoreMax", parseAsInteger.withDefault(100).withOptions({ shallow: true, history: "push" }));
+  const [limit, setLimit] = useQueryState("limit", parseAsInteger.withDefault(20).withOptions({ shallow: true, history: "push" }));
+  const [sortBy, setSortBy] = useQueryState("sortBy", parseAsString.withDefault("date-desc").withOptions({ shallow: true, history: "push" }));
 
-  // Helper to update URL params
+
+  // Derived update helper - batch updates to avoid multiple URL changes
   const updateUrl = useCallback((updates: Record<string, string | number | undefined>) => {
-    const params = new URLSearchParams(searchParams.toString());
-    
-    Object.entries(updates).forEach(([key, value]) => {
-      if (value === undefined || value === null) {
-        params.delete(key);
-      } else {
-        params.set(key, value.toString());
-      }
-    });
-
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  }, [pathname, router, searchParams]);
+    // Batch all updates together
+    Promise.all([
+      updates.scoreMin !== undefined ? setScoreMin(Number(updates.scoreMin)) : Promise.resolve(),
+      updates.scoreMax !== undefined ? setScoreMax(Number(updates.scoreMax)) : Promise.resolve(),
+      updates.limit !== undefined ? setLimit(Number(updates.limit)) : Promise.resolve(),
+      updates.sortBy !== undefined ? setSortBy(String(updates.sortBy)) : Promise.resolve(),
+    ]);
+  }, [setScoreMin, setScoreMax, setLimit, setSortBy]);
 
   useEffect(() => {
     console.log("[SearchResultsClient] Search changed to:", search.id);
@@ -153,7 +161,7 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
     },
     enabled: !!search.id,
     // Keep previous data during refetch to prevent blank screen
-    placeholderData: (previousData) => previousData,
+    placeholderData: keepPreviousData,
     // Use initialData if provided for the first page
     initialData: initialData ? {
         pages: [{
@@ -275,21 +283,31 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
   const lastPage = data?.pages[data.pages.length - 1];
   const pagination = lastPage?.pagination;
   
-  // Progress is ALWAYS from the first page (contains DB total count).
+  // Progress is ALWAYS from the first page (contains DB total count and score breakdowns).
   // The first-page poller keeps this fresh during active search.
   const progress = data?.pages[0]?.progress;
-  
+  const filteredTotal = data?.pages[0]?.pagination?.total; // From includeTotalCount logic
+
   // Calculate scoring progress
   const scoredCount = scoringState.isScoring ? scoringState.scored : (progress?.scored || 0);
   const totalCandidates = scoringState.isScoring ? scoringState.total : (progress?.total || candidates.length);
   const isScoringComplete = progress?.isScoringComplete ?? (totalCandidates > 0 && scoredCount === totalCandidates);
   const isScoring = scoringState.isScoring;
   
+  // Counts for filters
+  const filterCounts = {
+    total: progress?.total || 0,
+    excellent: progress?.excellent || 0,
+    good: progress?.good || 0,
+    fair: progress?.fair || 0,
+  };
+  
   // Show progress bar logic
   // Show if:
   // 1. Initial loading and no data yet
   // 2. Active search (initial or continue)
   const isInitialLoading = isLoading && !data;
+  const isRefetching = isFetching && !isFetchingNextPage && !isInitialLoading;
   const shouldShowProgressBar = (isActiveSearch || isInitialLoading) && candidates.length === 0;
   
   // Only show skeletons if we are actively loading data AND not showing the progress bar
@@ -534,17 +552,31 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
                   )}
                 </TooltipContent>
               </Tooltip>
-            </TooltipProvider>
 
-            <Button
-              variant={totalCount >= 1000 || isActiveSearch ? "secondary" : "default"}
-              size="sm"
-              className="h-7 text-xs"
-              onClick={handleContinueSearch}
-              disabled={totalCount >= 1000 || isActiveSearch}
-            >
-              {totalCount >= 1000 ? "Limit Reached" : isActiveSearch ? <IconLoader2 className="h-4 w-4 animate-spin" /> : "Get +100"}
-            </Button>
+              <Tooltip delayDuration={300}>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex">
+                    <Button
+                      variant={totalCount >= 1000 || isActiveSearch ? "secondary" : "default"}
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={handleContinueSearch}
+                      disabled={totalCount >= 1000 || isActiveSearch}
+                    >
+                      {totalCount >= 1000 ? "Limit Reached" : isActiveSearch ? <IconLoader2 className="h-4 w-4 animate-spin" /> : "Get +100"}
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  {totalCount >= 1000 
+                    ? "Maximum of 1,000 candidates reached" 
+                    : isActiveSearch 
+                      ? "Search in progress..." 
+                      : "Find 100 more candidates"
+                  }
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
         
@@ -590,6 +622,7 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
               <InlineFilters 
                 scoreRange={[scoreMin, scoreMax]}
                 sortBy={sortBy}
+                counts={filterCounts}
                 onScoreRangeChange={(min, max) => {
                   posthog.capture('search_filter_applied', {
                     search_id: search.id,
@@ -626,28 +659,44 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
 
               {/* Results with skeletons */}
               {realtimeStatus !== "error" && realtimeStatus !== "failed" && (
-                <>
-                  <CandidateCardListInfinite
-                    candidates={candidates}
-                    searchId={search.id}
-                    sourcingCriteria={search.parseResponse || undefined}
-                    viewMode="cards"
-                    isLoading={isInitialLoading}
-                    isFetchingNextPage={isFetchingNextPage}
-                    hasNextPage={hasNextPage}
-                    fetchNextPage={fetchNextPage}
-                    onSelectionChange={() => {}}
-                  />
-                  
-                  {/* Empty state messages if no candidates and not loading/skeleton */}
-                  {candidates.length === 0 && effectiveSkeletonCount === 0 && (
-                     realtimeStatus === 'completed' && !isFetching ? (
-                        <div className="text-center py-12 text-muted-foreground">
-                          No profiles found. Try adjusting your search criteria.
-                        </div>
-                     ) : null
+                <div className="relative min-h-[200px]">
+                  {/* Filtered count display */}
+                  {candidates.length > 0 && (
+                    <div className="text-xs font-medium text-muted-foreground mb-2 px-1">
+                       Showing {candidates.length} {filteredTotal ? `of ${filteredTotal}` : ""} candidates
+                    </div>
                   )}
-                </>
+
+                  {isRefetching && (
+                    <div className="absolute inset-0 z-20 flex items-start justify-center pt-20 bg-background/50 backdrop-blur-[1px] transition-all duration-300 animate-in fade-in">
+                      <div className="bg-background/80 shadow-sm border rounded-full p-2 backdrop-blur-md">
+                        <IconLoader2 className="h-5 w-5 animate-spin text-primary" />
+                      </div>
+                    </div>
+                  )}
+                  <div className={cn("transition-all duration-300", isRefetching && "opacity-50 grayscale-[0.5]")}>
+                    <CandidateCardListInfinite
+                      candidates={candidates}
+                      searchId={search.id}
+                      sourcingCriteria={search.parseResponse || undefined}
+                      viewMode="cards"
+                      isLoading={isInitialLoading}
+                      isFetchingNextPage={isFetchingNextPage}
+                      hasNextPage={hasNextPage}
+                      fetchNextPage={fetchNextPage}
+                      onSelectionChange={() => {}}
+                    />
+                    
+                    {/* Empty state messages if no candidates and not loading/skeleton */}
+                    {candidates.length === 0 && effectiveSkeletonCount === 0 && (
+                       realtimeStatus === 'completed' && !isFetching ? (
+                          <div className="text-center py-12 text-muted-foreground">
+                            No profiles found. Try adjusting your search criteria.
+                          </div>
+                       ) : null
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           </div>

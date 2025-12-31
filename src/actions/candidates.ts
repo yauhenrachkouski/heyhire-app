@@ -553,6 +553,7 @@ export async function getCandidatesForSearch(
     // Cursor/keyset pagination (recommended for infinite scroll performance)
     cursorMode?: boolean;
     cursor?: string | null;
+    includeTotalCount?: boolean;
   }
 ) {
   console.log("[Candidates] Fetching candidates for search:", searchId, "with options:", options);
@@ -792,12 +793,22 @@ export async function getCandidatesForSearch(
     fetch('http://127.0.0.1:7242/ingest/0cd1b653-bec9-4bbb-b583-c1c514b1bb69',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'candidates.ts:returnResults',message:'Returning page results',data:{pageSize:enrichedResults.length,hasMore,nextCursorExists:!!nextCursor},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'summary'})}).catch(()=>{});
     // #endregion
 
+    let totalCount = undefined;
+    if (options?.includeTotalCount) {
+        const [totalResult] = await db
+            .select({ count: count() })
+            .from(searchCandidates)
+            .where(and(...conditions)); // Use filtered conditions, but NOT cursor conditions
+        totalCount = totalResult?.count || 0;
+    }
+
     return {
       data: enrichedResults,
       pagination: {
         limit,
         hasMore,
         nextCursor,
+        total: totalCount
       },
     };
   }
@@ -968,10 +979,13 @@ export async function updateCandidateStatus(
 export async function getSearchProgress(searchId: string) {
   await requireSearchReadAccess(searchId);
   
-  const [result] = await db
+    const [result] = await db
     .select({
       total: count(),
       scored: count(searchCandidates.matchScore),
+      excellent: count(sql`CASE WHEN ${searchCandidates.matchScore} >= 80 THEN 1 END`),
+      good: count(sql`CASE WHEN ${searchCandidates.matchScore} >= 70 AND ${searchCandidates.matchScore} < 80 THEN 1 END`),
+      fair: count(sql`CASE WHEN ${searchCandidates.matchScore} >= 50 AND ${searchCandidates.matchScore} < 70 THEN 1 END`),
     })
     .from(searchCandidates)
     .where(eq(searchCandidates.searchId, searchId));
@@ -984,6 +998,9 @@ export async function getSearchProgress(searchId: string) {
     total,
     scored,
     unscored,
+    excellent: result?.excellent || 0,
+    good: result?.good || 0,
+    fair: result?.fair || 0,
     isScoringComplete: unscored === 0,
   };
 }

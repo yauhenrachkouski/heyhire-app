@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Slider } from "@/components/ui/slider";
 import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -10,36 +11,61 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { IconSparkles, IconSortAscending, IconSortDescending } from "@tabler/icons-react";
-import { cn } from "@/lib/utils";
+
 
 interface InlineFiltersProps {
   scoreRange?: [number, number];
   sortBy?: string;
   onScoreRangeChange?: (min: number, max: number) => void;
   onSortChange?: (sort: string) => void;
+  counts?: {
+    total: number;
+    excellent: number;
+    good: number;
+    fair: number;
+  };
 }
 
 export function InlineFilters({ 
   scoreRange = [0, 100], 
   sortBy = "date-desc", 
   onScoreRangeChange, 
-  onSortChange 
+  onSortChange,
+  counts
 }: InlineFiltersProps) {
   // Use local state only for the slider while dragging to avoid jitter
   // But initialize from props
   const [localMinScore, setLocalMinScore] = useState<number>(scoreRange[0]);
-  const [isCustom, setIsCustom] = useState<boolean>(scoreRange[0] > 0 && ![0, 50, 70, 80].includes(scoreRange[0]));
+  const [isCustom, setIsCustom] = useState<boolean>(() => {
+    const isStandardMin = [0, 50, 70, 80].includes(scoreRange[0]);
+    const isStandardMax = scoreRange[1] === 100;
+    return !(isStandardMin && isStandardMax);
+  });
 
   // Sync local state when props change (from URL)
   useEffect(() => {
     setLocalMinScore(scoreRange[0]);
-    // Determine if custom based on value, unless we are already in custom mode
-    const isStandard = [0, 50, 70, 80].includes(scoreRange[0]);
-    if (!isStandard) setIsCustom(true);
-    else if (scoreRange[0] === 0 && isCustom) setIsCustom(false); // Only exit custom if explicitly 0
+    
+    // Check if the current range matches any standard preset (min matches AND max is 100)
+    const isStandardMin = [0, 50, 70, 80].includes(scoreRange[0]);
+    const isStandardMax = scoreRange[1] === 100;
+    const isStandard = isStandardMin && isStandardMax;
+    
+    if (isStandard) {
+      setIsCustom(false);
+    } else {
+      setIsCustom(true);
+    }
   }, [scoreRange]);
+
 
   const sortLabel =
     sortBy === "date-desc"
@@ -85,12 +111,26 @@ export function InlineFilters({
 
   // Determine the current select value
   const getSelectValue = () => {
+    // If we are in custom mode (based on logic above), return "custom"
     if (isCustom) return "custom";
+    
+    // Double check logic for render safety: standard if max is 100 and min is in list
+    const isStandardMax = scoreRange[1] === 100;
+    if (!isStandardMax) return "custom";
+
     if ([0, 50, 70, 80].includes(localMinScore)) return localMinScore.toString();
     return "custom";
   };
 
-  const toggleItemClass = "px-4 min-w-12 data-[state=on]:bg-black data-[state=on]:text-white hover:data-[state=on]:bg-black/90";
+  const toggleItemClass = "px-4 min-w-12";
+
+  const presets = [
+    { value: "0", label: "All", count: counts?.total, tooltip: "Show all candidates (0+)" },
+    { value: "80", label: "Excellent", count: counts?.excellent, tooltip: "Score 80+" },
+    { value: "70", label: "Good", count: counts?.good, tooltip: "Score 70+" },
+    { value: "50", label: "Fair", count: counts?.fair, tooltip: "Score 50+" },
+    { value: "custom", label: "Custom", tooltip: "Set custom score range" },
+  ];
 
   return (
     <div className="flex flex-wrap items-center gap-4 w-full">
@@ -99,19 +139,29 @@ export function InlineFilters({
           <IconSparkles className="h-4 w-4" />
           Score
         </span>
-        <ToggleGroup 
-          type="single" 
-          value={getSelectValue()} 
-          onValueChange={handlePresetChange}
-          variant="outline"
-          className="justify-start"
-        >
-          <ToggleGroupItem value="0" className={toggleItemClass}>All</ToggleGroupItem>
-          <ToggleGroupItem value="80" className={toggleItemClass}>Excellent</ToggleGroupItem>
-          <ToggleGroupItem value="70" className={toggleItemClass}>Good</ToggleGroupItem>
-          <ToggleGroupItem value="50" className={toggleItemClass}>Fair</ToggleGroupItem>
-          <ToggleGroupItem value="custom" className={toggleItemClass}>Custom</ToggleGroupItem>
-        </ToggleGroup>
+        <TooltipProvider>
+          <ToggleGroup 
+            id="score-toggle-group"
+            type="single" 
+            value={getSelectValue()} 
+            onValueChange={handlePresetChange}
+            variant="outline"
+            className="justify-start"
+          >
+            {presets.map((preset) => (
+              <ToggleGroupItem key={preset.value} value={preset.value} className={toggleItemClass} title={preset.tooltip}>
+                <div className="flex items-center gap-2">
+                  <span>{preset.label}</span>
+                  {preset.count !== undefined && preset.count > 0 && (
+                    <Badge variant="secondary" className="px-1.5 py-0 h-5 text-[10px] font-medium min-w-5 justify-center bg-muted-foreground/15 text-muted-foreground">
+                      {preset.count}
+                    </Badge>
+                  )}
+                </div>
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </TooltipProvider>
 
         {isCustom && (
           <div className="flex items-center gap-3 px-3 border-l h-5 my-auto animate-in fade-in zoom-in-95 duration-200">

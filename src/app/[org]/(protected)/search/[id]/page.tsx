@@ -40,6 +40,7 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
         sortBy,
         cursorMode: true,
         cursor: null,
+        includeTotalCount: true,
       });
       
       const scoringProgress = await getSearchProgress(search.id);
@@ -54,6 +55,9 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
           scored: scoringProgress.scored,
           unscored: scoringProgress.unscored,
           isScoringComplete: scoringProgress.isScoringComplete,
+          excellent: scoringProgress.excellent,
+          good: scoringProgress.good,
+          fair: scoringProgress.fair,
         },
       }));
   } catch (error) {
