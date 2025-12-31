@@ -30,36 +30,29 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
   // Parse search params for initial query
   const scoreMin = resolvedSearchParams.scoreMin ? parseInt(resolvedSearchParams.scoreMin as string) : 0;
   const scoreMax = resolvedSearchParams.scoreMax ? parseInt(resolvedSearchParams.scoreMax as string) : 100;
-  const page = resolvedSearchParams.page ? parseInt(resolvedSearchParams.page as string) : 1;
+  // Infinite scroll always starts at page 1 (we intentionally ignore any `page` param)
+  const page = 1;
   const limit = resolvedSearchParams.limit ? parseInt(resolvedSearchParams.limit as string) : 20;
   const sortBy = (resolvedSearchParams.sortBy as string) || "date-desc";
 
   const queryClient = new QueryClient();
 
-  const queryKey = searchCandidatesKeys.list(search.id, {
-    scoreMin,
-    scoreMax,
-    page: page - 1,
-    limit,
-    sortBy,
-  });
-
-  // Prefetch candidates
-  await queryClient.prefetchQuery({
-    queryKey,
-    queryFn: async () => {
+  // Prefetch candidates (cursor-mode to match infinite scroll)
+  let initialData;
+  try {
       console.log("[SearchPage] Prefetching candidates");
       const { data: candidatesData, pagination } = await getCandidatesForSearch(search.id, {
         scoreMin: scoreMin !== 0 ? scoreMin : undefined,
         scoreMax: scoreMax !== 100 ? scoreMax : undefined,
-        page,
         limit,
         sortBy,
+        cursorMode: true,
+        cursor: null,
       });
       
       const scoringProgress = await getSearchProgress(search.id);
 
-      return {
+      initialData = {
         candidates: candidatesData,
         pagination,
         progress: {
@@ -69,15 +62,16 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
           isScoringComplete: scoringProgress.isScoringComplete,
         },
       };
-    },
-  });
+  } catch (error) {
+      console.error("[SearchPage] Error prefetching candidates:", error);
+  }
   
   return (
     <HydrationBoundary state={dehydrate(queryClient)}>
       <div className="fixed inset-0 bg-sidebar -z-10" />
       <div className="container mx-auto">
         {/* Key ensures component remounts when navigating between searches */}
-        <SearchResultsClient key={search.id} search={search} />
+        <SearchResultsClient key={search.id} search={search} initialData={initialData} />
         {showDebug ? <ScoringDebugPanel searchId={search.id} /> : null}
       </div>
     </HydrationBoundary>

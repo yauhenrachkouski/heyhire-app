@@ -14,10 +14,17 @@ import {
 import { getCommonPinningStyles } from "@/lib/data-table";
 import { cn } from "@/lib/utils";
 
+import { DataTableInfiniteScrollTrigger } from "@/components/data-table/data-table-infinite-scroll-trigger";
+
 interface DataTableProps<TData> extends React.ComponentProps<"div"> {
   table: TanstackTable<TData>;
   actionBar?: React.ReactNode;
   isLoading?: boolean;
+  infiniteScroll?: {
+    hasNextPage: boolean;
+    isFetchingNextPage: boolean;
+    fetchNextPage: () => void;
+  };
 }
 
 export function DataTable<TData>({
@@ -26,6 +33,7 @@ export function DataTable<TData>({
   children,
   className,
   isLoading = false,
+  infiniteScroll,
   ...props
 }: DataTableProps<TData>) {
   const columnCount = table.getAllColumns().length;
@@ -107,7 +115,15 @@ export function DataTable<TData>({
         </Table>
       </div>
       <div className="flex flex-col gap-2.5">
-        <DataTablePagination table={table} />
+        {infiniteScroll ? (
+          <DataTableInfiniteScrollTrigger
+            hasNextPage={infiniteScroll.hasNextPage}
+            isFetchingNextPage={infiniteScroll.isFetchingNextPage}
+            fetchNextPage={infiniteScroll.fetchNextPage}
+          />
+        ) : (
+          <DataTablePagination table={table} />
+        )}
         {actionBar &&
           table.getFilteredSelectedRowModel().rows.length > 0 &&
           actionBar}

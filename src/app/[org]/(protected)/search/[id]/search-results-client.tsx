@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import type { ParsedQuery, SourcingCriteria } from "@/types/search";
-import { CandidateCardListPaginated } from "@/components/search/candidate-card-list-paginated";
+import { CandidateCardListInfinite } from "@/components/search/candidate-card-list-infinite";
 import { AppliedFilters } from "@/components/search/applied-filters";
 import { InlineFilters } from "@/components/search/inline-filters";
 import { CriteriaDisplay } from "@/components/search/criteria-display";
@@ -25,25 +25,40 @@ import { SearchRightSidebar } from "@/components/search/search-right-sidebar";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { searchCandidatesKeys } from "@/lib/query-keys/search";
 
-interface SearchResultsClientProps {
-  search: {
-    id: string;
-    name: string;
-    query: string;
-    params: ParsedQuery;
-    parseResponse: SourcingCriteria | null;
-    createdAt: Date | string;
-    status: string;
-    progress: number | null;
-    createdBy: {
+  interface SearchResultsClientProps {
+    search: {
       id: string;
       name: string;
-      email: string;
-    } | null;
-  };
-}
-
-export function SearchResultsClient({ search }: SearchResultsClientProps) {
+      query: string;
+      params: ParsedQuery;
+      parseResponse: SourcingCriteria | null;
+      createdAt: Date | string;
+      status: string;
+      progress: number | null;
+      createdBy: {
+        id: string;
+        name: string;
+        email: string;
+      } | null;
+    };
+    initialData?: {
+        candidates: any[];
+        pagination: {
+            // Cursor-mode fields
+            nextCursor?: string | null;
+            hasMore?: boolean;
+            // Offset-mode fields (legacy)
+            page?: number;
+            total?: number;
+            totalPages?: number;
+            // Common
+            limit: number;
+        };
+        progress: any;
+    };
+  }
+  
+  export function SearchResultsClient({ search, initialData }: SearchResultsClientProps) {
   console.log("[SearchResultsClient] Rendering for search:", search.id);
   
   const queryClient = useQueryClient();
@@ -62,12 +77,8 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
   // Derive state from URL params
   const scoreMin = searchParams.get("scoreMin") ? parseInt(searchParams.get("scoreMin")!) : 0;
   const scoreMax = searchParams.get("scoreMax") ? parseInt(searchParams.get("scoreMax")!) : 100;
-  const page = searchParams.get("page") ? parseInt(searchParams.get("page")!) : 1;
   const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!) : 20;
   const sortBy = searchParams.get("sortBy") || "date-desc";
-  
-  // React Table uses 0-based index
-  const pageIndex = page - 1;
 
   // Helper to update URL params
   const updateUrl = useCallback((updates: Record<string, string | number | undefined>) => {
@@ -100,25 +111,53 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
   const activeSearchStatusRef = useRef<string>(search.status);
   
   // Poll for candidates with server-side filtering
-  const { data, isLoading, isFetching, error, refetch } = useQuery({
-    queryKey: searchCandidatesKeys.list(search.id, {
-      scoreMin,
-      scoreMax,
-      page: pageIndex,
-      limit,
-      sortBy,
-    }),
-    queryFn: async () => {
-      console.log("[SearchResultsClient] Fetching candidates for search:", search.id);
+  const queryKey = searchCandidatesKeys.list(search.id, {
+    scoreMin,
+    scoreMax,
+    page: -1,
+    limit,
+    sortBy,
+  });
+
+  const fetchFirstPage = useCallback(async () => {
+    const url = new URL(`/api/search/${search.id}/candidates`, window.location.origin);
+
+    if (scoreMin !== 0 || scoreMax !== 100) {
+      url.searchParams.set("scoreMin", scoreMin.toString());
+      url.searchParams.set("scoreMax", scoreMax.toString());
+    }
+    url.searchParams.set("limit", limit.toString());
+    url.searchParams.set("sortBy", sortBy);
+    // empty cursor => first page and includes progress
+    url.searchParams.set("cursor", "");
+
+    const response = await fetch(url.toString());
+    if (!response.ok) throw new Error("Failed to fetch candidates");
+    return await response.json();
+  }, [limit, scoreMax, scoreMin, search.id, sortBy]);
+
+  const { 
+    data, 
+    isLoading, 
+    isFetching, 
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    error, 
+    refetch,
+  } = useInfiniteQuery({
+    queryKey,
+    queryFn: async ({ pageParam = null }) => {
+      console.log("[SearchResultsClient] Fetching candidates cursor:", pageParam);
       const url = new URL(`/api/search/${search.id}/candidates`, window.location.origin);
       
       if (scoreMin !== 0 || scoreMax !== 100) {
         url.searchParams.set('scoreMin', scoreMin.toString());
         url.searchParams.set('scoreMax', scoreMax.toString());
       }
-      url.searchParams.set('page', (pageIndex + 1).toString());
       url.searchParams.set('limit', limit.toString());
       url.searchParams.set('sortBy', sortBy);
+      url.searchParams.set("cursor", pageParam ? String(pageParam) : "");
       
       const response = await fetch(url.toString());
       if (!response.ok) {
@@ -126,19 +165,91 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
       }
       return await response.json();
     },
-    // Poll every 2 seconds during active search to get updated candidate counts
-    refetchInterval: (query) => {
-      const isActive = ['created', 'processing', 'pending', 'generating', 'generated', 'executing', 'polling'].includes(activeSearchStatusRef.current);
-      return isActive ? 2000 : false;
+    initialPageParam: null,
+    getNextPageParam: (lastPage) => {
+      const nextCursor = lastPage?.pagination?.nextCursor;
+      return nextCursor ? nextCursor : undefined;
     },
     enabled: !!search.id,
     // Keep previous data during refetch to prevent blank screen
     placeholderData: (previousData) => previousData,
+    // Use initialData if provided for the first page
+    initialData: initialData ? {
+        pages: [{
+            candidates: initialData.candidates,
+            pagination: initialData.pagination,
+            progress: initialData.progress
+        }],
+        pageParams: [1]
+    } : undefined,
     // Cache data for 30 seconds to prevent unnecessary refetches
     staleTime: 30 * 1000,
     // Keep cache for 5 minutes
     gcTime: 5 * 60 * 1000,
   });
+
+  // Manual polling: refresh ONLY the first page (progress + newest candidates).
+  // This avoids refetching all loaded pages (which gets slower as you scroll).
+  useEffect(() => {
+    if (!search.id) return;
+    const isActive = ["created", "processing", "pending", "generating", "generated", "executing", "polling"].includes(
+      activeSearchStatusRef.current,
+    );
+    if (!isActive) return;
+
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const first = await fetchFirstPage();
+        if (cancelled) return;
+        queryClient.setQueryData(queryKey, (old: any) => {
+          const oldPages = old?.pages ?? [];
+
+          // Merge (prepend) any newly discovered candidates into existing data.
+          // IMPORTANT: Do not replace page 0 wholesale, otherwise page boundaries shift
+          // and we create gaps (e.g. some items fall from old page0 into page1, but page1
+          // remains the old snapshot). This is exactly how you can end up with
+          // "total=50" but only "40 loaded".
+          const allExisting = new Set<string>();
+          for (const p of oldPages) {
+            for (const sc of p?.candidates ?? []) {
+              const k = sc?.candidateId ?? sc?.candidate?.id ?? sc?.id;
+              if (k) allExisting.add(k);
+            }
+          }
+
+          const freshCandidates = (first?.candidates ?? []).filter((sc: any) => {
+            const k = sc?.candidateId ?? sc?.candidate?.id ?? sc?.id;
+            return k ? !allExisting.has(k) : true;
+          });
+
+          const prevFirst = oldPages[0] ?? first;
+          const mergedFirst = {
+            ...prevFirst,
+            ...first,
+            candidates: [...freshCandidates, ...(prevFirst?.candidates ?? [])],
+          };
+
+          const nextPages = [mergedFirst, ...oldPages.slice(1)];
+          return {
+            ...old,
+            pages: nextPages,
+            pageParams: old?.pageParams ?? [null],
+          };
+        });
+      } catch {
+        // ignore polling errors; UI already has error handling for main fetches
+      }
+    };
+
+    // Run once immediately, then interval
+    tick();
+    const id = window.setInterval(tick, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [fetchFirstPage, queryClient, queryKey, search.id]);
 
   // Real-time updates via Upstash Realtime
   const handleSearchCompleted = useCallback(async (candidatesCount: number) => {
@@ -148,7 +259,8 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
     const result = await refetch();
     
     // If no candidates returned but API says there should be some, retry after a short delay
-    if (candidatesCount > 0 && (!result.data?.candidates || result.data.candidates.length === 0)) {
+    const hasCandidates = result.data?.pages.some((page: any) => page.candidates && page.candidates.length > 0);
+    if (candidatesCount > 0 && !hasCandidates) {
       console.log("[SearchResultsClient] No candidates returned, retrying in 500ms...");
       setTimeout(() => {
         refetch();
@@ -169,34 +281,37 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
       searchCandidatesKeys.list(search.id, {
         scoreMin,
         scoreMax,
-        page: pageIndex,
+        page: -1, // Use the infinite query key
         limit,
         sortBy,
       }),
       (oldData: any) => {
-        if (!oldData?.candidates) return oldData;
+        if (!oldData?.pages) return oldData;
         
         return {
           ...oldData,
-          candidates: oldData.candidates.map((c: any) => 
-            c.id === data.searchCandidateId 
-              ? { 
-                  ...c, 
-                  matchScore: data.score,
-                  // Update detailed scoring result if available
-                  scoringResult: data.scoringResult ? JSON.stringify(data.scoringResult) : c.scoringResult 
-                }
-              : c
-          ),
-          progress: {
-            ...oldData.progress,
-            scored: data.scored,
-            unscored: data.total - data.scored,
-          },
+          pages: oldData.pages.map((page: any) => ({
+            ...page,
+            candidates: page.candidates.map((c: any) => 
+              c.id === data.searchCandidateId 
+                ? { 
+                    ...c, 
+                    matchScore: data.score,
+                    // Update detailed scoring result if available
+                    scoringResult: data.scoringResult ? JSON.stringify(data.scoringResult) : c.scoringResult 
+                  }
+                : c
+            ),
+            progress: {
+              ...page.progress,
+              scored: data.scored,
+              unscored: data.total - data.scored,
+            },
+          })),
         };
       }
     );
-  }, [queryClient, search.id, scoreMin, scoreMax, pageIndex, limit, sortBy]);
+  }, [queryClient, search.id, scoreMin, scoreMax, limit, sortBy]);
 
   // Handle scoring completion
   const handleScoringCompleted = useCallback((data: { scored: number; errors: number }) => {
@@ -234,13 +349,36 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
   useEffect(() => {
     if (isActiveSearch) {
       console.log("[SearchResultsClient] Search is active, refetching candidates");
-      refetch();
+      // Poller will refresh the first page; avoid refetching all pages.
+      // Keeping this as a no-op avoids expensive deep-page refetches.
     }
   }, [realtimeStatus, isActiveSearch, refetch]);
 
-  const candidates = data?.candidates || [];
-  const pagination = data?.pagination;
-  const progress = data?.progress;
+  const candidates = useMemo(() => {
+    if (!data?.pages) return [];
+    
+    const flat = data.pages.flatMap((page) => page.candidates) ?? [];
+
+    // Dedupe to prevent React key collisions and repeated rows.
+    // This can happen during polling when new candidates are inserted at the top.
+    const seen = new Set<string>();
+    return flat.filter((sc: any) => {
+      const key =
+        sc?.candidateId ??
+        sc?.candidate?.id ??
+        sc?.id;
+      if (!key) return true;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [data]);
+  const lastPage = data?.pages[data.pages.length - 1];
+  const pagination = lastPage?.pagination;
+  
+  // Progress is ALWAYS from the first page (contains DB total count).
+  // The first-page poller keeps this fresh during active search.
+  const progress = data?.pages[0]?.progress;
   
   // Calculate scoring progress
   const scoredCount = scoringState.isScoring ? scoringState.scored : (progress?.scored || 0);
@@ -274,8 +412,9 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
   
   const effectiveSkeletonCount = (shouldShowProgressBar || (isLoading && !data)) ? limit : 0;
 
-  // Use progress.total (from DB count) as the source of truth for candidate count
-  // This shows the exact number of candidates parsed to DB
+  // Always use DB total count (from first page progress).
+  // This count should NOT change during scrolling, only when new candidates are added to DB.
+  // Never fall back to candidates.length (rendered count), as that changes during scroll.
   const totalCount = progress?.total ?? 0;
 
   const handleRemoveFilter = (category: keyof ParsedQuery) => {
@@ -553,7 +692,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
                     score_min: min,
                     score_max: max,
                   });
-                  updateUrl({ scoreMin: min, scoreMax: max, page: 1 });
+                  updateUrl({ scoreMin: min, scoreMax: max, page: undefined });
                 }}
                 onSortChange={(sort) => {
                   posthog.capture('search_filter_applied', {
@@ -563,7 +702,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
                     from_sort_by: sortBy,
                     sort_by: sort,
                   });
-                  updateUrl({ sortBy: sort, page: 1 });
+                  updateUrl({ sortBy: sort, page: undefined });
                 }}
               />
             </div>
@@ -580,21 +719,16 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
               {/* Results with skeletons */}
               {realtimeStatus !== "error" && realtimeStatus !== "failed" && (
                 <>
-                  <CandidateCardListPaginated
+                  <CandidateCardListInfinite
                     candidates={candidates}
                     searchId={search.id}
                     sourcingCriteria={search.parseResponse || undefined}
                     viewMode="cards"
-                    skeletonCount={effectiveSkeletonCount}
-                    pageIndex={pageIndex}
-                    pageSize={limit}
-                    pageCount={pagination?.totalPages || 0}
-                    onPaginationChange={({ pageIndex: newPageIndex, pageSize: newPageSize }) => {
-                      updateUrl({ 
-                        page: newPageIndex + 1, 
-                        limit: newPageSize 
-                      });
-                    }}
+                    isLoading={isInitialLoading}
+                    isFetchingNextPage={isFetchingNextPage}
+                    hasNextPage={hasNextPage}
+                    fetchNextPage={fetchNextPage}
+                    onSelectionChange={() => {}}
                   />
                   
                   {/* Empty state messages if no candidates and not loading/skeleton */}

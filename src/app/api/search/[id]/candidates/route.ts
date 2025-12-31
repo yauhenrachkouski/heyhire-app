@@ -15,8 +15,9 @@ export async function GET(
     const pageParam = searchParams.get('page');
     const limitParam = searchParams.get('limit');
     const sortByParam = searchParams.get('sortBy');
+    const cursorParam = searchParams.get("cursor");
     
-    const options: { scoreMin?: number; scoreMax?: number; page?: number; limit?: number; sortBy?: string } = {};
+    const options: { scoreMin?: number; scoreMax?: number; page?: number; limit?: number; sortBy?: string; cursorMode?: boolean; cursor?: string | null } = {};
     
     if (scoreMinParam !== null) {
       options.scoreMin = parseInt(scoreMinParam, 10);
@@ -33,6 +34,10 @@ export async function GET(
     if (sortByParam !== null) {
       options.sortBy = sortByParam;
     }
+    if (cursorParam !== null) {
+      options.cursorMode = true;
+      options.cursor = cursorParam.length > 0 ? cursorParam : null;
+    }
     
     console.log("[API] Fetching candidates for search:", searchId);
 
@@ -40,19 +45,23 @@ export async function GET(
     const { data: candidatesData, pagination } = await getCandidatesForSearch(searchId, options);
     
     // Get scoring progress stats
-    const scoringProgress = await getSearchProgress(searchId);
+    // Cursor requests are "load more" during infinite scroll; avoid re-counting on every scroll call.
+    const shouldIncludeProgress = cursorParam === null || cursorParam.length === 0;
+    const scoringProgress = shouldIncludeProgress ? await getSearchProgress(searchId) : null;
     
     console.log("[API] Returning", candidatesData.length, "candidates");
 
     return Response.json({
       candidates: candidatesData,
       pagination,
-      progress: {
-        total: scoringProgress.total,
-        scored: scoringProgress.scored,
-        unscored: scoringProgress.unscored,
-        isScoringComplete: scoringProgress.isScoringComplete,
-      },
+      progress: scoringProgress
+        ? {
+            total: scoringProgress.total,
+            scored: scoringProgress.scored,
+            unscored: scoringProgress.unscored,
+            isScoringComplete: scoringProgress.isScoringComplete,
+          }
+        : undefined,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

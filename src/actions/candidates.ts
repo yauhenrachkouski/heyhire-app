@@ -2,7 +2,7 @@
 
 import { db } from "@/db/drizzle";
 import { candidates, searchCandidates, search, searchCandidateStrategies, sourcingStrategies, creditTransactions } from "@/db/schema";
-import { eq, and, gte, lte, or, isNull, inArray, count, desc, asc } from "drizzle-orm";
+import { eq, and, gte, lte, lt, gt, or, isNull, inArray, count, desc, asc, sql } from "drizzle-orm";
 import { generateId } from "@/lib/id";
 import type { CandidateProfile, ParsedQuery } from "@/types/search";
 import { scoreCandidateMatch, prepareCandidateForScoring } from "@/actions/scoring";
@@ -11,6 +11,34 @@ import { getSessionWithOrg } from "@/lib/auth-helpers";
 import { CREDIT_TYPES } from "@/lib/credits";
 
 const LINKEDIN_OPEN_DESCRIPTION = "Open LinkedIn profile";
+
+type CandidatesCursor =
+  | {
+      sortBy: "date-desc" | "date-asc";
+      // Store the raw search_candidates.id - we'll lookup the row to get exact createdAt
+      lastId: string;
+    }
+  | {
+      sortBy: "score-desc" | "score-asc";
+      scoreKey: number; // matchScore with nulls coerced
+      // Store the raw search_candidates.id - we'll lookup the row to get exact createdAt
+      lastId: string;
+    };
+
+function encodeCursor(cursor: CandidatesCursor): string {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
+
+function decodeCursor(cursor: string): CandidatesCursor | null {
+  try {
+    const raw = Buffer.from(cursor, "base64url").toString("utf8");
+    const parsed = JSON.parse(raw) as CandidatesCursor;
+    if (!parsed || typeof parsed !== "object" || !("sortBy" in parsed)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Transform API CandidateProfile to database candidate format
@@ -519,6 +547,9 @@ export async function getCandidatesForSearch(
     page?: number;
     limit?: number;
     sortBy?: string;
+    // Cursor/keyset pagination (recommended for infinite scroll performance)
+    cursorMode?: boolean;
+    cursor?: string | null;
   }
 ) {
   console.log("[Candidates] Fetching candidates for search:", searchId, "with options:", options);
@@ -553,54 +584,175 @@ export async function getCandidatesForSearch(
     }
   }
 
-  // Get total count for pagination
+  const limit = options?.limit || 20;
+  const sortBy = (options?.sortBy || "date-desc") as
+    | "date-desc"
+    | "date-asc"
+    | "score-desc"
+    | "score-asc";
+
+  const useCursor = options?.cursorMode === true || options?.cursor !== undefined;
+
+  // Determine order + cursor condition (keyset)
+  let orderBy: any[] = [];
+  const cursorConditions: any[] = [];
+
+  const parsedCursor =
+    options?.cursor && typeof options.cursor === "string" && options.cursor.length > 0
+      ? decodeCursor(options.cursor)
+      : null;
+
+  switch (sortBy) {
+    case "date-desc":
+      orderBy = [desc(searchCandidates.createdAt), desc(searchCandidates.id)];
+      if (useCursor && parsedCursor?.sortBy === "date-desc") {
+        // Use subquery to get exact timestamp from DB to avoid timezone issues
+        // This ensures we compare against the exact DB value, not a JS-converted value
+        cursorConditions.push(
+          sql`(${searchCandidates.createdAt}, ${searchCandidates.id}) < (
+            (SELECT created_at FROM search_candidates WHERE id = ${parsedCursor.lastId}),
+            ${parsedCursor.lastId}
+          )`,
+        );
+      }
+      break;
+    case "date-asc":
+      orderBy = [asc(searchCandidates.createdAt), asc(searchCandidates.id)];
+      if (useCursor && parsedCursor?.sortBy === "date-asc") {
+        cursorConditions.push(
+          sql`(${searchCandidates.createdAt}, ${searchCandidates.id}) > (
+            (SELECT created_at FROM search_candidates WHERE id = ${parsedCursor.lastId}),
+            ${parsedCursor.lastId}
+          )`,
+        );
+      }
+      break;
+    case "score-desc":
+      // Put NULL scores last by coercing them to -1 for ordering.
+      // Tie-break by createdAt/id so cursor paging is stable.
+      orderBy = [
+        sql`coalesce(${searchCandidates.matchScore}, -1) desc`,
+        desc(searchCandidates.createdAt),
+        desc(searchCandidates.id),
+      ];
+      if (useCursor && parsedCursor?.sortBy === "score-desc") {
+        cursorConditions.push(
+          sql`(coalesce(${searchCandidates.matchScore}, -1), ${searchCandidates.createdAt}, ${searchCandidates.id}) < (
+            ${parsedCursor.scoreKey},
+            (SELECT created_at FROM search_candidates WHERE id = ${parsedCursor.lastId}),
+            ${parsedCursor.lastId}
+          )`,
+        );
+      }
+      break;
+    case "score-asc":
+      // Put NULL scores last by coercing them to 101 for ordering.
+      orderBy = [
+        sql`coalesce(${searchCandidates.matchScore}, 101) asc`,
+        asc(searchCandidates.createdAt),
+        asc(searchCandidates.id),
+      ];
+      if (useCursor && parsedCursor?.sortBy === "score-asc") {
+        cursorConditions.push(
+          sql`(coalesce(${searchCandidates.matchScore}, 101), ${searchCandidates.createdAt}, ${searchCandidates.id}) > (
+            ${parsedCursor.scoreKey},
+            (SELECT created_at FROM search_candidates WHERE id = ${parsedCursor.lastId}),
+            ${parsedCursor.lastId}
+          )`,
+        );
+      }
+      break;
+    default:
+      orderBy = [desc(searchCandidates.createdAt), desc(searchCandidates.id)];
+  }
+
+  // Cursor/keyset pagination path (fast for infinite scroll)
+  if (useCursor) {
+    const pagePlusOne = limit + 1;
+    const results = await db.query.searchCandidates.findMany({
+      where: and(...conditions, ...cursorConditions),
+      with: {
+        candidate: true,
+      },
+      limit: pagePlusOne,
+      orderBy,
+    });
+
+    const hasMore = results.length > limit;
+    const pageResults = hasMore ? results.slice(0, limit) : results;
+
+    // Fetch revealed candidate IDs ONLY for the candidates on this page (keeps this fast without extra indexing)
+    const candidateIdsOnPage = pageResults.map((r) => r.candidateId);
+    const revealedCandidateIds = new Set<string>();
+
+    if (candidateIdsOnPage.length > 0) {
+      const { activeOrgId } = await getSessionWithOrg();
+      const revealedTransactions = await db.query.creditTransactions.findMany({
+        where: and(
+          eq(creditTransactions.organizationId, activeOrgId),
+          eq(creditTransactions.creditType, CREDIT_TYPES.GENERAL),
+          eq(creditTransactions.type, "consumption"),
+          eq(creditTransactions.description, LINKEDIN_OPEN_DESCRIPTION),
+          inArray(creditTransactions.relatedEntityId, candidateIdsOnPage),
+        ),
+        columns: {
+          relatedEntityId: true,
+        },
+      });
+
+      for (const t of revealedTransactions) {
+        if (t.relatedEntityId) revealedCandidateIds.add(t.relatedEntityId);
+      }
+    }
+
+    const enrichedResults = pageResults.map((result) => ({
+      ...result,
+      isRevealed: revealedCandidateIds.has(result.candidateId),
+    }));
+
+    const last = enrichedResults[enrichedResults.length - 1];
+    let nextCursor: string | null = null;
+    if (hasMore && last) {
+      // Store just the row ID - we'll use a subquery to get exact createdAt from DB
+      // This avoids timezone issues with Postgres timestamp without time zone
+      if (sortBy === "date-desc" || sortBy === "date-asc") {
+        nextCursor = encodeCursor({
+          sortBy,
+          lastId: last.id,
+        });
+      } else {
+        const scoreKey =
+          sortBy === "score-desc"
+            ? (last.matchScore ?? -1)
+            : (last.matchScore ?? 101);
+        nextCursor = encodeCursor({
+          sortBy,
+          scoreKey,
+          lastId: last.id,
+        });
+      }
+    }
+
+    return {
+      data: enrichedResults,
+      pagination: {
+        limit,
+        hasMore,
+        nextCursor,
+      },
+    };
+  }
+
+  // Offset pagination path (kept for compatibility; gets slower as page grows)
   const [totalResult] = await db
     .select({ count: count() })
     .from(searchCandidates)
     .where(and(...conditions));
-    
+
   const total = totalResult?.count || 0;
-  
-  // Pagination
+
   const page = options?.page || 1;
-  const limit = options?.limit || 20;
   const offset = (page - 1) * limit;
-
-  // Determine order
-  const sortBy = options?.sortBy || "date-desc";
-  let orderBy;
-
-  switch (sortBy) {
-    case "date-desc":
-      orderBy = [desc(searchCandidates.createdAt)];
-      break;
-    case "date-asc":
-      orderBy = [asc(searchCandidates.createdAt)];
-      break;
-    case "score-desc":
-      orderBy = [desc(searchCandidates.matchScore)]; // Postgres default puts NULLs first for DESC, but we want them last usually? 
-      // Actually Drizzle/Postgres default for DESC is NULLS FIRST. 
-      // We generally want scored candidates to appear first.
-      // So we should use nullsLast if supported, or sort by status/null check.
-      // But Drizzle desc() returns a standardized object.
-      // Let's use raw SQL or check if .nullsLast() is available in the version.
-      // Assuming standard Drizzle usage, let's try to be safe.
-      // Actually, simple desc() might be annoying if unscored candidates pop to top.
-      // Let's rely on the filter (isNull push) we added earlier?
-      // Wait, getCandidatesForSearch has:
-      // scoreConditions.push(isNull(searchCandidates.matchScore));
-      // if (orCondition) conditions.push(orCondition);
-      
-      // If we are showing "All" (0+), we include NULLs.
-      // If we sort by score desc, we want 100, 99... NULL.
-      // Postgres: ORDER BY score DESC NULLS LAST.
-      break;
-    case "score-asc":
-      orderBy = [asc(searchCandidates.matchScore)];
-      break;
-    default:
-      orderBy = [desc(searchCandidates.createdAt)];
-  }
 
   const results = await db.query.searchCandidates.findMany({
     where: and(...conditions),

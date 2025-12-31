@@ -315,8 +315,21 @@ export const searchCandidates = pgTable("search_candidates", {
   uniqueSearchCandidate: unique().on(table.searchId, table.candidateId),
   // Index for sorting by createdAt (newest first)
   searchCreatedIdx: index("search_candidates_search_created_idx").on(table.searchId, table.createdAt.desc()),
+  // Composite index for keyset pagination (stable tie-breaker on id)
+  searchCreatedIdIdx: index("search_candidates_search_created_id_idx").on(
+    table.searchId,
+    table.createdAt.desc(),
+    table.id.desc(),
+  ),
   // Index for sorting by matchScore (highest first) - useful for top matches
   searchScoreIdx: index("search_candidates_search_score_idx").on(table.searchId, table.matchScore.desc()),
+  // Composite index for keyset pagination on score sorts (helps even with COALESCE ordering)
+  searchScoreCreatedIdIdx: index("search_candidates_search_score_created_id_idx").on(
+    table.searchId,
+    table.matchScore.desc(),
+    table.createdAt.desc(),
+    table.id.desc(),
+  ),
 }));
 
 export const searchCandidateStrategies = pgTable("search_candidate_strategies", {

@@ -1,0 +1,2 @@
+CREATE INDEX "search_candidates_search_created_id_idx" ON "search_candidates" USING btree ("search_id","created_at" DESC NULLS LAST,"id" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "search_candidates_search_score_created_id_idx" ON "search_candidates" USING btree ("search_id","match_score" DESC NULLS LAST,"created_at" DESC NULLS LAST,"id" DESC NULLS LAST);
