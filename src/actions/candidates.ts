@@ -562,30 +562,27 @@ export async function getCandidatesForSearch(
 
   const conditions = [eq(searchCandidates.searchId, searchId)];
   
+  // Apply score filters
+  // When scoreMin > 0, we want ONLY scored candidates matching the range (not NULL)
+  // When scoreMin = 0 (or undefined), include all including NULL/unscored
   if (options?.scoreMin !== undefined || options?.scoreMax !== undefined) {
-    const scoreConditions = [];
+    const min = options.scoreMin ?? 0;
+    const max = options.scoreMax ?? 100;
     
-    if (options.scoreMin !== undefined && options.scoreMax !== undefined) {
-      scoreConditions.push(
+    // If filtering to a specific score range (not "All"), exclude NULL scores
+    const isFilteringByScore = min > 0 || max < 100;
+    
+    if (isFilteringByScore) {
+      // Only include candidates with scores in the specified range
+      // Do NOT include NULL scores - user wants specific score range
+      conditions.push(
         and(
-          gte(searchCandidates.matchScore, options.scoreMin),
-          lte(searchCandidates.matchScore, options.scoreMax)
-        )
+          gte(searchCandidates.matchScore, min),
+          lte(searchCandidates.matchScore, max)
+        )!
       );
-    } else if (options.scoreMin !== undefined) {
-      scoreConditions.push(gte(searchCandidates.matchScore, options.scoreMin));
-    } else if (options.scoreMax !== undefined) {
-      scoreConditions.push(lte(searchCandidates.matchScore, options.scoreMax));
     }
-    
-    scoreConditions.push(isNull(searchCandidates.matchScore));
-    
-    if (scoreConditions.length > 0) {
-      const orCondition = or(...scoreConditions);
-      if (orCondition) {
-        conditions.push(orCondition);
-      }
-    }
+    // If min=0 and max=100, no filter needed - include all candidates
   }
 
   const limit = options?.limit || 20;
@@ -975,17 +972,26 @@ export async function updateCandidateStatus(
 
 /**
  * Get candidate progress stats for a search
+ * 
+ * NOTE: Score counts are CUMULATIVE to match filter preset behavior:
+ * - excellent: scores >= 80
+ * - good: scores >= 70 (includes excellent)
+ * - fair: scores >= 50 (includes excellent + good)
+ * 
+ * This ensures the count shown on "Good (70+)" preset matches
+ * the actual number of candidates that will be displayed.
  */
 export async function getSearchProgress(searchId: string) {
   await requireSearchReadAccess(searchId);
   
-    const [result] = await db
+  const [result] = await db
     .select({
       total: count(),
       scored: count(searchCandidates.matchScore),
+      // Cumulative counts to match filter behavior (70+ includes 80+, etc.)
       excellent: count(sql`CASE WHEN ${searchCandidates.matchScore} >= 80 THEN 1 END`),
-      good: count(sql`CASE WHEN ${searchCandidates.matchScore} >= 70 AND ${searchCandidates.matchScore} < 80 THEN 1 END`),
-      fair: count(sql`CASE WHEN ${searchCandidates.matchScore} >= 50 AND ${searchCandidates.matchScore} < 70 THEN 1 END`),
+      good: count(sql`CASE WHEN ${searchCandidates.matchScore} >= 70 THEN 1 END`),
+      fair: count(sql`CASE WHEN ${searchCandidates.matchScore} >= 50 THEN 1 END`),
     })
     .from(searchCandidates)
     .where(eq(searchCandidates.searchId, searchId));

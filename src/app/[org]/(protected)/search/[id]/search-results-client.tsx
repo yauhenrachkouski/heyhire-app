@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
-import { useQueryClient, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useQueryClient, useInfiniteQuery, useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useQueryState, parseAsInteger, parseAsString } from "nuqs";
 import type { ParsedQuery, SourcingCriteria } from "@/types/search";
 import { CandidateCardListInfinite } from "@/components/search/candidate-card-list-infinite";
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger, PopoverHeader, PopoverTitle, PopoverDescription } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { IconPencil, IconCalendar, IconUser, IconInfoCircle, IconCopy, IconLoader2 } from "@tabler/icons-react";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -24,57 +25,70 @@ import posthog from 'posthog-js';
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useIsReadOnly } from "@/hooks/use-is-read-only";
 import { SearchRightSidebar } from "@/components/search/search-right-sidebar";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { searchCandidatesKeys } from "@/lib/query-keys/search";
 
-  interface SearchResultsClientProps {
-    search: {
+// Defaults used in server-side rendering (page.tsx)
+// These must match the defaults used when fetching initialData on the server
+const SSR_DEFAULTS = {
+  scoreMin: 0,
+  scoreMax: 100,
+  limit: 20,
+  sortBy: "date-desc",
+};
+
+interface SearchResultsClientProps {
+  search: {
+    id: string;
+    name: string;
+    query: string;
+    params: ParsedQuery;
+    parseResponse: SourcingCriteria | null;
+    createdAt: Date | string;
+    status: string;
+    progress: number | null;
+    createdBy: {
       id: string;
       name: string;
-      query: string;
-      params: ParsedQuery;
-      parseResponse: SourcingCriteria | null;
-      createdAt: Date | string;
-      status: string;
-      progress: number | null;
-      createdBy: {
-        id: string;
-        name: string;
-        email: string;
-      } | null;
+      email: string;
+    } | null;
+  };
+  initialData?: {
+    candidates: any[];
+    pagination: {
+      nextCursor?: string | null;
+      hasMore?: boolean;
+      page?: number;
+      total?: number;
+      totalPages?: number;
+      limit: number;
     };
-    initialData?: {
-        candidates: any[];
-        pagination: {
-            // Cursor-mode fields
-            nextCursor?: string | null;
-            hasMore?: boolean;
-            // Offset-mode fields (legacy)
-            page?: number;
-            total?: number;
-            totalPages?: number;
-            // Common
-            limit: number;
-        };
-        progress: any;
+    progress: {
+      total: number;
+      scored: number;
+      unscored: number;
+      isScoringComplete: boolean;
+      excellent: number;
+      good: number;
+      fair: number;
     };
-  }
-  
-  export function SearchResultsClient(props: SearchResultsClientProps) {
-    return (
-      <Suspense fallback={<SourcingLoader />}>
-        <SearchResultsClientContent {...props} />
-      </Suspense>
-    );
-  }
+  };
+}
 
-  function SearchResultsClientContent({ search, initialData }: SearchResultsClientProps) {
-  console.log("[SearchResultsClient] Rendering for search:", search.id);
+// Progress/counts type
+interface SearchProgress {
+  total: number;
+  scored: number;
+  unscored: number;
+  isScoringComplete: boolean;
+  excellent: number;
+  good: number;
+  fair: number;
+}
+
+export function SearchResultsClient({ search, initialData }: SearchResultsClientProps) {
+  console.log("[SearchResultsClient] Rendering for search:", search.id, "initialData:", !!initialData);
   
   const queryClient = useQueryClient();
-  // const searchParams = useSearchParams(); // Removed in favor of NUQS
-  const router = useRouter();
-  // const pathname = usePathname(); // Removed in favor of NUQS
 
   const { data: activeOrg } = useActiveOrganization();
   const isReadOnly = useIsReadOnly();
@@ -84,17 +98,14 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
   const [searchName, setSearchName] = useState(search.name);
   const titleRef = useRef<HTMLHeadingElement>(null);
 
-  // NUQS state management
-  // Use shallow history to avoid polluting browser history with filter changes
+  // NUQS state management - URL-synced filter state
   const [scoreMin, setScoreMin] = useQueryState("scoreMin", parseAsInteger.withDefault(0).withOptions({ shallow: true, history: "push" }));
   const [scoreMax, setScoreMax] = useQueryState("scoreMax", parseAsInteger.withDefault(100).withOptions({ shallow: true, history: "push" }));
   const [limit, setLimit] = useQueryState("limit", parseAsInteger.withDefault(20).withOptions({ shallow: true, history: "push" }));
   const [sortBy, setSortBy] = useQueryState("sortBy", parseAsString.withDefault("date-desc").withOptions({ shallow: true, history: "push" }));
 
-
-  // Derived update helper - batch updates to avoid multiple URL changes
+  // Batch URL updates
   const updateUrl = useCallback((updates: Record<string, string | number | undefined>) => {
-    // Batch all updates together
     Promise.all([
       updates.scoreMin !== undefined ? setScoreMin(Number(updates.scoreMin)) : Promise.resolve(),
       updates.scoreMax !== undefined ? setScoreMax(Number(updates.scoreMax)) : Promise.resolve(),
@@ -115,133 +126,125 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
     }
   }, [isEditingName]);
 
-  // Query key for candidates list
-  const queryKey = searchCandidatesKeys.list(search.id, {
+  // Check if current filters match SSR defaults
+  const filtersMatchSSRDefaults = 
+    scoreMin === SSR_DEFAULTS.scoreMin &&
+    scoreMax === SSR_DEFAULTS.scoreMax &&
+    limit === SSR_DEFAULTS.limit &&
+    sortBy === SSR_DEFAULTS.sortBy;
+
+  // ========== TANSTACK QUERY: Progress (Global counts, independent of filters) ==========
+  const progressQuery = useQuery<SearchProgress>({
+    queryKey: searchCandidatesKeys.progress(search.id),
+    queryFn: async () => {
+      console.log("[SearchResultsClient] Fetching progress for search:", search.id);
+      const response = await fetch(`/api/search/${search.id}/progress`);
+      if (!response.ok) throw new Error('Failed to fetch progress');
+      return response.json();
+    },
+    // Use SSR data for initial state
+    initialData: initialData?.progress,
+    // Mark SSR data as stale so background refetch happens
+    initialDataUpdatedAt: initialData?.progress ? 0 : undefined,
+    staleTime: 30 * 1000,
+    gcTime: 5 * 60 * 1000,
+  });
+
+  // ========== TANSTACK QUERY: Candidates list (filtered) ==========
+  const candidatesQueryKey = searchCandidatesKeys.list(search.id, {
     scoreMin,
     scoreMax,
-    page: -1,
+    page: -1, // Marker for infinite query
     limit,
     sortBy,
   });
 
-  const { 
-    data, 
-    isLoading, 
-    isFetching, 
-    isFetchingNextPage,
-    hasNextPage,
-    fetchNextPage,
-    error, 
-  } = useInfiniteQuery({
-    queryKey,
+  const candidatesQuery = useInfiniteQuery({
+    queryKey: candidatesQueryKey,
     queryFn: async ({ pageParam = null }) => {
-      console.log("[SearchResultsClient] Fetching candidates cursor:", pageParam);
+      console.log("[SearchResultsClient] Fetching candidates cursor:", pageParam, "filters:", { scoreMin, scoreMax, limit, sortBy });
       const url = new URL(`/api/search/${search.id}/candidates`, window.location.origin);
       
-      if (scoreMin !== 0 || scoreMax !== 100) {
-        url.searchParams.set('scoreMin', scoreMin.toString());
-        url.searchParams.set('scoreMax', scoreMax.toString());
-      }
+      // Only send non-default filters to match SSR behavior
+      if (scoreMin !== 0) url.searchParams.set('scoreMin', scoreMin.toString());
+      if (scoreMax !== 100) url.searchParams.set('scoreMax', scoreMax.toString());
       url.searchParams.set('limit', limit.toString());
       url.searchParams.set('sortBy', sortBy);
       url.searchParams.set("cursor", pageParam ? String(pageParam) : "");
-      // Prevent browser caching
-      url.searchParams.set("_t", Date.now().toString());
       
       const response = await fetch(url.toString());
-      if (!response.ok) {
-        throw new Error('Failed to fetch candidates');
-      }
-      return await response.json();
+      if (!response.ok) throw new Error('Failed to fetch candidates');
+      return response.json();
     },
     initialPageParam: null,
-    getNextPageParam: (lastPage) => {
-      const nextCursor = lastPage?.pagination?.nextCursor;
-      return nextCursor ? nextCursor : undefined;
-    },
+    getNextPageParam: (lastPage) => lastPage?.pagination?.nextCursor ?? undefined,
     enabled: !!search.id,
-    // Keep previous data during refetch to prevent blank screen
     placeholderData: keepPreviousData,
-    // Use initialData if provided for the first page
-    initialData: initialData ? {
-        pages: [{
-            candidates: initialData.candidates,
-            pagination: initialData.pagination,
-            progress: initialData.progress
-        }],
-        pageParams: [null]
+    // CRITICAL: Only use initialData when current filters match SSR state
+    initialData: (initialData && filtersMatchSSRDefaults) ? {
+      pages: [{
+        candidates: initialData.candidates,
+        pagination: initialData.pagination,
+        progress: initialData.progress,
+      }],
+      pageParams: [null],
     } : undefined,
-    // Cache data for 30 seconds to prevent unnecessary refetches
-    staleTime: 30 * 1000,
-    // Keep cache for 5 minutes
+    // Mark SSR data as stale so it refetches when switching back to default filters
+    initialDataUpdatedAt: (initialData && filtersMatchSSRDefaults) ? 0 : undefined,
+    // Candidates should always refetch when filter changes for fresh results
+    staleTime: 0,
     gcTime: 5 * 60 * 1000,
   });
 
-  // Real-time updates via Upstash Realtime
+  // ========== Realtime handlers ==========
   const handleSearchCompleted = useCallback(async (candidatesCount: number) => {
     console.log("[SearchResultsClient] Search completed with", candidatesCount, "candidates");
-    
-    // Invalidate ALL candidate queries for this search (regardless of filter params)
-    // This ensures all views refresh, even if user has different filters in other tabs
-    await queryClient.invalidateQueries({ 
-      queryKey: searchCandidatesKeys.details(search.id)
-    });
+    // Invalidate both progress and candidates queries
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.progress(search.id) }),
+      queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.details(search.id) }),
+    ]);
   }, [queryClient, search.id]);
 
   const handleSearchFailed = useCallback((errorMsg: string) => {
     console.error("[SearchResultsClient] Search failed:", errorMsg);
   }, []);
 
-  // Handle individual candidate score updates via realtime
   const handleScoringProgress = useCallback((data: { candidateId: string; searchCandidateId: string; score: number; scored: number; total: number; scoringResult?: any }) => {
     console.log("[SearchResultsClient] Score update:", data.searchCandidateId, "=", data.score);
     
-    // Update the specific candidate in the query cache
-    queryClient.setQueryData(
-      searchCandidatesKeys.list(search.id, {
-        scoreMin,
-        scoreMax,
-        page: -1, // Use the infinite query key
-        limit,
-        sortBy,
-      }),
-      (oldData: any) => {
-        if (!oldData?.pages) return oldData;
-        
-        return {
-          ...oldData,
-          pages: oldData.pages.map((page: any) => ({
-            ...page,
-            candidates: page.candidates.map((c: any) => 
-              c.id === data.searchCandidateId 
-                ? { 
-                    ...c, 
-                    matchScore: data.score,
-                    // Update detailed scoring result if available
-                    scoringResult: data.scoringResult ? JSON.stringify(data.scoringResult) : c.scoringResult 
-                  }
-                : c
-            ),
-            progress: {
-              ...page.progress,
-              scored: data.scored,
-              unscored: data.total - data.scored,
-            },
-          })),
-        };
-      }
-    );
-  }, [queryClient, search.id, scoreMin, scoreMax, limit, sortBy]);
+    // Update candidate in cache
+    queryClient.setQueryData(candidatesQueryKey, (oldData: any) => {
+      if (!oldData?.pages) return oldData;
+      
+      return {
+        ...oldData,
+        pages: oldData.pages.map((page: any) => ({
+          ...page,
+          candidates: page.candidates.map((c: any) => 
+            c.id === data.searchCandidateId 
+              ? { ...c, matchScore: data.score, scoringResult: data.scoringResult ? JSON.stringify(data.scoringResult) : c.scoringResult }
+              : c
+          ),
+        })),
+      };
+    });
 
-  // Handle scoring completion
+    // Update progress in cache
+    queryClient.setQueryData(searchCandidatesKeys.progress(search.id), (old: SearchProgress | undefined) => {
+      if (!old) return old;
+      return { ...old, scored: data.scored, unscored: data.total - data.scored };
+    });
+  }, [queryClient, search.id, candidatesQueryKey]);
+
   const handleScoringCompleted = useCallback((data: { scored: number; errors: number }) => {
     console.log("[SearchResultsClient] Scoring completed. Scored:", data.scored, "Errors:", data.errors);
-    queryClient.invalidateQueries({
-      queryKey: searchCandidatesKeys.details(search.id)
-    });
+    // Invalidate to get fresh counts
+    queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.progress(search.id) });
+    queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.details(search.id) });
   }, [queryClient, search.id]);
 
-    const {
+  const {
     status: realtimeStatus,
     progress: realtimeProgress,
     message: realtimeMessage,
@@ -258,87 +261,57 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
     onScoringCompleted: handleScoringCompleted,
   });
 
-  // Calculate if search is in an active/running state
+  // ========== Derived state ==========
   const isActiveSearch = ['created', 'processing', 'pending', 'generating', 'generated', 'executing', 'polling'].includes(realtimeStatus);
 
   const candidates = useMemo(() => {
-    if (!data?.pages) return [];
+    if (!candidatesQuery.data?.pages) return [];
     
-    const flat = data.pages.flatMap((page) => page.candidates) ?? [];
-
-    // Dedupe to prevent React key collisions and repeated rows.
-    // This can happen during polling when new candidates are inserted at the top.
+    const flat = candidatesQuery.data.pages.flatMap((page) => page.candidates) ?? [];
     const seen = new Set<string>();
     return flat.filter((sc: any) => {
-      const key =
-        sc?.candidateId ??
-        sc?.candidate?.id ??
-        sc?.id;
+      const key = sc?.candidateId ?? sc?.candidate?.id ?? sc?.id;
       if (!key) return true;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
-  }, [data]);
-  const lastPage = data?.pages[data.pages.length - 1];
-  const pagination = lastPage?.pagination;
-  
-  // Progress is ALWAYS from the first page (contains DB total count and score breakdowns).
-  // The first-page poller keeps this fresh during active search.
-  const progress = data?.pages[0]?.progress;
-  const filteredTotal = data?.pages[0]?.pagination?.total; // From includeTotalCount logic
+  }, [candidatesQuery.data]);
 
-  // Calculate scoring progress
-  const scoredCount = scoringState.isScoring ? scoringState.scored : (progress?.scored || 0);
-  const totalCandidates = scoringState.isScoring ? scoringState.total : (progress?.total || candidates.length);
-  const isScoringComplete = progress?.isScoringComplete ?? (totalCandidates > 0 && scoredCount === totalCandidates);
-  const isScoring = scoringState.isScoring;
-  
-  // Counts for filters
+  // Get counts from TanStack Query progress (not custom state!)
+  const progress = progressQuery.data;
   const filterCounts = {
     total: progress?.total || 0,
     excellent: progress?.excellent || 0,
     good: progress?.good || 0,
     fair: progress?.fair || 0,
   };
-  
-  // Show progress bar logic
-  // Show if:
-  // 1. Initial loading and no data yet
-  // 2. Active search (initial or continue)
-  const isInitialLoading = isLoading && !data;
-  const isRefetching = isFetching && !isFetchingNextPage && !isInitialLoading;
-  const shouldShowProgressBar = (isActiveSearch || isInitialLoading) && candidates.length === 0;
-  
-  // Only show skeletons if we are actively loading data AND not showing the progress bar
-  // If progress bar is shown, we want to hide the list to avoid clutter/confusion or show skeletons underneath
-  // Actually, for "Continue Search", we might want to see existing candidates while new ones load?
-  // User asked to "handle progress in progress bar".
-  // If we assume the full screen loader is what we want for "new search", 
-  // but for "continue search" we might want a less intrusive indicator?
-  // But the existing code forces full screen overlay if shouldShowProgressBar is true.
-  // Let's stick to the requested "handle status changes and progress".
-  
-  // If we have candidates (Continue Search), we probably don't want the full overlay blocking them.
-  // But the current implementation of shouldShowProgressBar logic was:
-  // (isActiveSearch && candidates.length === 0) || (isInitialLoading && isActiveSearch)
-  // This implies overlay is ONLY for initial empty state.
-  
-  // If the user wants to see progress for "Continue Search", we should probably use the header progress bar.
-  // Which we are about to modify.
-  
-  const effectiveSkeletonCount = (shouldShowProgressBar || (isLoading && !data)) ? limit : 0;
 
-  // Always use DB total count (from first page progress).
-  // This count should NOT change during scrolling, only when new candidates are added to DB.
-  // Never fall back to candidates.length (rendered count), as that changes during scroll.
+  // Filtered total from candidates pagination
+  const filteredTotal = candidatesQuery.data?.pages[0]?.pagination?.total;
+  
+  // Global total from progress query
   const totalCount = progress?.total ?? 0;
 
+  // Scoring state
+  const scoredCount = scoringState.isScoring ? scoringState.scored : (progress?.scored || 0);
+  const totalCandidates = scoringState.isScoring ? scoringState.total : (progress?.total || candidates.length);
+  const isScoringComplete = progress?.isScoringComplete ?? (totalCandidates > 0 && scoredCount === totalCandidates);
+  const isScoring = scoringState.isScoring;
+
+  // Loading states
+  const isInitialLoading = candidatesQuery.isLoading && !candidatesQuery.data;
+  const isRefetching = candidatesQuery.isFetching && !candidatesQuery.isFetchingNextPage && !isInitialLoading;
+  
+  // Show sourcing loader ONLY when search is actively running AND no candidates yet
+  const shouldShowSourcingLoader = isActiveSearch && candidates.length === 0;
+  
+  // Show skeleton loading when we have NO data yet (true initial load)
+  const shouldShowSkeletons = isInitialLoading && !initialData;
+
+  // ========== Handlers ==========
   const handleRemoveFilter = (category: keyof ParsedQuery) => {
-    setCurrentParsedQuery(prevParams => ({
-      ...prevParams,
-      [category]: undefined,
-    }));
+    setCurrentParsedQuery(prevParams => ({ ...prevParams, [category]: undefined }));
   };
 
   const handleSaveName = async () => {
@@ -389,54 +362,32 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
   };
 
   const handleContinueSearch = async () => {
-    // Optimistically update status to show loading state immediately
-    // Reset progress to 5% to indicate starting
     setOptimisticStatus("processing", "Starting search...", 5);
     
     toast.promise(analyzeAndContinueSearch(search.id), {
-        loading: "Analyzing best strategies...",
-        success: (result) => {
-            if (result.success) {
-                // Status will be updated via realtime events shortly
-                return "Continuing search with best strategies";
-            } else {
-                // Revert optimistic update on failure, restore to completed state
-                setOptimisticStatus("completed", "", 100);
-                throw new Error(result.error);
-            }
-        },
-        error: (err) => {
-            // Revert optimistic update on error, restore to completed state
-            setOptimisticStatus("completed", "", 100);
-            return err instanceof Error ? err.message : "Failed to continue search";
+      loading: "Analyzing best strategies...",
+      success: (result) => {
+        if (result.success) {
+          return "Continuing search with best strategies";
+        } else {
+          setOptimisticStatus("completed", "", 100);
+          throw new Error(result.error);
         }
+      },
+      error: (err) => {
+        setOptimisticStatus("completed", "", 100);
+        return err instanceof Error ? err.message : "Failed to continue search";
+      }
     });
   };
 
+  // ========== Render ==========
   return (
     <div>
-      {/* Debug panel */}
-      {/* {process.env.NODE_ENV !== 'production' && (
-        <div className="fixed bottom-4 right-4 z-50 p-3 bg-black/80 text-white text-xs rounded-lg max-w-xs font-mono space-y-0.5">
-          <div className="font-bold mb-1">🔍 Debug Panel</div>
-          <div>Status: <span className={realtimeStatus === 'completed' ? 'text-green-400' : realtimeStatus === 'error' ? 'text-red-400' : 'text-yellow-400'}>{realtimeStatus}</span></div>
-          <div>Progress: {realtimeProgress}%</div>
-          <div>Connection: <span className={connectionStatus === 'connected' ? 'text-green-400' : 'text-red-400'}>{connectionStatus}</span></div>
-          <div>Candidates: {candidates.length}</div>
-          <div className="border-t border-white/20 my-1 pt-1">Scoring:</div>
-          <div>Is Scoring: {isScoring ? '✓' : '✗'}</div>
-          <div>Scored: {scoredCount}/{totalCandidates}</div>
-        </div>
-      )} */}
-      
-      {/* Shared Header */}
+      {/* Header */}
       <div>
         <div className="flex items-start justify-between gap-4">
-          <div 
-            className="group flex items-center gap-2"
-            onMouseEnter={() => !isEditingName}
-            onMouseLeave={() => !isEditingName}
-          >
+          <div className="group flex items-center gap-2">
             <h1 
               ref={titleRef}
               className="text-2xl font-bold max-w-[calc(100%-40px)] truncate"
@@ -444,10 +395,7 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
               suppressContentEditableWarning={true}
               onBlur={handleSaveName}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  e.currentTarget.blur();
-                }
+                if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); }
                 if (e.key === "Escape") {
                   if (titleRef.current) titleRef.current.innerText = search.name;
                   setIsEditingName(false);
@@ -484,7 +432,7 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
               {search.createdBy.name}
             </span>
           )}
-          {search.query && search.query.trim() && (
+          {search.query?.trim() && (
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="sm" className="h-auto py-0.5 px-2 text-xs text-muted-foreground hover:text-foreground">
@@ -520,24 +468,16 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
                     </div>
                     {isActiveSearch ? (
                       <div className="h-2 w-20 bg-muted rounded-full overflow-hidden relative">
-                        <div
-                          className="h-full w-1/3 bg-primary rounded-full absolute"
-                          style={{
-                            animation: "shimmer 1.5s ease-in-out infinite",
-                          }}
-                        />
+                        <div className="h-full w-1/3 bg-primary rounded-full absolute" style={{ animation: "shimmer 1.5s ease-in-out infinite" }} />
                       </div>
                     ) : (
-                      <Progress
-                        value={Math.min((totalCount / 1000) * 100, 100)}
-                        className="h-2 w-20 transition-all duration-500 ease-out"
-                      />
+                      <Progress value={Math.min((totalCount / 1000) * 100, 100)} className="h-2 w-20 transition-all duration-500 ease-out" />
                     )}
                   </div>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="text-xs">
                   <p>You have collected {totalCount.toLocaleString()} candidates.</p>
-                  <p className="text-muted-foreground">Maximum limit for this search is 1,000 candidates.</p>
+                  <p className="text-muted-foreground">Maximum limit is 1,000 candidates.</p>
                   {isActiveSearch && (
                     <div className="pt-2 mt-2 border-t border-border">
                       <p className="font-medium capitalize text-foreground mb-0.5">
@@ -568,23 +508,14 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
                   </span>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="text-xs">
-                  {totalCount >= 1000 
-                    ? "Maximum of 1,000 candidates reached" 
-                    : isActiveSearch 
-                      ? "Search in progress..." 
-                      : "Find 100 more candidates"
-                  }
+                  {totalCount >= 1000 ? "Maximum of 1,000 candidates reached" : isActiveSearch ? "Search in progress..." : "Find 100 more candidates"}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
         </div>
         
-        <AppliedFilters 
-          params={currentParsedQuery} 
-          initialQueryText={search.query} 
-          onRemoveFilter={handleRemoveFilter}
-        />
+        <AppliedFilters params={currentParsedQuery} initialQueryText={search.query} onRemoveFilter={handleRemoveFilter} />
       </div>
 
       {/* Sticky Criteria Display */}
@@ -594,116 +525,133 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
 
       <div className="flex w-full min-h-0 gap-4">
         <div
-          className={
-            shouldShowProgressBar
-              ? "flex-1 relative min-h-[min(420px,60svh)] max-h-[calc(100svh-200px)] overflow-hidden"
-              : "flex-1 relative"
-          }
+          className={shouldShowSourcingLoader ? "flex-1 relative min-h-[min(420px,60svh)] max-h-[calc(100svh-200px)] overflow-hidden" : "flex-1 relative"}
           id="search-results-container"
         >
-        {shouldShowProgressBar && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
-            <div className="w-full max-w-[400px] h-[200px] mb-8">
-              <SourcingLoader />
+          {/* Sourcing loader - only for active search with no candidates */}
+          {shouldShowSourcingLoader && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
+              <div className="w-full max-w-[400px] h-[200px] mb-8">
+                <SourcingLoader />
+              </div>
+              <div className="text-center space-y-2">
+                <h3 className="text-lg font-medium text-foreground">
+                  {realtimeMessage || "Searching for candidates..."}
+                </h3>
+                <p className="text-sm text-muted-foreground max-w-sm">
+                  This process runs in the background. Usually it takes less than 2 minutes.
+                </p>
+              </div>
             </div>
-            <div className="text-center space-y-2">
-              <h3 className="text-lg font-medium text-foreground">
-                {realtimeMessage || "Searching for candidates..."}
-              </h3>
-              <p className="text-sm text-muted-foreground max-w-sm">This process runs in the background. Usually it takes less than 2 minutes. You can leave and come back later.</p>
-            </div>
-          </div>
-        )}
+          )}
 
-        <div className={shouldShowProgressBar ? "opacity-20 pointer-events-none transition-opacity" : "transition-opacity mt-4"}>
-          <div className="space-y-4">
-            <div className="space-y-3">
-              {/* Inline Filters */}
-              <InlineFilters 
-                scoreRange={[scoreMin, scoreMax]}
-                sortBy={sortBy}
-                counts={filterCounts}
-                onScoreRangeChange={(min, max) => {
-                  posthog.capture('search_filter_applied', {
-                    search_id: search.id,
-                    organization_id: activeOrg?.id,
-                    filter_type: 'score_range',
-                    from_score_min: scoreMin,
-                    from_score_max: scoreMax,
-                    score_min: min,
-                    score_max: max,
-                  });
-                  updateUrl({ scoreMin: min, scoreMax: max, page: undefined });
-                }}
-                onSortChange={(sort) => {
-                  posthog.capture('search_filter_applied', {
-                    search_id: search.id,
-                    organization_id: activeOrg?.id,
-                    filter_type: 'sort_by',
-                    from_sort_by: sortBy,
-                    sort_by: sort,
-                  });
-                  updateUrl({ sortBy: sort, page: undefined });
-                }}
-              />
-            </div>
-      
-            {/* Results */}
+          <div className={shouldShowSourcingLoader ? "opacity-20 pointer-events-none transition-opacity" : "transition-opacity mt-4"}>
             <div className="space-y-4">
-              {/* Error State */}
-              {(realtimeStatus === "error" || realtimeStatus === "failed") && (
-                <div className="text-center py-12 text-destructive">
-                  Error loading candidates: {realtimeMessage || (error as Error)?.message || "Unknown error"}
-                </div>
-              )}
-
-              {/* Results with skeletons */}
-              {realtimeStatus !== "error" && realtimeStatus !== "failed" && (
-                <div className="relative min-h-[200px]">
-                  {/* Filtered count display */}
-                  {candidates.length > 0 && (
-                    <div className="text-xs font-medium text-muted-foreground mb-2 px-1">
-                       Showing {candidates.length} {filteredTotal ? `of ${filteredTotal}` : ""} candidates
-                    </div>
-                  )}
-
-                  {isRefetching && (
-                    <div className="absolute inset-0 z-20 flex items-start justify-center pt-20 bg-background/50 backdrop-blur-[1px] transition-all duration-300 animate-in fade-in">
-                      <div className="bg-background/80 shadow-sm border rounded-full p-2 backdrop-blur-md">
-                        <IconLoader2 className="h-5 w-5 animate-spin text-primary" />
-                      </div>
-                    </div>
-                  )}
-                  <div className={cn("transition-all duration-300", isRefetching && "opacity-50 grayscale-[0.5]")}>
-                    <CandidateCardListInfinite
-                      candidates={candidates}
-                      searchId={search.id}
-                      sourcingCriteria={search.parseResponse || undefined}
-                      viewMode="cards"
-                      isLoading={isInitialLoading}
-                      isFetchingNextPage={isFetchingNextPage}
-                      hasNextPage={hasNextPage}
-                      fetchNextPage={fetchNextPage}
-                      onSelectionChange={() => {}}
-                    />
-                    
-                    {/* Empty state messages if no candidates and not loading/skeleton */}
-                    {candidates.length === 0 && effectiveSkeletonCount === 0 && (
-                       realtimeStatus === 'completed' && !isFetching ? (
-                          <div className="text-center py-12 text-muted-foreground">
-                            No profiles found. Try adjusting your search criteria.
-                          </div>
-                       ) : null
-                    )}
+              <div className="space-y-3">
+                {/* Inline Filters - show skeletons while loading counts */}
+                {progressQuery.isLoading && !progressQuery.data ? (
+                  <div className="flex items-center gap-4">
+                    <Skeleton className="h-9 w-32" />
+                    <Skeleton className="h-9 w-24" />
+                    <Skeleton className="h-9 w-24" />
+                    <Skeleton className="h-9 w-24" />
+                    <Skeleton className="h-9 w-24 ml-auto" />
                   </div>
-                </div>
-              )}
+                ) : (
+                  <InlineFilters 
+                    scoreRange={[scoreMin, scoreMax]}
+                    sortBy={sortBy}
+                    counts={filterCounts}
+                    onScoreRangeChange={(min, max) => {
+                      posthog.capture('search_filter_applied', {
+                        search_id: search.id,
+                        organization_id: activeOrg?.id,
+                        filter_type: 'score_range',
+                        score_min: min,
+                        score_max: max,
+                      });
+                      updateUrl({ scoreMin: min, scoreMax: max });
+                    }}
+                    onSortChange={(sort) => {
+                      posthog.capture('search_filter_applied', {
+                        search_id: search.id,
+                        organization_id: activeOrg?.id,
+                        filter_type: 'sort_by',
+                        sort_by: sort,
+                      });
+                      updateUrl({ sortBy: sort });
+                    }}
+                  />
+                )}
+              </div>
+        
+              {/* Results */}
+              <div className="space-y-4">
+                {/* Error State */}
+                {(realtimeStatus === "error" || realtimeStatus === "failed") && (
+                  <div className="text-center py-12 text-destructive">
+                    Error loading candidates: {realtimeMessage || (candidatesQuery.error as Error)?.message || "Unknown error"}
+                  </div>
+                )}
+
+                {/* Results */}
+                {realtimeStatus !== "error" && realtimeStatus !== "failed" && (
+                  <div className="relative min-h-[200px]">
+                    {/* Filtered count display */}
+                    {candidates.length > 0 && (
+                      <div className="text-xs font-medium text-muted-foreground mb-2 px-1">
+                        Showing {candidates.length}{filteredTotal && filteredTotal !== candidates.length ? ` of ${filteredTotal}` : ""} candidates
+                      </div>
+                    )}
+
+                    {/* Refetch overlay */}
+                    {isRefetching && (
+                      <div className="absolute inset-0 z-20 flex items-start justify-center pt-20 bg-background/50 backdrop-blur-[1px] transition-all duration-300 animate-in fade-in">
+                        <div className="bg-background/80 shadow-sm border rounded-full p-2 backdrop-blur-md">
+                          <IconLoader2 className="h-5 w-5 animate-spin text-primary" />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className={cn("transition-all duration-300", isRefetching && "opacity-50 grayscale-[0.5]")}>
+                      {/* Skeleton loading */}
+                      {shouldShowSkeletons ? (
+                        <div className="grid grid-cols-1 gap-4">
+                          {Array.from({ length: limit }).map((_, i) => (
+                            <Skeleton key={i} className="h-32 w-full rounded-lg" />
+                          ))}
+                        </div>
+                      ) : (
+                        <>
+                          <CandidateCardListInfinite
+                            candidates={candidates}
+                            searchId={search.id}
+                            sourcingCriteria={search.parseResponse || undefined}
+                            viewMode="cards"
+                            isLoading={isInitialLoading}
+                            isFetchingNextPage={candidatesQuery.isFetchingNextPage}
+                            hasNextPage={candidatesQuery.hasNextPage}
+                            fetchNextPage={candidatesQuery.fetchNextPage}
+                            onSelectionChange={() => {}}
+                          />
+                          
+                          {/* Empty state */}
+                          {candidates.length === 0 && !isInitialLoading && realtimeStatus === 'completed' && (
+                            <div className="text-center py-12 text-muted-foreground">
+                              No profiles found. Try adjusting your search criteria.
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
         <SearchRightSidebar />
+      </div>
     </div>
-  </div>
   );
 }

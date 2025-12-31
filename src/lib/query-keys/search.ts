@@ -30,5 +30,7 @@ export const searchCandidatesKeys = {
   // Helper to invalidate all lists for a specific search ID regardless of filters
   details: (searchId: string) => [...searchCandidatesKeys.lists(), searchId] as const,
   detail: (candidateId: string) => [...searchCandidatesKeys.all, "detail", candidateId] as const,
+  // Separate key for progress/counts - independent of filters
+  progress: (searchId: string) => [...searchCandidatesKeys.all, "progress", searchId] as const,
 };
 
