@@ -670,7 +670,7 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
               <h3 className="text-lg font-medium text-foreground">
                 {realtimeMessage || "Searching for candidates..."}
               </h3>
-              <p className="text-sm text-muted-foreground max-w-sm">This process runs in the background. You can leave and come back later.</p>
+              <p className="text-sm text-muted-foreground max-w-sm">This process runs in the background. Usually it takes less than 2 minutes. You can leave and come back later.</p>
             </div>
           </div>
         )}

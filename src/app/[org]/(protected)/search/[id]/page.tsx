@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { getSearchById } from "@/actions/search";
 import { SearchResultsClient } from "./search-results-client";
-import { ScoringDebugPanel } from "./scoring-debug-panel";
 import { getCandidatesForSearch, getSearchProgress } from "@/actions/candidates";
 import { HydrationBoundary, QueryClient, dehydrate } from "@tanstack/react-query";
 import { searchCandidatesKeys } from "@/lib/query-keys/search";
@@ -25,7 +24,6 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
   }
   
   const search = searchResult.data;
-  const showDebug = process.env.NODE_ENV !== "production";
 
   // Parse search params for initial query
   const scoreMin = resolvedSearchParams.scoreMin ? parseInt(resolvedSearchParams.scoreMin as string) : 0;
@@ -72,7 +70,6 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
       <div className="container mx-auto">
         {/* Key ensures component remounts when navigating between searches */}
         <SearchResultsClient key={search.id} search={search} initialData={initialData} />
-        {showDebug ? <ScoringDebugPanel searchId={search.id} /> : null}
       </div>
     </HydrationBoundary>
   );
