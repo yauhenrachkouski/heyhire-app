@@ -454,14 +454,18 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
                       <span className="text-xs">1,000</span>
                     </div>
                     {isActiveSearch ? (
-                      <Progress 
-                        value={realtimeProgress || 5} 
-                        className="h-2 w-20 transition-all duration-500 ease-out animate-pulse" 
-                      />
+                      <div className="h-2 w-20 bg-muted rounded-full overflow-hidden relative">
+                        <div
+                          className="h-full w-1/3 bg-primary rounded-full absolute"
+                          style={{
+                            animation: "shimmer 1.5s ease-in-out infinite",
+                          }}
+                        />
+                      </div>
                     ) : (
-                      <Progress 
-                        value={Math.min((totalCount / 1000) * 100, 100)} 
-                        className="h-2 w-20 transition-all duration-500 ease-out" 
+                      <Progress
+                        value={Math.min((totalCount / 1000) * 100, 100)}
+                        className="h-2 w-20 transition-all duration-500 ease-out"
                       />
                     )}
                   </div>
