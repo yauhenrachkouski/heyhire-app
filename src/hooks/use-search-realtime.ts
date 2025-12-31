@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
 import { useRealtime } from "@upstash/realtime/client";
 import type { RealtimeEvents } from "@/lib/realtime";
 
@@ -23,11 +23,12 @@ interface UseSearchRealtimeOptions {
   initialProgress: number;
   onCompleted?: (candidatesCount: number) => void;
   onFailed?: (error: string) => void;
+  onCandidatesAdded?: (data: { count: number; total: number }) => void;
   onScoringProgress?: (data: { candidateId: string; searchCandidateId: string; score: number; scored: number; total: number; scoringResult?: any }) => void;
   onScoringCompleted?: (data: { scored: number; errors: number }) => void;
 }
 
-// List of statuses that indicate an active/running search
+// Statuses that indicate an active/running search
 const ACTIVE_STATUSES = ["created", "processing", "pending", "generating", "generated", "executing", "polling"];
 
 export function useSearchRealtime({
@@ -36,17 +37,17 @@ export function useSearchRealtime({
   initialProgress,
   onCompleted,
   onFailed,
+  onCandidatesAdded,
   onScoringProgress,
   onScoringCompleted,
 }: UseSearchRealtimeOptions) {
-  // Initialize state from server-rendered props, then realtime takes over
+  // State initialized from SSR, then realtime takes over
   const [state, setState] = useState<SearchRealtimeState>({
     status: initialStatus,
     progress: initialProgress,
     message: "",
   });
 
-  // Scoring state - separate from search state
   const [scoringState, setScoringState] = useState<ScoringState>({
     isScoring: false,
     scored: 0,
@@ -54,35 +55,29 @@ export function useSearchRealtime({
     errors: 0,
   });
 
-  // Track if we have an optimistic update that shouldn't be overridden by sync effects
-  const hasOptimisticUpdateRef = useRef(false);
-
-  // Connect for active searches OR when scoring is in progress
   const isSearchActive = ACTIVE_STATUSES.includes(state.status);
-  const shouldConnect = isSearchActive || scoringState.isScoring || state.status === "completed";
+  
+  // Always connect - we need to receive scoring events even when search is completed
+  const shouldConnect = true;
 
   type RealtimePayload = {
-    event: "status.updated" | "progress.updated" | "search.completed" | "search.failed" | "scoring.started" | "scoring.progress" | "scoring.completed" | "scoring.failed";
+    event: "status.updated" | "progress.updated" | "search.completed" | "search.failed" | "candidates.added" | "scoring.started" | "scoring.progress" | "scoring.completed" | "scoring.failed";
     data: unknown;
     channel: string;
   };
 
   const { status: connectionStatus } = useRealtime<
     RealtimeEvents,
-    "status.updated" | "progress.updated" | "search.completed" | "search.failed" | "scoring.started" | "scoring.progress" | "scoring.completed" | "scoring.failed"
+    "status.updated" | "progress.updated" | "search.completed" | "search.failed" | "candidates.added" | "scoring.started" | "scoring.progress" | "scoring.completed" | "scoring.failed"
   >({
     channels: shouldConnect ? [`search:${searchId}`] : [],
-    events: ["status.updated", "progress.updated", "search.completed", "search.failed", "scoring.started", "scoring.progress", "scoring.completed", "scoring.failed"],
+    events: ["status.updated", "progress.updated", "search.completed", "search.failed", "candidates.added", "scoring.started", "scoring.progress", "scoring.completed", "scoring.failed"],
     onData: useCallback((payload: RealtimePayload) => {
-      console.log("[useSearchRealtime] Received event:", payload.event, "data:", JSON.stringify(payload.data));
-      
-      // Clear optimistic flag - we're now getting real updates from the server
-      hasOptimisticUpdateRef.current = false;
+      console.log("[useSearchRealtime] Event:", payload.event);
       
       // Search events
       if (payload.event === "status.updated") {
         const data = payload.data as { status: string; message: string; progress?: number };
-        console.log("[useSearchRealtime] Status update:", data.status, "progress:", data.progress);
         setState((prev) => ({
           ...prev,
           status: data.status,
@@ -91,7 +86,6 @@ export function useSearchRealtime({
         }));
       } else if (payload.event === "progress.updated") {
         const data = payload.data as { progress: number; message: string };
-        console.log("[useSearchRealtime] Progress update:", data.progress, "%");
         setState((prev) => ({
           ...prev,
           progress: data.progress,
@@ -99,7 +93,6 @@ export function useSearchRealtime({
         }));
       } else if (payload.event === "search.completed") {
         const data = payload.data as { candidatesCount: number; status: string };
-        console.log("[useSearchRealtime] Search completed with", data.candidatesCount, "candidates");
         setState({
           status: "completed",
           progress: 100,
@@ -108,18 +101,19 @@ export function useSearchRealtime({
         onCompleted?.(data.candidatesCount);
       } else if (payload.event === "search.failed") {
         const data = payload.data as { error: string };
-        console.log("[useSearchRealtime] Search failed:", data.error);
         setState((prev) => ({
           ...prev,
           status: "error",
           message: data.error,
         }));
         onFailed?.(data.error);
+      } else if (payload.event === "candidates.added") {
+        const data = payload.data as { count: number; total: number };
+        onCandidatesAdded?.(data);
       }
       // Scoring events
       else if (payload.event === "scoring.started") {
         const data = payload.data as { total: number };
-        console.log("[useSearchRealtime] Scoring started, total:", data.total);
         setScoringState({
           isScoring: true,
           scored: 0,
@@ -128,7 +122,6 @@ export function useSearchRealtime({
         });
       } else if (payload.event === "scoring.progress") {
         const data = payload.data as { candidateId: string; searchCandidateId: string; score: number; scored: number; total: number; scoringResult?: any };
-        console.log("[useSearchRealtime] Scoring progress:", data.scored, "/", data.total, "- Score:", data.score);
         setScoringState((prev) => ({
           ...prev,
           scored: data.scored,
@@ -137,7 +130,6 @@ export function useSearchRealtime({
         onScoringProgress?.(data);
       } else if (payload.event === "scoring.completed") {
         const data = payload.data as { scored: number; errors: number };
-        console.log("[useSearchRealtime] Scoring completed. Scored:", data.scored, "Errors:", data.errors);
         setScoringState({
           isScoring: false,
           scored: data.scored,
@@ -146,35 +138,23 @@ export function useSearchRealtime({
         });
         onScoringCompleted?.(data);
       } else if (payload.event === "scoring.failed") {
-        const data = payload.data as { error: string };
-        console.log("[useSearchRealtime] Scoring failed:", data.error);
         setScoringState((prev) => ({
           ...prev,
           isScoring: false,
         }));
       }
-    }, [onCompleted, onFailed, onScoringProgress, onScoringCompleted]),
+    }, [onCompleted, onFailed, onCandidatesAdded, onScoringProgress, onScoringCompleted]),
   });
 
+  // Optimistic status update for immediate UI feedback
   const setOptimisticStatus = useCallback((status: string, message: string = "", progress?: number) => {
-    // Mark that we have an optimistic update - prevents sync effects from reverting it
-    if (ACTIVE_STATUSES.includes(status)) {
-      hasOptimisticUpdateRef.current = true;
-    } else {
-      hasOptimisticUpdateRef.current = false;
-    }
-    
     setState((prev) => ({
       ...prev,
       status,
       message,
-      // Reset progress when starting a new active state, keep current if not specified
-      progress: progress !== undefined ? progress : (ACTIVE_STATUSES.includes(status) ? 5 : prev.progress),
+      progress: progress ?? (ACTIVE_STATUSES.includes(status) ? 5 : prev.progress),
     }));
   }, []);
-
-  // Getter for optimistic update state - used by sync effects to avoid overriding
-  const hasOptimisticUpdate = useCallback(() => hasOptimisticUpdateRef.current, []);
 
   return {
     ...state,
@@ -182,6 +162,5 @@ export function useSearchRealtime({
     connectionStatus,
     isActive: isSearchActive,
     setOptimisticStatus,
-    hasOptimisticUpdate,
   };
 }

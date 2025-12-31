@@ -208,6 +208,13 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
     console.error("[SearchResultsClient] Search failed:", errorMsg);
   }, []);
 
+  const handleCandidatesAdded = useCallback((data: { count: number; total: number }) => {
+    console.log("[SearchResultsClient] Candidates added:", data.count, "total:", data.total);
+    // Invalidate candidates query to fetch the new ones
+    queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.details(search.id) });
+    queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.progress(search.id) });
+  }, [queryClient, search.id]);
+
   const handleScoringProgress = useCallback((data: { candidateId: string; searchCandidateId: string; score: number; scored: number; total: number; scoringResult?: any }) => {
     console.log("[SearchResultsClient] Score update:", data.searchCandidateId, "=", data.score);
     
@@ -247,34 +254,17 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
     progress: realtimeProgress,
     message: realtimeMessage,
     scoring: scoringState,
-    connectionStatus,
     setOptimisticStatus,
-    hasOptimisticUpdate,
   } = useSearchRealtime({
     searchId: search.id,
     initialStatus: search.status,
     initialProgress: search.progress || 0,
     onCompleted: handleSearchCompleted,
     onFailed: handleSearchFailed,
+    onCandidatesAdded: handleCandidatesAdded,
     onScoringProgress: handleScoringProgress,
     onScoringCompleted: handleScoringCompleted,
   });
-
-  // Sync realtime status from progressQuery when server says completed but client thinks active
-  // This catches missed realtime events (connection issues) via the existing progressQuery refetch cycle
-  // Skip if we have an optimistic update pending (e.g., user clicked "Get +100")
-  useEffect(() => {
-    // Don't override optimistic updates - let realtime events handle the transition
-    if (hasOptimisticUpdate()) return;
-    
-    const serverStatus = progressQuery.data?.searchStatus;
-    const isClientActive = ['created', 'processing', 'pending', 'generating', 'generated', 'executing', 'polling'].includes(realtimeStatus);
-    
-    if (serverStatus === 'completed' && isClientActive) {
-      console.log('[SearchResultsClient] Syncing status from progressQuery: completed');
-      setOptimisticStatus('completed', 'Search completed', 100);
-    }
-  }, [progressQuery.data?.searchStatus, realtimeStatus, setOptimisticStatus, hasOptimisticUpdate]);
 
   // ========== Derived state ==========
   const isActiveSearch = ['created', 'processing', 'pending', 'generating', 'generated', 'executing', 'polling'].includes(realtimeStatus);

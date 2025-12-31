@@ -3,11 +3,12 @@
 import "server-only";
 import { db } from "@/db/drizzle";
 import { searchCandidates, searchCandidateStrategies, sourcingStrategies, search } from "@/db/schema";
-import { eq, inArray, avg, sql, desc, and, isNotNull } from "drizzle-orm";
+import { eq, and, isNotNull } from "drizzle-orm";
 import { getErrorMessage } from "@/lib/handle-error";
 import { requireSearchReadAccess, assertNotReadOnlyForOrganization } from "@/lib/request-access";
 import { triggerSourcingWorkflow } from "@/actions/jobs";
 import { getSearchById } from "@/actions/search";
+import { realtime } from "@/lib/realtime";
 
 /**
  * Analyzes the performance of search strategies and triggers a new run with the best ones.
@@ -27,6 +28,13 @@ export async function analyzeAndContinueSearch(searchId: string) {
         progress: 5 
       })
       .where(eq(search.id, searchId));
+
+    // Emit realtime event so client sees the change immediately
+    await realtime.channel(`search:${searchId}`).emit("status.updated", {
+      status: "processing",
+      message: "Analyzing strategies...",
+      progress: 5,
+    });
 
     // 1. Get performance stats for each strategy
     // We want: strategyId, strategyName, median score, candidate count

@@ -34,6 +34,12 @@ const schema = {
       message: z.string(),
     }),
   },
+  candidates: {
+    added: z.object({
+      count: z.number(),
+      total: z.number(),
+    }),
+  },
   // Scoring events - separate from search events
   scoring: {
     started: z.object({

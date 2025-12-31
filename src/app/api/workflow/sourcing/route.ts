@@ -403,9 +403,21 @@ export const { POST } = serve<SourcingWorkflowPayload>(
     });
 
     // Step 7: Poll for results (up to 5 minutes)
+    // Save candidates incrementally as strategies complete
     const maxPolls = 60; // 60 * 5 seconds = 5 minutes
     let pollCount = 0;
     let candidatesData: unknown[] = [];
+    let lastSavedCount = 0;
+    
+    // Get search record early for incremental saves
+    const searchRecordForSave = await context.run("get-search-params-early", async () => {
+      return await db.query.search.findFirst({
+        where: eq(search.id, searchId),
+      });
+    });
+    
+    // Import save function for incremental saves
+    const { saveCandidatesFromSearch } = await import("@/actions/candidates");
 
     while (pollCount < maxPolls) {
       pollCount++;
@@ -448,14 +460,32 @@ export const { POST } = serve<SourcingWorkflowPayload>(
         pollData = strategyResultsResponseSchema.parse(pollResponse.body);
       } catch (error) {
          console.error(`[Workflow] Poll ${pollCount} schema validation failed:`, error);
-         // If schema parsing fails, we might want to retry polling? 
-         // Or assumes API is broken?
-         // Let's count this as a failed poll and continue, hoping next poll is valid?
-         // Or fail if it persists.
          continue;
       }
 
       console.log(`[Workflow] Poll ${pollCount}: status=${pollData.status}`);
+
+      // Get current candidates (partial or final)
+      const currentCandidates = pollData.candidates || pollData.results || [];
+      
+      // Save new candidates incrementally if we have more than before
+      if (currentCandidates.length > lastSavedCount && searchRecordForSave) {
+        const newCandidates = currentCandidates.slice(lastSavedCount);
+        console.log(`[Workflow] Saving ${newCandidates.length} new candidates incrementally`);
+        
+        await context.run(`save-candidates-incremental-${pollCount}`, async () => {
+          const parsedQuery = JSON.parse(searchRecordForSave.params);
+          await saveCandidatesFromSearch(searchId, newCandidates as any, rawText, parsedQuery);
+          
+          // Emit event so client refreshes the list
+          await realtime.channel(channel).emit("candidates.added", {
+            count: newCandidates.length,
+            total: currentCandidates.length,
+          });
+        });
+        
+        lastSavedCount = currentCandidates.length;
+      }
 
       // Update progress based on strategies completed
       if (pollData.strategies_completed && pollData.strategies_total) {
@@ -473,13 +503,13 @@ export const { POST } = serve<SourcingWorkflowPayload>(
 
           await realtime.channel(channel).emit( "progress.updated", {
             progress,
-            message: `Searching candidates... (${pollData.strategies_completed}/${pollData.strategies_total} strategies complete)`
+            message: `Found ${currentCandidates.length} candidates (${pollData.strategies_completed}/${pollData.strategies_total} strategies)`
           });
         });
       }
 
       if (pollData.status === "completed") {
-        candidatesData = pollData.candidates || pollData.results || [];
+        candidatesData = currentCandidates;
         console.log("[Workflow] Search completed with", candidatesData.length, "candidates");
         break;
       }
@@ -521,51 +551,26 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       throw new Error("Search timed out after 5 minutes");
     }
 
-    // Step 8: Save candidates to database
-    // Import saveCandidatesFromSearch dynamically to avoid circular deps
-    const { saveCandidatesFromSearch } = await import("@/actions/candidates");
+    // Step 8: Save any remaining candidates that weren't saved incrementally
+    // This handles the final batch when status changes to "completed"
+    const remainingCandidates = candidatesData.length - lastSavedCount;
     
-    // Get parsedQuery from search params
-    const searchRecord = await context.run("get-search-params", async () => {
-      console.log("[Workflow] Fetching search params for:", searchId, "type:", typeof searchId);
-      const result = await db.query.search.findFirst({
-        where: eq(search.id, searchId),
+    if (remainingCandidates > 0 && searchRecordForSave) {
+      await context.run("save-candidates-final", async () => {
+        console.log("[Workflow] Saving final batch of", remainingCandidates, "candidates");
+        const parsedQuery = JSON.parse(searchRecordForSave.params);
+        const finalBatch = candidatesData.slice(lastSavedCount);
+        // @ts-expect-error - finalBatch is typed correctly from API
+        await saveCandidatesFromSearch(searchId, finalBatch, rawText, parsedQuery);
+        
+        await realtime.channel(channel).emit("progress.updated", {
+          progress: 95,
+          message: `Saved ${candidatesData.length} candidates, finalizing...`
+        });
       });
-      console.log("[Workflow] Search params fetched:", result ? "found" : "not found");
-      return result;
-    });
-
-    let savedCandidatesCount = 0;
-    
-    if (searchRecord && candidatesData.length > 0) {
-      const parsedQuery = JSON.parse(searchRecord.params);
-      
-      const saveResult = await context.run("save-candidates", async () => {
-        console.log("[Workflow] Starting candidate save for", candidatesData.length, "candidates");
-        try {
-          // @ts-expect-error - candidatesData is typed correctly from API
-          const result = await saveCandidatesFromSearch(searchId, candidatesData, rawText, parsedQuery);
-          console.log("[Workflow] Batch save complete. New:", result.saved, "Linked:", result.linked);
-          
-          // NOTE: Don't emit "completed" status here - let finalize step handle it
-          await realtime.channel(channel).emit("progress.updated", {
-            progress: 95,
-            message: `Saved ${candidatesData.length} candidates, finalizing...`
-          });
-          
-          return result;
-        } catch (error) {
-          console.error("[Workflow] Error saving candidates:", error);
-          // Return partial result so workflow can continue
-          return { success: false, saved: 0, linked: 0 };
-        }
-      });
-      
-      savedCandidatesCount = saveResult?.saved || 0;
-      console.log("[Workflow] Candidates saved, proceeding to finalize step. Saved:", savedCandidatesCount);
-    } else {
-      console.log("[Workflow] No candidates to save, proceeding to finalize step");
     }
+    
+    console.log("[Workflow] All candidates saved, proceeding to finalize step. Total:", candidatesData.length);
 
     // Step 9: Update final status and emit completion event
     await context.run("finalize", async () => {
