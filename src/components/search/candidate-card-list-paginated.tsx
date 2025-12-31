@@ -51,7 +51,7 @@ export function CandidateCardListPaginated({
   searchId,
   sourcingCriteria,
   viewMode = "cards",
-  pageSize = 10,
+  pageSize = 20,
   pageIndex = 0,
   pageCount,
   onPaginationChange,
@@ -234,7 +234,7 @@ export function CandidateCardListPaginated({
       </div>
 
       <div className="mt-4">
-        <DataTablePagination table={table} />
+        <DataTablePagination table={table} pageSizeOptions={[20, 50, 100]} />
       </div>
 
       {selectedIds.size > 0 && (

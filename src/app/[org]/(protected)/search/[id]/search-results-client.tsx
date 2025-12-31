@@ -11,10 +11,11 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger, PopoverHeader, PopoverTitle, PopoverDescription } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
-import { IconPencil, IconCalendar, IconUser, IconInfoCircle, IconCopy } from "@tabler/icons-react";
+import { IconPencil, IconCalendar, IconUser, IconInfoCircle, IconCopy, IconLoader2 } from "@tabler/icons-react";
 import { formatDate } from "@/lib/format";
 import SourcingLoader from "@/components/search/sourcing-custom-loader";
 import { updateSearchName } from "@/actions/search";
+import { analyzeAndContinueSearch } from "@/actions/workflow";
 import { toast } from "sonner";
 import { useSearchRealtime } from "@/hooks/use-search-realtime";
 import posthog from 'posthog-js';
@@ -62,7 +63,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
   const scoreMin = searchParams.get("scoreMin") ? parseInt(searchParams.get("scoreMin")!) : 0;
   const scoreMax = searchParams.get("scoreMax") ? parseInt(searchParams.get("scoreMax")!) : 100;
   const page = searchParams.get("page") ? parseInt(searchParams.get("page")!) : 1;
-  const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!) : 10;
+  const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!) : 20;
   const sortBy = searchParams.get("sortBy") || "date-desc";
   
   // React Table uses 0-based index
@@ -248,10 +249,29 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
   const isScoring = scoringState.isScoring;
   
   // Show progress bar logic
+  // Show if:
+  // 1. Initial loading and no data yet
+  // 2. Active search (initial or continue)
   const isInitialLoading = isLoading && !data;
-  const shouldShowProgressBar = (isActiveSearch && candidates.length === 0) || (isInitialLoading && isActiveSearch);
+  const shouldShowProgressBar = isActiveSearch || isInitialLoading;
   
   // Only show skeletons if we are actively loading data AND not showing the progress bar
+  // If progress bar is shown, we want to hide the list to avoid clutter/confusion or show skeletons underneath
+  // Actually, for "Continue Search", we might want to see existing candidates while new ones load?
+  // User asked to "handle progress in progress bar".
+  // If we assume the full screen loader is what we want for "new search", 
+  // but for "continue search" we might want a less intrusive indicator?
+  // But the existing code forces full screen overlay if shouldShowProgressBar is true.
+  // Let's stick to the requested "handle status changes and progress".
+  
+  // If we have candidates (Continue Search), we probably don't want the full overlay blocking them.
+  // But the current implementation of shouldShowProgressBar logic was:
+  // (isActiveSearch && candidates.length === 0) || (isInitialLoading && isActiveSearch)
+  // This implies overlay is ONLY for initial empty state.
+  
+  // If the user wants to see progress for "Continue Search", we should probably use the header progress bar.
+  // Which we are about to modify.
+  
   const effectiveSkeletonCount = (shouldShowProgressBar || (isLoading && !data)) ? limit : 0;
 
   // Use progress.total (from DB count) as the source of truth for candidate count
@@ -312,8 +332,20 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
     }
   };
 
-  const handleContinueSearch = () => {
-    toast.info("Continue search functionality coming soon");
+  const handleContinueSearch = async () => {
+    toast.promise(analyzeAndContinueSearch(search.id), {
+        loading: "Analyzing best strategies...",
+        success: (result) => {
+            if (result.success) {
+                return "Continuing search with best strategies";
+            } else {
+                throw new Error(result.error);
+            }
+        },
+        error: (err) => {
+            return err instanceof Error ? err.message : "Failed to continue search";
+        }
+    });
   };
 
   return (
@@ -422,14 +454,10 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
                       <span className="text-xs">1,000</span>
                     </div>
                     {isActiveSearch ? (
-                      <div className="h-2 w-20 bg-muted rounded-full overflow-hidden relative">
-                        <div 
-                          className="h-full w-1/3 bg-primary rounded-full absolute"
-                          style={{
-                            animation: 'shimmer 1.5s ease-in-out infinite',
-                          }}
-                        />
-                      </div>
+                      <Progress 
+                        value={realtimeProgress || 5} 
+                        className="h-2 w-20 transition-all duration-500 ease-out animate-pulse" 
+                      />
                     ) : (
                       <Progress 
                         value={Math.min((totalCount / 1000) * 100, 100)} 
@@ -442,7 +470,16 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
                   <p>You have collected {totalCount.toLocaleString()} candidates.</p>
                   <p className="text-muted-foreground">Maximum limit for this search is 1,000 candidates.</p>
                   {isActiveSearch && (
-                    <p className="text-muted-foreground mt-1">Status: {realtimeStatus}</p>
+                    <div className="pt-2 mt-2 border-t border-border">
+                      <p className="font-medium capitalize text-foreground mb-0.5">
+                        {realtimeStatus === 'processing' ? 'Analyzing' : realtimeStatus}...
+                      </p>
+                      {realtimeMessage && <p className="text-muted-foreground mb-1">{realtimeMessage}</p>}
+                      <div className="flex items-center justify-between text-muted-foreground">
+                        <span>Progress</span>
+                        <span>{realtimeProgress}%</span>
+                      </div>
+                    </div>
                   )}
                 </TooltipContent>
               </Tooltip>
@@ -455,7 +492,7 @@ export function SearchResultsClient({ search }: SearchResultsClientProps) {
               onClick={handleContinueSearch}
               disabled={totalCount >= 1000 || isActiveSearch}
             >
-              {totalCount >= 1000 ? "Limit Reached" : isActiveSearch ? "Searching..." : "Get +100"}
+              {totalCount >= 1000 ? "Limit Reached" : isActiveSearch ? <IconLoader2 className="h-4 w-4 animate-spin" /> : "Get +100"}
             </Button>
           </div>
         </div>

@@ -31,7 +31,7 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
   const scoreMin = resolvedSearchParams.scoreMin ? parseInt(resolvedSearchParams.scoreMin as string) : 0;
   const scoreMax = resolvedSearchParams.scoreMax ? parseInt(resolvedSearchParams.scoreMax as string) : 100;
   const page = resolvedSearchParams.page ? parseInt(resolvedSearchParams.page as string) : 1;
-  const limit = resolvedSearchParams.limit ? parseInt(resolvedSearchParams.limit as string) : 10;
+  const limit = resolvedSearchParams.limit ? parseInt(resolvedSearchParams.limit as string) : 20;
   const sortBy = (resolvedSearchParams.sortBy as string) || "date-desc";
 
   const queryClient = new QueryClient();

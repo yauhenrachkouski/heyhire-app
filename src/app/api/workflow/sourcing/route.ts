@@ -25,6 +25,7 @@ interface SourcingWorkflowPayload {
   searchId: string;
   rawText: string;
   criteria: SourcingCriteria;
+  strategyIdsToRun?: string[];
 }
 
 export const { POST } = serve<SourcingWorkflowPayload>(
@@ -37,12 +38,13 @@ export const { POST } = serve<SourcingWorkflowPayload>(
         return null;
       }
 
-      const { searchId, rawText, criteria } = context.requestPayload;
+      const { searchId, rawText, criteria, strategyIdsToRun } = context.requestPayload;
       console.log("[Workflow] Payload received", {
         hasSearchId: Boolean(searchId),
         hasRawText: Boolean(rawText),
         hasCriteria: Boolean(criteria),
         rawTextLength: typeof rawText === "string" ? rawText.length : null,
+        strategyIdsToRunCount: strategyIdsToRun?.length,
       });
       if (!searchId || !rawText || !criteria) {
         console.error("[Workflow] Invalid payload received", {
@@ -54,7 +56,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       }
 
       console.log("[Workflow] Starting sourcing workflow for search:", searchId);
-      return { searchId, rawText, criteria };
+      return { searchId, rawText, criteria, strategyIdsToRun };
     });
     
     // If validation failed, stop workflow execution
@@ -62,7 +64,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       return { error: "Invalid request payload", aborted: true };
     }
     
-    const { searchId, rawText, criteria } = payload;
+    const { searchId, rawText, criteria, strategyIdsToRun } = payload;
     console.log("[Workflow] Using payload searchId:", searchId);
     const channel = `search:${searchId}`;
 
@@ -81,76 +83,158 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       console.log("[Workflow] Updated search status to processing");
     });
 
-    // Step 2: Generate strategies via external API
-    const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-    
-    const generateResponse = await context.call<{
-      request_id: string;
-      reasoning: unknown;
-      strategies: SourcingStrategyItem[];
-    }>("generate-strategies", {
-      url: `${API_BASE_URL}/api/v3/strategies/generate`,
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: {
-        raw_text: rawText,
-        parsed_with_criteria: criteria,
-        request_id: requestId,
-      },
-      retries: 3,
-    });
+    // Step 2: Generate strategies OR use existing ones
+    let allGeneratedStrategies: SourcingStrategyItem[] = [];
 
-    if (generateResponse.status !== 200) {
-      await context.run("handle-generate-error", async () => {
-        await db
-          .update(search)
-          .set({ status: "error", progress: 0 })
-          .where(eq(search.id, searchId));
-        
-        await realtime.channel(channel).emit( "search.failed", {
-          error: `Strategy generation failed: ${generateResponse.status}`
-        });
-        console.error(`[Workflow] Strategy generation failed: ${generateResponse.status}`);
+    if (strategyIdsToRun && strategyIdsToRun.length > 0) {
+      // Branch A: Use existing strategies (Get 100 more)
+      console.log("[Workflow] Using existing strategies:", strategyIdsToRun);
+      
+      allGeneratedStrategies = await context.run("fetch-and-update-strategies-pagination", async () => {
+         // Deduplicate IDs for fetching
+         const uniqueIds = Array.from(new Set(strategyIdsToRun));
+         const existingStrategies = await db.query.sourcingStrategies.findMany({
+            where: inArray(sourcingStrategies.id, uniqueIds),
+         });
+         
+         const strategyMap = new Map(existingStrategies.map(s => [s.id, s]));
+         const updatedStrategies: SourcingStrategyItem[] = [];
+
+         // Process each requested execution (preserving order and count from strategyIdsToRun)
+         // We need to track the current page for each strategy ID within this batch to increment correctly
+         const strategyPageTracker = new Map<string, number>();
+
+         for (const id of strategyIdsToRun) {
+            const s = strategyMap.get(id);
+            if (!s) continue;
+
+            let payload: any;
+            try {
+                payload = JSON.parse(s.apifyPayload);
+            } catch (e) {
+                payload = {}; 
+            }
+
+            // Determine the page for this specific execution
+            // Start from DB value, or if we've already incremented in this loop, use that
+            const dbPage = payload.startPage || 1;
+            const lastUsedPage = strategyPageTracker.get(id) ?? dbPage;
+            const nextPage = lastUsedPage + 1;
+            
+            // Update tracker
+            strategyPageTracker.set(id, nextPage);
+
+            // Create execution item with SPECIFIC page
+            const executionPayload = { ...payload, startPage: nextPage };
+            
+            updatedStrategies.push({
+                id: s.id,
+                name: s.name,
+                description: s.description || "",
+                apify_payload: executionPayload,
+            });
+         }
+
+         // Batch update DB with the final page numbers for each strategy
+         for (const [id, finalPage] of strategyPageTracker.entries()) {
+             const s = strategyMap.get(id);
+             if (s) {
+                 let payload: any;
+                 try { payload = JSON.parse(s.apifyPayload); } catch { payload = {}; }
+                 
+                 await db.update(sourcingStrategies)
+                    .set({ apifyPayload: JSON.stringify({ ...payload, startPage: finalPage }) })
+                    .where(eq(sourcingStrategies.id, id));
+             }
+         }
+         
+         return updatedStrategies;
       });
       
-      // Don't retry on client errors (4xx)
-      if (generateResponse.status >= 400 && generateResponse.status < 500) {
-        return {
-          success: false,
-          searchId,
-          error: `Strategy generation failed: ${generateResponse.status}`,
-        };
+      if (allGeneratedStrategies.length === 0) {
+         // Fallback if IDs were invalid (shouldn't happen if logic is correct)
+         console.warn("[Workflow] No existing strategies found for IDs provided. Falling back to generation.");
+      } else {
+         await realtime.channel(channel).emit( "status.updated", {
+          status: "processing",
+          message: `Continuing with ${allGeneratedStrategies.length} best strategies...`,
+          progress: 15
+        });
       }
+    }
+
+    // Branch B: Generate new strategies (only if no existing ones used)
+    if (allGeneratedStrategies.length === 0) {
+      const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       
-      throw new Error(`Strategy generation failed: ${generateResponse.status}`);
-    }
-
-    let generateData;
-    try {
-      generateData = strategyGenerationResponseSchema.parse(generateResponse.body);
-    } catch (error) {
-       await context.run("handle-generate-schema-error", async () => {
-        await db
-          .update(search)
-          .set({ status: "error", progress: 0 })
-          .where(eq(search.id, searchId));
-        
-        await realtime.channel(channel).emit( "search.failed", {
-          error: "Strategy generation response invalid"
-        });
-        console.error("[Workflow] Strategy generation schema validation failed:", error);
+      const generateResponse = await context.call<{
+        request_id: string;
+        reasoning: unknown;
+        strategies: SourcingStrategyItem[];
+      }>("generate-strategies", {
+        url: `${API_BASE_URL}/api/v3/strategies/generate`,
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: {
+          raw_text: rawText,
+          parsed_with_criteria: criteria,
+          request_id: requestId,
+        },
+        retries: 3,
       });
-      return { success: false, error: "Strategy generation response invalid" };
-    }
 
-    // Always clamp the amount we request/save per strategy.
-    const allGeneratedStrategies = generateData.strategies.map((s) => ({
-      ...s,
-      apify_payload: {
-        ...s.apify_payload,
-        maxItems: STRATEGY_MAX_ITEMS,
-      },
-    }));
+      if (generateResponse.status !== 200) {
+        await context.run("handle-generate-error", async () => {
+          await db
+            .update(search)
+            .set({ status: "error", progress: 0 })
+            .where(eq(search.id, searchId));
+          
+          await realtime.channel(channel).emit( "search.failed", {
+            error: `Strategy generation failed: ${generateResponse.status}`
+          });
+          console.error(`[Workflow] Strategy generation failed: ${generateResponse.status}`);
+        });
+        
+        // Don't retry on client errors (4xx)
+        if (generateResponse.status >= 400 && generateResponse.status < 500) {
+          return {
+            success: false,
+            searchId,
+            error: `Strategy generation failed: ${generateResponse.status}`,
+          };
+        }
+        
+        throw new Error(`Strategy generation failed: ${generateResponse.status}`);
+      }
+
+      let generateData;
+      try {
+        generateData = strategyGenerationResponseSchema.parse(generateResponse.body);
+      } catch (error) {
+         await context.run("handle-generate-schema-error", async () => {
+          await db
+            .update(search)
+            .set({ status: "error", progress: 0 })
+            .where(eq(search.id, searchId));
+          
+          await realtime.channel(channel).emit( "search.failed", {
+            error: "Strategy generation response invalid"
+          });
+          console.error("[Workflow] Strategy generation schema validation failed:", error);
+        });
+        return { success: false, error: "Strategy generation response invalid" };
+      }
+
+      // Always clamp the amount we request/save per strategy.
+      allGeneratedStrategies = generateData.strategies.map((s) => ({
+        ...s,
+        apify_payload: {
+          ...s.apify_payload,
+          maxItems: STRATEGY_MAX_ITEMS,
+        },
+      }));
+    }
 
     if (allGeneratedStrategies.length === 0) {
       await context.run("handle-no-strategies", async () => {
@@ -168,39 +252,56 @@ export const { POST } = serve<SourcingWorkflowPayload>(
 
     // In debug mode we still SAVE all strategies, but only AUTO-EXECUTE the first.
     // This lets us manually run other strategies from the UI for testing.
-    const strategiesToExecute = process.env.DEBUG_SOURCING
+    // UNLESS we are explicitly continuing specific strategies
+    const isContinuing = strategyIdsToRun && strategyIdsToRun.length > 0;
+    
+    const strategiesToExecute = (process.env.DEBUG_SOURCING && !isContinuing)
       ? allGeneratedStrategies.slice(0, 1)
       : allGeneratedStrategies;
 
     const strategyIds = allGeneratedStrategies.map((s) => s.id);
     const executedStrategyIds = strategiesToExecute.map((s) => s.id);
 
-    console.log("[Workflow] Generated", allGeneratedStrategies.length, "strategies");
+    console.log("[Workflow] Strategies to use:", allGeneratedStrategies.length);
     console.log("[Workflow] Will auto-execute", strategiesToExecute.length, "strategies");
 
-    // Step 3: Save strategies to database
-    await context.run("save-strategies", async () => {
-      for (const strategy of allGeneratedStrategies) {
-        // IMPORTANT: persist the strategy with the SAME id we send to the sourcing API,
-        // so candidates can return `source_strategy_ids` that match DB ids.
-        await db.insert(sourcingStrategies).values({
-          id: strategy.id,
-          searchId: searchId,
-          name: strategy.name,
-          description: strategy.description,
-          apifyPayload: JSON.stringify(strategy.apify_payload),
-          status: "pending",
-        });
-      }
-      
-      await realtime.channel(channel).emit( "status.updated", {
-        status: "generating",
-        message: `Generated ${strategyIds.length} sourcing strategies`,
-        progress: 20
-      });
+    // Step 3: Save strategies to database (ONLY IF NEW)
+    if (!isContinuing) {
+        await context.run("save-strategies", async () => {
+          // Update search status to generating while we save
+          await db.update(search)
+             .set({ status: "generating" })
+             .where(eq(search.id, searchId));
 
-      console.log("[Workflow] Saved", strategyIds.length, "strategies to database");
-    });
+          for (const strategy of allGeneratedStrategies) {
+            // IMPORTANT: persist the strategy with the SAME id we send to the sourcing API,
+            // so candidates can return `source_strategy_ids` that match DB ids.
+            await db.insert(sourcingStrategies).values({
+              id: strategy.id,
+              searchId: searchId,
+              name: strategy.name,
+              description: strategy.description,
+              apifyPayload: JSON.stringify(strategy.apify_payload),
+              status: "pending",
+            });
+          }
+          
+          await realtime.channel(channel).emit( "status.updated", {
+            status: "generating",
+            message: `Generated ${strategyIds.length} sourcing strategies`,
+            progress: 20
+          });
+
+          console.log("[Workflow] Saved", strategyIds.length, "strategies to database");
+        });
+    } else {
+        // Just update status to pending for re-execution
+        await context.run("reset-strategies-status", async () => {
+            await db.update(sourcingStrategies)
+                .set({ status: "pending", error: null, taskId: null })
+                .where(inArray(sourcingStrategies.id, executedStrategyIds));
+        });
+    }
 
     // Step 4: Update progress
     await context.run("update-progress-20", async () => {
@@ -291,7 +392,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       
       await db
         .update(search)
-        .set({ taskId: taskId, progress: 30 })
+        .set({ taskId: taskId, status: "executing", progress: 30 })
         .where(eq(search.id, searchId));
       
       await realtime.channel(channel).emit( "status.updated", {
@@ -362,7 +463,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
         await context.run(`update-progress-${pollCount}`, async () => {
           await db
             .update(search)
-            .set({ progress })
+            .set({ progress, status: "polling" })
             .where(eq(search.id, searchId));
           
           await db

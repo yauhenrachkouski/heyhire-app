@@ -601,10 +601,14 @@ export async function startBackgroundSearch(
 export async function triggerSourcingWorkflow(
   rawText: string,
   criteria: SourcingCriteria,
-  searchId: string
+  searchId: string,
+  strategyIdsToRun?: string[]
 ): Promise<{ success: boolean; workflowRunId?: string; error?: string }> {
   try {
     console.log("[Workflow Trigger] Starting workflow for search:", searchId);
+    if (strategyIdsToRun?.length) {
+      console.log("[Workflow Trigger] With specific strategies:", strategyIdsToRun);
+    }
 
     // Get the base URL for the workflow endpoint
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL 
@@ -653,6 +657,7 @@ export async function triggerSourcingWorkflow(
         searchId,
         rawText,
         criteria,
+        strategyIdsToRun,
       },
       retries: 3,
     });

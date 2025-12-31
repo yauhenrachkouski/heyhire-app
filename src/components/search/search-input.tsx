@@ -558,6 +558,7 @@ export function SearchInput({
   const [activePanel, setActivePanel] = useState<"criteria" | null>(null);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [selectedScenarios, setSelectedScenarios] = useState<string[]>([]);
+  const [lastParsedQuery, setLastParsedQuery] = useState("");
   const [isTextareaFocused, setIsTextareaFocused] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -585,7 +586,8 @@ export function SearchInput({
     isSearching ||
     isParsing ||
     !query.trim() ||
-    scenarios.length === 0;
+    scenarios.length === 0 ||
+    query.trim() !== lastParsedQuery.trim();
 
   // Update query when value prop changes
   useEffect(() => {
@@ -799,6 +801,7 @@ export function SearchInput({
         // Generate boolean search string
         const booleanSearchString = generateBooleanSearch(result.data);
         setBooleanSearch(booleanSearchString);
+        setLastParsedQuery(searchQuery);
         
         console.log("[SearchInput] Parsed query:", result.data);
         console.log("[SearchInput] Criteria:", result.criteria);
@@ -855,6 +858,7 @@ export function SearchInput({
     setActiveGroup(null);
     setScenarios([]);
     setSelectedScenarios([]);
+    setLastParsedQuery("");
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {

@@ -24,7 +24,7 @@ export const searchCandidatesKeys = {
       filters?.scoreMin ?? 0,
       filters?.scoreMax ?? 100,
       filters?.page ?? 0,
-      filters?.limit ?? 10,
+      filters?.limit ?? 20,
       filters?.sortBy ?? "date-desc",
     ] as const,
   // Helper to invalidate all lists for a specific search ID regardless of filters

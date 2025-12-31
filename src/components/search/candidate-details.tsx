@@ -17,7 +17,7 @@ import {
 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ProfileAvatar } from "@/components/custom/profile-avatar";
+import { MatchScoreAvatar } from "./match-score-avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -483,55 +483,11 @@ export function CandidateDetails({ searchCandidate, onClose, sourcingCriteria }:
               <div>
                 <div className="flex gap-4 mb-4 items-start">
                   <div className="shrink-0 flex flex-col items-center gap-2">
-                    <div className="relative w-[72px] h-[72px] flex items-center justify-center">
-                      {matchScore !== null && (
-                        <svg className="absolute inset-0 w-full h-full transform -rotate-90" viewBox="0 0 72 72">
-                          <circle
-                            cx="36"
-                            cy="36"
-                            r="33"
-                            fill="none"
-                            stroke="#e5e7eb"
-                            strokeWidth="3"
-                          />
-                          <circle
-                            cx="36"
-                            cy="36"
-                            r="33"
-                            fill="none"
-                            stroke={
-                              matchScore >= 80 ? "#16a34a" :
-                              matchScore >= 60 ? "#2563eb" :
-                              matchScore >= 40 ? "#ca8a04" :
-                              "#ea580c"
-                            }
-                            strokeWidth="3"
-                            strokeLinecap="round"
-                            strokeDasharray={`${2 * Math.PI * 33}`}
-                            strokeDashoffset={`${2 * Math.PI * 33 * (1 - matchScore / 100)}`}
-                            className="transition-all duration-500"
-                          />
-                        </svg>
-                      )}
-                      <ProfileAvatar
-                        className="h-16 w-16 relative z-10"
-                        fullName={fullName}
-                        photoUrl={candidate.photoUrl}
-                      />
-                      {matchScore !== null && (
-                        <div className="absolute bottom-0 right-0 z-20 bg-white rounded-full ring-2 ring-white shadow-sm">
-                          <span className={cn(
-                            "text-xs font-bold px-1.5 py-0.5 block",
-                            matchScore >= 80 ? "text-green-600" :
-                            matchScore >= 60 ? "text-blue-600" :
-                            matchScore >= 40 ? "text-yellow-600" :
-                            "text-orange-600"
-                          )}>
-                            {matchScore}
-                          </span>
-                        </div>
-                      )}
-                    </div>
+                    <MatchScoreAvatar
+                      matchScore={matchScore}
+                      fullName={fullName}
+                      photoUrl={candidate.photoUrl}
+                    />
                   </div>
 
                   <div className="flex-1 min-w-0 space-y-1.5">
