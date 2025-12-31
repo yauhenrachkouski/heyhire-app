@@ -1,0 +1,478 @@
+---
+description: Search real-time architecture patterns for sourcing candidates with SSR + client hybrid approach
+globs:
+  - src/app/**/search/**/*
+  - src/hooks/use-search-realtime.ts
+  - src/actions/workflow.ts
+  - src/actions/jobs.ts
+  - src/actions/candidates.ts
+  - src/app/api/workflow/**/*
+  - src/app/api/search/**/*
+  - src/lib/realtime.ts
+  - scripts/test-cursor-pagination.ts
+---
+
+# Search & Sourcing Real-time Architecture
+
+## Overview
+
+This document describes the architecture for real-time candidate sourcing, including the SSR + client hybrid approach, real-time updates via Upstash, and infinite scroll with cursor-based pagination.
+
+## Core Principles
+
+1. **Single Source of Truth**: Upstash Realtime for status updates
+2. **SSR + Client Hybrid**: Server prefetch for speed, client hydration for interactivity
+3. **Optimistic Updates**: Immediate UI feedback, backend confirmation via realtime
+4. **Cursor-based Pagination**: Efficient infinite scroll without duplicates
+
+---
+
+## Architecture Components
+
+### 1. SSR Prefetch (page.tsx)
+
+The server component prefetches the first page of candidates and progress data:
+
+```typescript
+// src/app/[org]/(protected)/search/[id]/page.tsx
+const { data: candidatesData, pagination } = await getCandidatesForSearch(search.id, {
+  scoreMin, scoreMax, limit, sortBy,
+  cursorMode: true,
+  cursor: null,  // First page always uses null cursor
+});
+
+const scoringProgress = await getSearchProgress(search.id);
+
+// Pass to client as initialData
+initialData = { candidates: candidatesData, pagination, progress: scoringProgress };
+```
+
+**Key points:**
+- Always use `cursor: null` for first page
+- Include `progress` data for candidate count display
+- Serialize with `JSON.parse(JSON.stringify())` to avoid Date serialization issues
+
+### 2. Client Hydration (search-results-client.tsx)
+
+The client component uses TanStack Query with `initialData`:
+
+```typescript
+const { data, fetchNextPage, hasNextPage } = useInfiniteQuery({
+  queryKey: searchCandidatesKeys.list(searchId, filters),
+  queryFn: async ({ pageParam = null }) => {
+    // Fetch with cursor from previous page
+    url.searchParams.set("cursor", pageParam ? String(pageParam) : "");
+    return fetch(url).then(r => r.json());
+  },
+  initialPageParam: null,
+  getNextPageParam: (lastPage) => lastPage?.pagination?.nextCursor || undefined,
+  
+  // SSR initialData
+  initialData: initialData ? {
+    pages: [{ candidates, pagination, progress }],
+    pageParams: [null]  // First page was fetched with null cursor
+  } : undefined,
+  
+  staleTime: 30 * 1000,  // Prevent unnecessary refetches
+  placeholderData: (prev) => prev,  // Keep previous data during refetch
+});
+```
+
+**Key points:**
+- `initialData` provides instant render (no loading state)
+- `pageParams: [null]` indicates first page was fetched with null cursor
+- `getNextPageParam` extracts cursor for next page
+- Subsequent pages use cursor from previous page's `pagination.nextCursor`
+
+### 3. Real-time Updates (use-search-realtime.ts)
+
+The `useSearchRealtime` hook manages WebSocket connection to Upstash Realtime:
+
+```typescript
+const ACTIVE_STATUSES = ["created", "processing", "pending", "generating", "generated", "executing", "polling"];
+
+// Connect when search is active OR completed (to receive scoring updates)
+const shouldConnect = isSearchActive || scoringState.isScoring || state.status === "completed";
+
+const { status: connectionStatus } = useRealtime({
+  channels: shouldConnect ? [`search:${searchId}`] : [],
+  events: ["status.updated", "progress.updated", "search.completed", "search.failed", ...],
+  onData: (payload) => {
+    // Update local state based on event type
+  },
+});
+```
+
+**Events handled:**
+- `status.updated`: Search status and progress changes
+- `progress.updated`: Progress percentage updates
+- `search.completed`: Search finished, invalidate queries
+- `search.failed`: Error handling
+- `scoring.started/progress/completed`: Scoring lifecycle
+
+### 4. Optimistic Updates
+
+For immediate UI feedback (e.g., "Get +100" button):
+
+```typescript
+// In client component
+const handleContinueSearch = async () => {
+  // 1. Optimistic update - instant feedback
+  setOptimisticStatus("processing", "Starting search...", 5);
+  
+  // 2. Call server action
+  const result = await analyzeAndContinueSearch(search.id);
+  
+  // 3. On error, revert to previous state
+  if (!result.success) {
+    setOptimisticStatus("completed", "", 100);
+  }
+  // On success, realtime events will update status
+};
+```
+
+```typescript
+// In setOptimisticStatus (use-search-realtime.ts)
+const setOptimisticStatus = useCallback((status: string, message: string = "", progress?: number) => {
+  setState((prev) => ({
+    ...prev,
+    status,
+    message,
+    // Auto-reset progress when entering active state
+    progress: progress !== undefined ? progress : (ACTIVE_STATUSES.includes(status) ? 5 : prev.progress),
+  }));
+}, []);
+```
+
+### 5. Backend Workflow (QStash + Upstash Realtime)
+
+The sourcing workflow uses QStash for reliable async processing:
+
+```typescript
+// src/actions/jobs.ts - triggerSourcingWorkflow
+export async function triggerSourcingWorkflow(rawText, criteria, searchId, strategyIdsToRun?) {
+  // 1. Update DB status
+  await db.update(search).set({ status: "processing", progress: 5 });
+  
+  // 2. IMMEDIATELY emit realtime event (before QStash)
+  // This ensures frontend gets instant confirmation
+  await realtime.channel(`search:${searchId}`).emit("status.updated", {
+    status: "processing",
+    message: "Starting search...",
+    progress: 5,
+  });
+  
+  // 3. Trigger QStash workflow
+  await qstashClient.publishJSON({
+    url: `${baseUrl}/api/workflow/sourcing`,
+    body: { searchId, rawText, criteria, strategyIdsToRun },
+  });
+}
+```
+
+**Workflow steps (api/workflow/sourcing/route.ts):**
+1. Validate payload
+2. Generate or use existing strategies
+3. Execute strategies via external API
+4. Poll for results with sleep
+5. Save candidates to database
+6. Emit `search.completed` event
+7. Trigger scoring workflow
+
+---
+
+## Data Flow Diagrams
+
+### Initial Search Load
+
+```
+[SSR - page.tsx]
+    │
+    │ getCandidatesForSearch(cursor: null)
+    │ getSearchProgress()
+    ▼
+[Return initialData]
+    │
+    ▼
+[Client - search-results-client.tsx]
+    │
+    │ useInfiniteQuery({ initialData })
+    │ useSearchRealtime({ initialStatus })
+    ▼
+[Immediate Render - No Loading State]
+```
+
+### Infinite Scroll
+
+```
+[User scrolls to bottom]
+    │
+    │ isInView triggers fetchNextPage()
+    ▼
+[queryFn({ pageParam: "cursor123" })]
+    │
+    │ GET /api/search/{id}/candidates?cursor=cursor123
+    ▼
+[API returns next page]
+    │
+    │ { candidates, pagination: { nextCursor: "cursor456" } }
+    ▼
+[Query data updated]
+    │
+    │ pages: [page0, page1]
+    │ pageParams: [null, "cursor123"]
+    ▼
+[New candidates rendered]
+```
+
+### Get +100 Candidates Flow
+
+```
+[User clicks "Get +100"]
+    │
+    │ setOptimisticStatus("processing", 5)
+    ▼
+[UI shows processing immediately]
+    │
+    │ analyzeAndContinueSearch(searchId)
+    ▼
+[Server: triggerSourcingWorkflow]
+    │
+    │ 1. Update DB
+    │ 2. Emit realtime event ◄── Instant confirmation
+    │ 3. Trigger QStash
+    ▼
+[QStash workflow runs]
+    │
+    │ Emits progress.updated events
+    ▼
+[Workflow completes]
+    │
+    │ Emits search.completed
+    ▼
+[Client receives event]
+    │
+    │ handleSearchCompleted()
+    │ queryClient.invalidateQueries()
+    ▼
+[New candidates appear]
+```
+
+---
+
+## Query Key Structure
+
+```typescript
+// src/lib/query-keys/search.ts
+export const searchCandidatesKeys = {
+  all: ["search-candidates"] as const,
+  lists: () => [...searchCandidatesKeys.all, "list"] as const,
+  
+  // Specific list with filters (for exact cache hits)
+  list: (searchId, filters) => [
+    ...searchCandidatesKeys.lists(),
+    searchId,
+    filters?.scoreMin ?? 0,
+    filters?.scoreMax ?? 100,
+    filters?.page ?? 0,
+    filters?.limit ?? 20,
+    filters?.sortBy ?? "date-desc",
+  ] as const,
+  
+  // Prefix for invalidating ALL lists for a search
+  details: (searchId) => [...searchCandidatesKeys.lists(), searchId] as const,
+};
+```
+
+**Invalidation patterns:**
+- `invalidateQueries({ queryKey: searchCandidatesKeys.details(searchId) })` - Invalidates all filter variations
+- `setQueryData(queryKey, ...)` - Optimistically update specific candidates (e.g., score updates)
+
+---
+
+## API Optimization
+
+### Progress Only on First Page
+
+```typescript
+// src/app/api/search/[id]/candidates/route.ts
+const shouldIncludeProgress = cursorParam === null || cursorParam.length === 0;
+const scoringProgress = shouldIncludeProgress ? await getSearchProgress(searchId) : null;
+```
+
+**Reason:** Progress (total count) only needs to be fetched once. Subsequent "load more" requests don't need it.
+
+### Payload Optimization
+
+```typescript
+// Only select needed columns for candidate list
+const results = await db.query.searchCandidates.findMany({
+  with: {
+    candidate: {
+      columns: {
+        id: true,
+        fullName: true,
+        headline: true,
+        photoUrl: true,
+        location: true,
+        linkedinUrl: true,
+        linkedinUsername: true,
+        experiences: true,
+        // Excluded: sourceData, summary, skills, educations, certifications
+      }
+    },
+  },
+});
+```
+
+**Reason:** Reduces payload size significantly by excluding large fields not needed for list display.
+
+---
+
+## Best Practices
+
+### 1. Always Use Realtime for Status Updates
+```typescript
+// ✅ Good: Emit event immediately
+await realtime.channel(channel).emit("status.updated", { status, message, progress });
+
+// ❌ Bad: Only update database (frontend won't know)
+await db.update(search).set({ status });
+```
+
+### 2. Optimistic + Confirmation Pattern
+```typescript
+// ✅ Good: Optimistic update + realtime confirmation
+setOptimisticStatus("processing");
+await serverAction();  // Server emits realtime event
+
+// ❌ Bad: Wait for server before updating UI
+await serverAction();
+setStatus("processing");  // Too slow
+```
+
+### 3. Query Invalidation on Completion
+```typescript
+// ✅ Good: Invalidate by search ID prefix (catches all filter variations)
+await queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.details(searchId) });
+
+// ❌ Bad: Invalidate specific key (misses other filter views)
+await queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.list(searchId, currentFilters) });
+```
+
+### 4. Keep Connection Active for Completed Searches
+```typescript
+// ✅ Good: Stay connected to receive scoring updates
+const shouldConnect = isSearchActive || scoringState.isScoring || state.status === "completed";
+
+// ❌ Bad: Disconnect immediately on completion (miss scoring events)
+const shouldConnect = isSearchActive;
+```
+
+---
+
+## Troubleshooting
+
+### "Stuck" Status After Get +100
+- Check if realtime event is emitted in `triggerSourcingWorkflow` BEFORE QStash
+- Verify WebSocket connection status in browser DevTools
+- Check console for `[useSearchRealtime]` logs
+
+### Candidates Not Appearing After Search
+- Verify `search.completed` event is emitted in workflow finalize step
+- Check `handleSearchCompleted` calls `invalidateQueries`
+- Ensure query key matches between invalidation and active query
+
+### Duplicate Candidates on Scroll
+- Verify cursor is being passed correctly to API
+- Check `getNextPageParam` returns correct cursor
+- Ensure `decodeCursor` handles the cursor format properly
+
+### Infinite Scroll Stops Early (Not All Candidates Loaded)
+- **Root cause**: PostgreSQL timestamp has microsecond precision (`.662470`), but JavaScript Date only has millisecond precision (`.662`). When comparing with `eq()`, `.662000 ≠ .662470` causes the tie-breaker to fail.
+- See "Cursor-based Pagination: Timestamp Precision" section below for the fix.
+
+---
+
+## Cursor-based Pagination: Timestamp Precision
+
+### The Problem
+
+PostgreSQL `timestamp` stores microsecond precision (6 decimal places), but JavaScript `Date` only has millisecond precision (3 decimal places):
+
+```
+PostgreSQL: 2025-12-31 16:52:48.662470  (microseconds)
+JavaScript: 2025-12-31 16:52:48.662     (milliseconds, treated as .662000)
+```
+
+When using standard Drizzle cursor comparison:
+```typescript
+// ❌ BROKEN: eq() fails because .662000 ≠ .662470
+or(
+  lt(searchCandidates.createdAt, new Date(cursor.createdAt)),
+  and(
+    eq(searchCandidates.createdAt, new Date(cursor.createdAt)),  // Never matches!
+    lt(searchCandidates.id, cursor.lastId)
+  )
+)
+```
+
+This causes infinite scroll to skip candidates when multiple records share the same millisecond timestamp (common with batch inserts).
+
+### The Solution: Range-based Comparison
+
+Instead of `eq()` for timestamp, use a millisecond range that captures all microsecond variants:
+
+```typescript
+// ✅ CORRECT: Range-based comparison (preserves index usage)
+const floorMs = cursorCreatedAtMs;
+const ceilMs = cursorCreatedAtMs + 1;  // +1 millisecond
+
+sql`(
+  (${searchCandidates.createdAt} < to_timestamp(${floorMs}::double precision / 1000))
+  OR (
+    ${searchCandidates.createdAt} >= to_timestamp(${floorMs}::double precision / 1000)
+    AND ${searchCandidates.createdAt} < to_timestamp(${ceilMs}::double precision / 1000)
+    AND ${searchCandidates.id} < ${cursor.lastId}
+  )
+)`
+```
+
+**How it works:**
+1. Records with `createdAt < floor` → Include (strictly before cursor millisecond)
+2. Records with `floor ≤ createdAt < ceil` → Check ID tie-breaker (same millisecond)
+
+### Performance Comparison
+
+| Approach | Index Usage | Execution Time | Planning Time |
+|----------|-------------|----------------|---------------|
+| `date_trunc()` fix | ⚠️ Partial | 0.181 ms | 0.454 ms |
+| **Range-based** | ✅ Full | **0.122 ms** | **0.172 ms** |
+
+The range-based approach is **33% faster** because PostgreSQL can use the index directly without function calls on columns.
+
+### Implementation in candidates.ts
+
+See `getCandidatesForSearch()` in `src/actions/candidates.ts` for the full implementation of:
+- `date-desc` / `date-asc` sorting with range-based cursor
+- `score-desc` / `score-asc` sorting with 3-level comparison (score → timestamp range → id)
+
+### Testing Cursor Pagination
+
+Use the CLI test script to verify pagination works correctly:
+
+```bash
+bun scripts/test-cursor-pagination.ts <searchId>
+```
+
+Expected output:
+```
+📊 Total candidates in search: 160
+📄 Page 1: Fetched 20 (hasMore: true)
+📄 Page 2: Fetched 20 (hasMore: true)
+...
+📊 Summary:
+   Total in DB: 160
+   Total fetched: 160
+   ✅ All candidates fetched successfully!
+```
