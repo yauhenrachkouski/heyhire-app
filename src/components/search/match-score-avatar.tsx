@@ -52,12 +52,12 @@ export function MatchScoreAvatar({
         </svg>
       )}
       <ProfileAvatar
-        className="h-16 w-16 relative z-10"
+        className="h-16 w-16 relative"
         fullName={fullName || "Unknown"}
         photoUrl={photoUrl}
       />
       {matchScore !== null && (
-        <div className="absolute bottom-0 right-0 z-20 bg-white rounded-full ring-2 ring-white shadow-sm">
+        <div className="absolute bottom-0 right-0  bg-white rounded-full ring-2 ring-white shadow-sm">
           <span
             className={cn(
               "text-xs font-bold px-1.5 py-0.5 block",

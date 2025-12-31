@@ -58,6 +58,8 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
           excellent: scoringProgress.excellent,
           good: scoringProgress.good,
           fair: scoringProgress.fair,
+          searchStatus: scoringProgress.searchStatus,
+          searchProgress: scoringProgress.searchProgress,
         },
       }));
   } catch (error) {

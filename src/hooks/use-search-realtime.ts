@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRealtime } from "@upstash/realtime/client";
 import type { RealtimeEvents } from "@/lib/realtime";
 
@@ -53,6 +53,21 @@ export function useSearchRealtime({
     total: 0,
     errors: 0,
   });
+
+  // Sync state with server-side props when they change (e.g., on page refetch)
+  // This handles cases where realtime events are missed (connection issues, etc.)
+  useEffect(() => {
+    // Only sync if server status is "completed" but we think we're still active
+    // This prevents reverting optimistic updates during normal operation
+    if (initialStatus === "completed" && ACTIVE_STATUSES.includes(state.status)) {
+      console.log("[useSearchRealtime] Syncing with server: search completed");
+      setState({
+        status: initialStatus,
+        progress: initialProgress,
+        message: "Search completed",
+      });
+    }
+  }, [initialStatus, initialProgress]); // Intentionally exclude state.status from deps
 
   // Connect for active searches OR when scoring is in progress
   const isSearchActive = ACTIVE_STATUSES.includes(state.status);

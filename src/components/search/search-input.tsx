@@ -560,6 +560,7 @@ export function SearchInput({
   const [selectedScenarios, setSelectedScenarios] = useState<string[]>([]);
   const [lastParsedQuery, setLastParsedQuery] = useState("");
   const [isTextareaFocused, setIsTextareaFocused] = useState(false);
+  const lastSentQueryRef = useRef("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -773,6 +774,7 @@ export function SearchInput({
       return;
     }
 
+    lastSentQueryRef.current = searchQuery;
     setIsParsing(true);
     onParsingChange?.(true);
     // Close scenarios while parsing
@@ -780,9 +782,17 @@ export function SearchInput({
     
     try {
       const result = await parseJob(searchQuery);
+      
+      // If this is a stale result, ignore it
+      if (searchQuery !== lastSentQueryRef.current) {
+        console.log("[SearchInput] Discarding stale parse result for:", searchQuery);
+        return;
+      }
+
       if (result.success && result.data) {
         // Pass criteria to parent for search flow
-        onQueryParsed(result.data, searchQuery, result.criteria);
+        // IMPORTANT: We pass undefined for queryText to prevent the parent from overwriting our current input
+        onQueryParsed(result.data, undefined, result.criteria);
         setParsedQuery(result.data);
         setOriginalParsedQuery(result.data);
         setParsedCriteria(result.criteria ?? null);
@@ -806,6 +816,7 @@ export function SearchInput({
         console.log("[SearchInput] Parsed query:", result.data);
         console.log("[SearchInput] Criteria:", result.criteria);
       } else {
+        // ... rest of the error handling ...
         setBooleanSearch("");
         setParsedQuery(null);
         setParsedCriteria(null);
@@ -842,8 +853,10 @@ export function SearchInput({
         description: "An unexpected error occurred",
       });
     } finally {
-      setIsParsing(false);
-      onParsingChange?.(false);
+      if (searchQuery === lastSentQueryRef.current) {
+        setIsParsing(false);
+        onParsingChange?.(false);
+      }
     }
   };
 

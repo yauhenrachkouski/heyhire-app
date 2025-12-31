@@ -32,6 +32,7 @@ interface InlineFiltersProps {
     good: number;
     fair: number;
   };
+  isScoring?: boolean;
 }
 
 export function InlineFilters({ 
@@ -39,7 +40,8 @@ export function InlineFilters({
   sortBy = "date-desc", 
   onScoreRangeChange, 
   onSortChange,
-  counts
+  counts,
+  isScoring = false
 }: InlineFiltersProps) {
   // Use local state only for the slider while dragging to avoid jitter
   // But initialize from props
@@ -153,7 +155,10 @@ export function InlineFilters({
                 <div className="flex items-center gap-2">
                   <span>{preset.label}</span>
                   {preset.count !== undefined && preset.count > 0 && (
-                    <Badge variant="secondary" className="px-1.5 py-0 h-5 text-[10px] font-medium min-w-5 justify-center bg-muted-foreground/15 text-muted-foreground">
+                    <Badge 
+                      variant="secondary" 
+                      className={`px-1.5 py-0 h-5 text-[10px] font-medium min-w-5 justify-center bg-muted-foreground/15 text-muted-foreground transition-opacity ${isScoring ? 'animate-pulse' : ''}`}
+                    >
                       {preset.count}
                     </Badge>
                   )}

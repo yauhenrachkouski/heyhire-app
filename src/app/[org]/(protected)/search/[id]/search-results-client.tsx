@@ -70,6 +70,8 @@ interface SearchResultsClientProps {
       excellent: number;
       good: number;
       fair: number;
+      searchStatus?: string;
+      searchProgress?: number;
     };
   };
 }
@@ -83,6 +85,8 @@ interface SearchProgress {
   excellent: number;
   good: number;
   fair: number;
+  searchStatus?: string;
+  searchProgress?: number;
 }
 
 export function SearchResultsClient({ search, initialData }: SearchResultsClientProps) {
@@ -191,8 +195,9 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
     } : undefined,
     // Mark SSR data as stale so it refetches when switching back to default filters
     initialDataUpdatedAt: (initialData && filtersMatchSSRDefaults) ? 0 : undefined,
-    // Candidates should always refetch when filter changes for fresh results
-    staleTime: 0,
+    // Give some staleTime to prevent excessive refetches during scoring
+    // Filter changes create new queryKey, so they still get fresh results
+    staleTime: 10 * 1000,
     gcTime: 5 * 60 * 1000,
   });
 
@@ -261,6 +266,18 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
     onScoringCompleted: handleScoringCompleted,
   });
 
+  // Sync realtime status from progressQuery when server says completed but client thinks active
+  // This catches missed realtime events (connection issues) via the existing progressQuery refetch cycle
+  useEffect(() => {
+    const serverStatus = progressQuery.data?.searchStatus;
+    const isClientActive = ['created', 'processing', 'pending', 'generating', 'generated', 'executing', 'polling'].includes(realtimeStatus);
+    
+    if (serverStatus === 'completed' && isClientActive) {
+      console.log('[SearchResultsClient] Syncing status from progressQuery: completed');
+      setOptimisticStatus('completed', 'Search completed', 100);
+    }
+  }, [progressQuery.data?.searchStatus, realtimeStatus, setOptimisticStatus]);
+
   // ========== Derived state ==========
   const isActiveSearch = ['created', 'processing', 'pending', 'generating', 'generated', 'executing', 'polling'].includes(realtimeStatus);
 
@@ -301,7 +318,8 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
 
   // Loading states
   const isInitialLoading = candidatesQuery.isLoading && !candidatesQuery.data;
-  const isRefetching = candidatesQuery.isFetching && !candidatesQuery.isFetchingNextPage && !isInitialLoading;
+  // Don't show blocking refetch overlay during scoring - we update scores in-place via setQueryData
+  const isRefetching = candidatesQuery.isFetching && !candidatesQuery.isFetchingNextPage && !isInitialLoading && !scoringState.isScoring;
   
   // Show sourcing loader ONLY when search is actively running AND no candidates yet
   const shouldShowSourcingLoader = isActiveSearch && candidates.length === 0;
@@ -519,7 +537,7 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
       </div>
 
       {/* Sticky Criteria Display */}
-      <div className="sticky top-0 z-30 bg-background border-b">
+      <div className="sticky top-0 z-1 bg-background border-b">
         <CriteriaDisplay data={search.parseResponse} />
       </div>
 
@@ -562,6 +580,7 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
                     scoreRange={[scoreMin, scoreMax]}
                     sortBy={sortBy}
                     counts={filterCounts}
+                    isScoring={isScoring}
                     onScoreRangeChange={(min, max) => {
                       posthog.capture('search_filter_applied', {
                         search_id: search.id,

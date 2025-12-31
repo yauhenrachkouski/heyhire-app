@@ -984,18 +984,26 @@ export async function updateCandidateStatus(
 export async function getSearchProgress(searchId: string) {
   await requireSearchReadAccess(searchId);
   
-  const [result] = await db
-    .select({
-      total: count(),
-      scored: count(searchCandidates.matchScore),
-      // Cumulative counts to match filter behavior (70+ includes 80+, etc.)
-      excellent: count(sql`CASE WHEN ${searchCandidates.matchScore} >= 80 THEN 1 END`),
-      good: count(sql`CASE WHEN ${searchCandidates.matchScore} >= 70 THEN 1 END`),
-      fair: count(sql`CASE WHEN ${searchCandidates.matchScore} >= 50 THEN 1 END`),
-    })
-    .from(searchCandidates)
-    .where(eq(searchCandidates.searchId, searchId));
+  // Get both counts and search status in parallel
+  const [countResult, searchRecord] = await Promise.all([
+    db
+      .select({
+        total: count(),
+        scored: count(searchCandidates.matchScore),
+        // Cumulative counts to match filter behavior (70+ includes 80+, etc.)
+        excellent: count(sql`CASE WHEN ${searchCandidates.matchScore} >= 80 THEN 1 END`),
+        good: count(sql`CASE WHEN ${searchCandidates.matchScore} >= 70 THEN 1 END`),
+        fair: count(sql`CASE WHEN ${searchCandidates.matchScore} >= 50 THEN 1 END`),
+      })
+      .from(searchCandidates)
+      .where(eq(searchCandidates.searchId, searchId)),
+    db.query.search.findFirst({
+      where: eq(search.id, searchId),
+      columns: { status: true, progress: true },
+    }),
+  ]);
 
+  const result = countResult[0];
   const total = result?.total || 0;
   const scored = result?.scored || 0;
   const unscored = total - scored;
@@ -1008,5 +1016,8 @@ export async function getSearchProgress(searchId: string) {
     good: result?.good || 0,
     fair: result?.fair || 0,
     isScoringComplete: unscored === 0,
+    // Include search status for client-side sync
+    searchStatus: searchRecord?.status || "unknown",
+    searchProgress: searchRecord?.progress || 0,
   };
 }
