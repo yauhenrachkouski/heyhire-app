@@ -107,10 +107,7 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
     }
   }, [isEditingName]);
 
-  // Track active search status for polling
-  const activeSearchStatusRef = useRef<string>(search.status);
-  
-  // Poll for candidates with server-side filtering
+  // Query key for candidates list
   const queryKey = searchCandidatesKeys.list(search.id, {
     scoreMin,
     scoreMax,
@@ -118,25 +115,6 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
     limit,
     sortBy,
   });
-
-  const fetchFirstPage = useCallback(async () => {
-    const url = new URL(`/api/search/${search.id}/candidates`, window.location.origin);
-
-    if (scoreMin !== 0 || scoreMax !== 100) {
-      url.searchParams.set("scoreMin", scoreMin.toString());
-      url.searchParams.set("scoreMax", scoreMax.toString());
-    }
-    url.searchParams.set("limit", limit.toString());
-    url.searchParams.set("sortBy", sortBy);
-    // empty cursor => first page and includes progress
-    url.searchParams.set("cursor", "");
-    // Prevent browser caching
-    url.searchParams.set("_t", Date.now().toString());
-
-    const response = await fetch(url.toString());
-    if (!response.ok) throw new Error("Failed to fetch candidates");
-    return await response.json();
-  }, [limit, scoreMax, scoreMin, search.id, sortBy]);
 
   const { 
     data, 
@@ -146,7 +124,6 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
     hasNextPage,
     fetchNextPage,
     error, 
-    refetch,
   } = useInfiniteQuery({
     queryKey,
     queryFn: async ({ pageParam = null }) => {
@@ -192,94 +169,16 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
     gcTime: 5 * 60 * 1000,
   });
 
-  // Manual polling: refresh ONLY the first page (progress + newest candidates).
-  // This avoids refetching all loaded pages (which gets slower as you scroll).
-  // useEffect(() => {
-  //   if (!search.id) return;
-  //   const isActive = ["created", "processing", "pending", "generating", "generated", "executing", "polling"].includes(
-  //     activeSearchStatusRef.current,
-  //   );
-  //   if (!isActive) return;
-
-  //   let cancelled = false;
-  //   let timeoutId: number;
-
-  //   const tick = async () => {
-  //     try {
-  //       const first = await fetchFirstPage();
-  //       if (cancelled) return;
-  //       queryClient.setQueryData(queryKey, (old: any) => {
-  //         const oldPages = old?.pages ?? [];
-
-  //         // Merge (prepend) any newly discovered candidates into existing data.
-  //         // IMPORTANT: Do not replace page 0 wholesale, otherwise page boundaries shift
-  //         // and we create gaps (e.g. some items fall from old page0 into page1, but page1
-  //         // remains the old snapshot). This is exactly how you can end up with
-  //         // "total=50" but only "40 loaded".
-  //         const allExisting = new Set<string>();
-  //         for (const p of oldPages) {
-  //           for (const sc of p?.candidates ?? []) {
-  //             const k = sc?.candidateId ?? sc?.candidate?.id ?? sc?.id;
-  //             if (k) allExisting.add(k);
-  //           }
-  //         }
-
-  //         const freshCandidates = (first?.candidates ?? []).filter((sc: any) => {
-  //           const k = sc?.candidateId ?? sc?.candidate?.id ?? sc?.id;
-  //           return k ? !allExisting.has(k) : true;
-  //         });
-
-  //         const prevFirst = oldPages[0] ?? first;
-  //         const mergedFirst = {
-  //           ...prevFirst,
-  //           ...first,
-  //           candidates: [...freshCandidates, ...(prevFirst?.candidates ?? [])],
-  //         };
-
-  //         const nextPages = [mergedFirst, ...oldPages.slice(1)];
-  //         return {
-  //           ...old,
-  //           pages: nextPages,
-  //           pageParams: old?.pageParams ?? [null],
-  //         };
-  //       });
-  //     } catch {
-  //       // ignore polling errors; UI already has error handling for main fetches
-  //     } finally {
-  //       if (!cancelled) {
-  //         // Schedule next poll only after current one finishes (adaptive polling)
-  //         // Use 4000ms delay to reduce load
-  //         timeoutId = window.setTimeout(tick, 4000);
-  //       }
-  //     }
-  //   };
-
-  //   // Run once immediately, then schedule next run after completion
-  //   tick();
-
-  //   return () => {
-  //     cancelled = true;
-  //     if (timeoutId) window.clearTimeout(timeoutId);
-  //   };
-  // }, [fetchFirstPage, queryClient, queryKey, search.id]);
-
   // Real-time updates via Upstash Realtime
   const handleSearchCompleted = useCallback(async (candidatesCount: number) => {
     console.log("[SearchResultsClient] Search completed with", candidatesCount, "candidates");
     
-    // Invalidate queries to force refresh of list and counts
+    // Invalidate ALL candidate queries for this search (regardless of filter params)
+    // This ensures all views refresh, even if user has different filters in other tabs
     await queryClient.invalidateQueries({ 
-      queryKey 
+      queryKey: searchCandidatesKeys.details(search.id)
     });
-    
-    // Fallback: If no candidates returned but API says there should be some, retry after a short delay
-    // This handles race conditions where DB might lag slightly behind completion event
-    if (candidatesCount > 0) {
-       setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey });
-       }, 1000);
-    }
-  }, [queryClient, queryKey]);
+  }, [queryClient, search.id]);
 
   const handleSearchFailed = useCallback((errorMsg: string) => {
     console.error("[SearchResultsClient] Search failed:", errorMsg);
@@ -351,22 +250,8 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
     onScoringCompleted: handleScoringCompleted,
   });
 
-  // Update ref when status changes to enable/disable polling
-  useEffect(() => {
-    activeSearchStatusRef.current = realtimeStatus;
-  }, [realtimeStatus]);
-
   // Calculate if search is in an active/running state
   const isActiveSearch = ['created', 'processing', 'pending', 'generating', 'generated', 'executing', 'polling'].includes(realtimeStatus);
-
-  // Refetch candidates when search status changes to ensure we have latest count
-  useEffect(() => {
-    if (isActiveSearch) {
-      console.log("[SearchResultsClient] Search is active, refetching candidates");
-      // Poller will refresh the first page; avoid refetching all pages.
-      // Keeping this as a no-op avoids expensive deep-page refetches.
-    }
-  }, [realtimeStatus, isActiveSearch, refetch]);
 
   const candidates = useMemo(() => {
     if (!data?.pages) return [];
@@ -487,7 +372,8 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
 
   const handleContinueSearch = async () => {
     // Optimistically update status to show loading state immediately
-    setOptimisticStatus("processing", "Starting search...");
+    // Reset progress to 5% to indicate starting
+    setOptimisticStatus("processing", "Starting search...", 5);
     
     toast.promise(analyzeAndContinueSearch(search.id), {
         loading: "Analyzing best strategies...",
@@ -496,14 +382,14 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
                 // Status will be updated via realtime events shortly
                 return "Continuing search with best strategies";
             } else {
-                // Revert optimistic update on failure
-                setOptimisticStatus(search.status, "Failed to continue");
+                // Revert optimistic update on failure, restore to completed state
+                setOptimisticStatus("completed", "", 100);
                 throw new Error(result.error);
             }
         },
         error: (err) => {
-            // Revert optimistic update on error
-            setOptimisticStatus(search.status, "Error continuing search");
+            // Revert optimistic update on error, restore to completed state
+            setOptimisticStatus("completed", "", 100);
             return err instanceof Error ? err.message : "Failed to continue search";
         }
     });

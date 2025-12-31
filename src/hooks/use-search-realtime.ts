@@ -150,11 +150,13 @@ export function useSearchRealtime({
     }, [onCompleted, onFailed, onScoringProgress, onScoringCompleted]),
   });
 
-  const setOptimisticStatus = useCallback((status: string, message: string = "") => {
+  const setOptimisticStatus = useCallback((status: string, message: string = "", progress?: number) => {
     setState((prev) => ({
       ...prev,
       status,
       message,
+      // Reset progress when starting a new active state, keep current if not specified
+      progress: progress !== undefined ? progress : (ACTIVE_STATUSES.includes(status) ? 5 : prev.progress),
     }));
   }, []);
 

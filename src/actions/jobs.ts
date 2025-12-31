@@ -627,6 +627,16 @@ export async function triggerSourcingWorkflow(
       })
       .where(eq(search.id, searchId));
 
+    // Emit immediate status update so frontend knows we're starting
+    // This provides instant feedback before QStash picks up the job
+    const channel = `search:${searchId}`;
+    await realtime.channel(channel).emit("status.updated", {
+      status: "processing",
+      message: strategyIdsToRun?.length ? "Starting continuation..." : "Starting search...",
+      progress: 5,
+    });
+    console.log("[Workflow Trigger] Emitted initial status update to channel:", channel);
+
     // Check if running on localhost without a public-facing URL
     // We allow "localhost.heyhire.ai" as it is a public tunnel
     const isLocalhost = workflowUrl.includes("localhost") || workflowUrl.includes("127.0.0.1");
