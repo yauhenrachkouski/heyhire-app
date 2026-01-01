@@ -57,7 +57,7 @@ export function OrganizationSwitcher({
 }: OrganizationSwitcherProps) {
   const router = useRouter()
   const pathname = usePathname()
-  const { isMobile } = useSidebar()
+  const { isMobile, state } = useSidebar()
   const queryClient = useQueryClient()
   const { data: clientActiveOrganization, refetch: refetchActiveOrganization } = useActiveOrganization()
   const { refetch: refetchOrganizations } = useListOrganizations()
@@ -98,19 +98,18 @@ export function OrganizationSwitcher({
   if ((!organizations || organizations.length === 0) && !activeOrganization) {
     console.log('[OrgSwitcher] No organizations available - showing error state')
     return (
-      <SidebarMenu>
+          <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton size="lg" disabled>
-            <div className="flex aspect-square size-8 items-center justify-center rounded-lg border overflow-hidden">
+            <div className="flex aspect-square size-8 items-center justify-center rounded-lg border overflow-hidden shrink-0">
               <Image 
                 src="/favicon.png" 
                 alt="No Organization" 
                 width={16} 
                 height={16} 
-                className="invert"
               />
             </div>
-            <div className="grid flex-1 text-left text-sm leading-tight">
+            <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
               <span className="truncate font-semibold text-orange-600">No Organization</span>
               <span className="truncate text-xs text-orange-500">Contact admin</span>
             </div>
@@ -157,24 +156,25 @@ export function OrganizationSwitcher({
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
+              tooltip={state === "collapsed" ? displayOrg.name : undefined}
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg border overflow-hidden">
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg border overflow-hidden shrink-0">
                 <Image 
                   src={getLogoUrl(displayOrg.logo)} 
                   alt="Workspace" 
                   width={16} 
                   height={16} 
-                  className={displayOrg.logo ? "object-cover" : "invert"}
+                  className={displayOrg.logo ? "object-cover" : ""}
                 />
               </div>
-              <div className="grid flex-1 text-left text-sm leading-tight">
+              <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
                 <div className="truncate font-semibold">{displayOrg.name}</div>
                 <span className="mt-0.5 truncate rounded-full text-xs font-medium text-muted-foreground">
                   {getPlanDisplay()}
                 </span>
               </div>
-              <Icon name="selector" className="ml-auto" />
+              <Icon name="selector" className="ml-auto group-data-[collapsible=icon]:hidden" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
