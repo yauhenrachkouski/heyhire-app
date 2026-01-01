@@ -541,7 +541,7 @@ export function SearchInput({
   hideSearchButton = false,
   organizationId,
 }: SearchInputProps) {
-  const MAX_QUERY_LENGTH = 3000;
+  const MAX_QUERY_LENGTH = 10000;
   const [query, setQuery] = useState("");
   const [isParsing, setIsParsing] = useState(false);
   const [isSearching, setIsSearching] = useState(false);

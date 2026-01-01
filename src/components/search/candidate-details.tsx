@@ -296,67 +296,6 @@ function CandidateSummary(props: { matchScore: number | null; scoringData: Scori
   );
 }
 
-function CandidateAIScoring(props: {
-  matchScore: number | null;
-  scoringData: ScoringData;
-  sourcingCriteria?: SourcingCriteria;
-}) {
-  const { matchScore, scoringData, sourcingCriteria } = props;
-
-  const {
-    verdict,
-    primary_issue,
-    high_importance_missing,
-    concept_scores
-  } = scoringData || {};
-
-  // Move all hooks to the top before any conditional returns
-  const conceptScoresById = useMemo(() => {
-    const entries = (concept_scores ?? []).map((cs) => [cs.concept_id, cs] as const);
-    return new Map(entries);
-  }, [concept_scores]);
-
-  const passedHighCriteria = useMemo(() => {
-    const criteria = sourcingCriteria?.criteria ?? [];
-    if (!criteria.length || !concept_scores?.length) return [];
-
-    const toDisplay = (criterion: any) => {
-      if (Array.isArray(criterion?.value)) return criterion.value.join(", ");
-      if (criterion?.value === null || criterion?.value === undefined) return "";
-
-      const type = String(criterion?.type ?? "");
-      if (type.includes("minimum_years_of_experience") || type.includes("minimum_relevant_years_of_experience")) {
-        const n = Number(criterion?.value);
-        if (Number.isFinite(n)) return `${n}y+`;
-      }
-      return String(criterion.value);
-    };
-
-    return criteria
-      .filter((c: any) => String(c?.priority_level ?? "").toLowerCase() === "high")
-      .filter((c: any) => {
-        const key = (c?.concept_id as string | undefined) ?? (c?.id as string | undefined);
-        if (!key) return false;
-        return conceptScoresById.get(key)?.status === "pass";
-      })
-      .map((c: any) => toDisplay(c))
-      .filter(Boolean);
-  }, [conceptScoresById, concept_scores?.length, sourcingCriteria?.criteria]);
-
-  // Now check for early return after all hooks
-  if (matchScore === null) {
-    return null;
-  }
-
-  return (
-    <div className="pt-3">
-      <div className="flex flex-col gap-2 text-xs">
-      </div>
-    </div>
-  );
-}
-
-
 function ExperienceItem({ exp }: { exp: any }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -533,10 +472,7 @@ export function CandidateDetails({ searchCandidate, onClose, sourcingCriteria }:
                 </div>
 
                 {matchScore !== null && (
-                  <>
-                    <CandidateScoreDisplay matchScore={matchScore} scoringData={scoringData} sourcingCriteria={sourcingCriteria} />
-                    <CandidateAIScoring matchScore={matchScore} scoringData={scoringData} sourcingCriteria={sourcingCriteria} />
-                  </>
+                  <CandidateScoreDisplay matchScore={matchScore} scoringData={scoringData} sourcingCriteria={sourcingCriteria} />
                 )}
               </div>
 
