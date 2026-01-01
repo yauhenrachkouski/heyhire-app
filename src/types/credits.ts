@@ -1,12 +1,11 @@
 import type { creditTransactions } from "@/db/schema";
 
 // Enum types matching database enums
-export type TransactionType = "subscription_grant" | "manual_grant" | "purchase" | "consumption";
+type TransactionType = "subscription_grant" | "manual_grant" | "purchase" | "consumption";
 export type CreditType = "contact_lookup" | "export" | "general";
 
 // Infer types from schema
 export type CreditTransaction = typeof creditTransactions.$inferSelect;
-export type NewCreditTransaction = typeof creditTransactions.$inferInsert;
 
 // Credit balance by type
 export interface CreditBalance {
@@ -69,8 +68,6 @@ export interface CreditOperationResult {
   transaction?: CreditTransaction;
   error?: string;
 }
-
-
 
 
 

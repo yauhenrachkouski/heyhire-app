@@ -16,7 +16,7 @@ const inviteMemberSchema = z.object({
 });
 
 // Types
-export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;
+type InviteMemberInput = z.infer<typeof inviteMemberSchema>;
 
 /**
  * Invite a new member to the organization using Better Auth
@@ -117,6 +117,3 @@ export async function cancelInvitation(invitationId: string) {
     };
   }
 }
-
-// Alias for backward compatibility
-export const revokeInvitation = cancelInvitation;

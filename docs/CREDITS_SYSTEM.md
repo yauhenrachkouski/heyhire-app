@@ -39,17 +39,9 @@ Stores complete audit trail of all credit operations:
 **Cost:** 1 credit per lookup  
 **Usage:** Revealing contact information (email/phone) for candidates  
 **Plan Allocations:**
-- Starter: 100 credits/month
-- Pro: 500 credits/month
-- Enterprise: Unlimited
 
-### Export Credits
-**Cost:** 1 credit per export (configurable)  
-**Usage:** Exporting search results or candidate data  
-**Plan Allocations:**
-- Starter: 50 credits/month
-- Pro: 200 credits/month
-- Enterprise: Unlimited
+- Pro: 1000 credits/month
+
 
 ### General Credits
 **Purpose:** Flexible credits for future features  
@@ -61,7 +53,7 @@ Stores complete audit trail of all credit operations:
 
 #### Subscription-Based Granting
 When a subscription payment succeeds (via Stripe webhook):
-1. System determines plan level (starter/pro/enterprise)
+1. System determines plan level ("pro")
 2. Looks up credit allocations for that plan
 3. Grants credits for each credit type
 4. Creates transaction records with type `subscription_grant`

@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // --- Criteria Schemas ---
 
-export const criterionSchema = z.object({
+const criterionSchema = z.object({
   id: z.string(),
   type: z.enum([
     "logistics_location",
@@ -38,7 +38,7 @@ export const criterionSchema = z.object({
 
 export type Criterion = z.infer<typeof criterionSchema>;
 
-export const conceptSchema = z.object({
+const conceptSchema = z.object({
   display_label: z.string().nullable().optional(),
   synonyms: z.array(z.string()).optional().default([]),
   parent_concept_id: z.string().nullable().optional(),
@@ -54,12 +54,12 @@ export const jobParsingResponseV3Schema = z.object({
   concepts: z.object({}).catchall(conceptSchema).optional().catch({}),
 });
 
-export type JobParsingResponseV3 = z.infer<typeof jobParsingResponseV3Schema>;
+type JobParsingResponseV3 = z.infer<typeof jobParsingResponseV3Schema>;
 export type SourcingCriteria = JobParsingResponseV3;
 
 // --- Strategy Schemas ---
 
-export const apifyPayloadSchema = z.object({
+const apifyPayloadSchema = z.object({
   profileScraperMode: z.enum(["Short", "Full", "Full + email search"]).default("Full").optional(),
   searchQuery: z.string().max(300).nullable().optional(),
   maxItems: z.number().max(2500).default(5).optional(),
@@ -80,9 +80,7 @@ export const apifyPayloadSchema = z.object({
   excludeCurrentCompanies: z.array(z.string()).max(10).nullable().optional(),
 }).passthrough();
 
-export type ApifyPayload = z.infer<typeof apifyPayloadSchema>;
-
-export const sourcingStrategyItemSchema = z.object({
+const sourcingStrategyItemSchema = z.object({
   id: z.string(),
   name: z.string(),
   description: z.string(),
@@ -92,22 +90,18 @@ export const sourcingStrategyItemSchema = z.object({
 
 export type SourcingStrategyItem = z.infer<typeof sourcingStrategyItemSchema>;
 
-export const sgrReasoningSchema = z.object({
+const sgrReasoningSchema = z.object({
   market_understanding: z.string(),
   criteria_analysis: z.string(),
   strategy_plan: z.string(),
   boolean_approach: z.string(),
 });
 
-export type SGRReasoning = z.infer<typeof sgrReasoningSchema>;
-
-export const strategyGenerationRequestSchema = z.object({
+const strategyGenerationRequestSchema = z.object({
   raw_text: z.string(),
   parsed_with_criteria: z.union([z.record(z.string(), z.any()), z.string()]),
   request_id: z.union([z.string(), z.number()]),
 });
-
-export type StrategyGenerationRequest = z.infer<typeof strategyGenerationRequestSchema>;
 
 export const strategyGenerationResponseSchema = z.object({
   request_id: z.string(),
@@ -116,13 +110,6 @@ export const strategyGenerationResponseSchema = z.object({
 });
 
 export type StrategyGenerationResponse = z.infer<typeof strategyGenerationResponseSchema>;
-
-export const strategyExecutionRequestSchema = z.object({
-  project_id: z.string(),
-  strategies: z.array(sourcingStrategyItemSchema),
-});
-
-export type StrategyExecutionRequest = z.infer<typeof strategyExecutionRequestSchema>;
 
 export const strategyExecutionResponseSchema = z.object({
   task_id: z.string(),
@@ -134,15 +121,13 @@ export type StrategyExecutionResponse = z.infer<typeof strategyExecutionResponse
 
 // --- Candidate Schemas ---
 
-export const candidateLocationSchema = z.object({
+const candidateLocationSchema = z.object({
   city: z.string().nullable().optional(),
   country: z.string().nullable().optional(),
   linkedinText: z.string().nullable().optional(),
 });
 
-export type CandidateLocation = z.infer<typeof candidateLocationSchema>;
-
-export const candidateExperienceSchema = z.object({
+const candidateExperienceSchema = z.object({
   title: z.string().nullable().optional(),
   company: z.string().nullable().optional(),
   companyUrl: z.string().nullable().optional(),
@@ -154,9 +139,7 @@ export const candidateExperienceSchema = z.object({
   skills: z.array(z.string()).nullable().optional(),
 });
 
-export type CandidateExperience = z.infer<typeof candidateExperienceSchema>;
-
-export const candidateEducationSchema = z.object({
+const candidateEducationSchema = z.object({
   school: z.string().nullable().optional(),
   schoolUrl: z.string().nullable().optional(),
   degree: z.string().nullable().optional(),
@@ -166,9 +149,7 @@ export const candidateEducationSchema = z.object({
   skills: z.array(z.string()).nullable().optional(),
 });
 
-export type CandidateEducation = z.infer<typeof candidateEducationSchema>;
-
-export const candidateProfileSchema = z.object({
+const candidateProfileSchema = z.object({
   id: z.string().nullable().optional(),
   publicIdentifier: z.string().nullable().optional(),
   linkedinUrl: z.string().nullable().optional(),
@@ -237,7 +218,7 @@ export type ScoreResult = z.infer<typeof scoreResultSchema>;
 
 // --- UI Schemas ---
 
-export const categoryTagSchema = z.object({
+const categoryTagSchema = z.object({
   category: z.enum([
     "job_title",
     "location",
@@ -273,12 +254,10 @@ export const categoryTagSchema = z.object({
 
 export type CategoryTag = z.infer<typeof categoryTagSchema>;
 
-export const multiValueFieldSchema = z.object({
+const multiValueFieldSchema = z.object({
   values: z.array(z.string()),
   operator: z.enum(["OR", "AND"]).default("OR"),
 });
-
-export type MultiValueField = z.infer<typeof multiValueFieldSchema>;
 
 export const parsedQuerySchema = z.object({
   job_title: z.union([z.string(), multiValueFieldSchema]).default(""),
@@ -302,7 +281,7 @@ export type ParsedQuery = z.infer<typeof parsedQuerySchema>;
 
 // --- Response Schemas ---
 
-export const parseQueryResponseSchema = z.object({
+const parseQueryResponseSchema = z.object({
   success: z.boolean(),
   data: parsedQuerySchema.optional(),
   error: z.string().optional(),

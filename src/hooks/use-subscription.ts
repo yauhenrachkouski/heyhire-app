@@ -5,7 +5,7 @@ import { useActiveOrganization } from "@/lib/auth-client";
 import { getUserSubscription } from "@/actions/stripe";
 import { getSubscriptionStatus as getStatusInfo } from "@/lib/subscription";
 
-export interface SubscriptionState {
+interface SubscriptionState {
     subscription: Awaited<ReturnType<typeof getUserSubscription>>["subscription"];
     isActive: boolean;
     isTrialing: boolean;
@@ -19,7 +19,7 @@ export interface SubscriptionState {
     refetch: () => void;
 }
 
-export const subscriptionKeys = {
+const subscriptionKeys = {
     all: ["subscription"] as const,
     organization: (orgId: string) => [...subscriptionKeys.all, "org", orgId] as const,
 };
@@ -69,21 +69,3 @@ export function useSubscription(): SubscriptionState {
 /**
  * Simple check hook - just returns if subscription is active
  */
-export function useHasActiveSubscription(): boolean {
-    const { isActive, isLoading } = useSubscription();
-    return !isLoading && isActive;
-}
-
-/**
- * Hook to get subscription display info
- */
-export function useSubscriptionDisplay() {
-    const { subscription, isLoading } = useSubscription();
-    const statusInfo = subscription ? getStatusInfo(subscription) : null;
-
-    return {
-        display: statusInfo?.display ?? "No subscription",
-        needsAction: statusInfo?.needsAction ?? false,
-        isLoading,
-    };
-}

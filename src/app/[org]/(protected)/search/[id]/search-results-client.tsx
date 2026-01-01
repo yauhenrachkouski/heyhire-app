@@ -5,7 +5,7 @@ import { useQueryClient, useInfiniteQuery, useQuery, keepPreviousData } from "@t
 import { useQueryState, parseAsInteger, parseAsString } from "nuqs";
 import type { ParsedQuery, SourcingCriteria } from "@/types/search";
 import { CandidateCardListInfinite } from "@/components/search/candidate-card-list-infinite";
-import { AppliedFilters } from "@/components/search/applied-filters";
+
 import { InlineFilters } from "@/components/search/inline-filters";
 import { CriteriaDisplay } from "@/components/search/criteria-display";
 import { SkeletonCard } from "@/components/search/skeleton-card";
@@ -573,7 +573,7 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
           </div>
         </div>
         
-        <AppliedFilters params={currentParsedQuery} initialQueryText={search.query} onRemoveFilter={handleRemoveFilter} />
+       
       </div>
 
       {/* Sticky Criteria Display */}

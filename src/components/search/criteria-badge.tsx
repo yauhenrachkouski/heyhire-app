@@ -22,7 +22,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-export type CriteriaStatus = "match" | "missing" | "neutral" | "excluded";
+type CriteriaStatus = "match" | "missing" | "neutral" | "excluded";
 
 interface CriteriaBadgeProps {
   label: string;

@@ -1,4 +1,4 @@
-export const PLAN_IDS = ["starter", "pro", "enterprise"] as const
+const PLAN_IDS = ["pro"] as const
 
 export type PlanId = (typeof PLAN_IDS)[number]
 
@@ -7,16 +7,10 @@ export function isPlanId(value: unknown): value is PlanId {
 }
 
 export const PLAN_LIMITS: Record<PlanId, { credits: number; trialCredits: number }> = {
-  starter: {
-    credits: 250,
-    trialCredits: 50,
-  },
+ 
   pro: {
     credits: 1000,
     trialCredits: 100,
   },
-  enterprise: {
-    credits: 100000,
-    trialCredits: 100,
-  },
+
 }

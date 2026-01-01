@@ -4,7 +4,6 @@ import { OrganizationForm } from '@/components/account/organization-form'
 import { redirect } from 'next/navigation'
 import { SimpleMembersTable } from './simple-members-table'
 import { getMembers } from '@/actions/members'
-import { SharingSection } from '@/components/organization/sharing-section'
 import { listShareLinks } from '@/actions/share-links'
 
 export default async function OrganizationSettingsPage() {
@@ -81,9 +80,7 @@ export default async function OrganizationSettingsPage() {
         />
       )}
 
-      {currentOrganization && (activeMember?.role === 'owner' || activeMember?.role === 'admin') && (
-        <SharingSection organizationId={currentOrganization.id} initialLinks={shareLinks} />
-      )}
+      
     </>
   )
 }

@@ -35,21 +35,4 @@ function hasSearchCriteria(parsedQuery: ParsedQuery): boolean {
   return hasFields || !!parsedQuery.is_current;
 }
 
-export function AppliedFilters({ params, hideRefineButton, initialQueryText, onRemoveFilter }: AppliedFiltersProps) {
-  // If no filters are applied
-  if (!hasSearchCriteria(params)) {
-    return null;
-  }
-
-  return (
-    <div className="space-y-3">
-      {/* <SearchInterpretation 
-        parsedQuery={params} 
-        action={!hideRefineButton && (
-          <RefineSearchModal params={params} initialQueryText={initialQueryText} />
-        )}
-      /> */}
-    </div>
-  );
-}
 
