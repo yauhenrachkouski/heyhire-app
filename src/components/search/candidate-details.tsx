@@ -117,15 +117,7 @@ function CandidateScoreDisplay(props: {
 }) {
   const { matchScore, scoringData, sourcingCriteria } = props;
 
-  if (matchScore === null) {
-    return (
-      <div className="flex items-center gap-2 py-2">
-        <IconLoader2 className="h-5 w-5 animate-spin text-gray-400" />
-        <span className="text-xs text-gray-500">Calculating...</span>
-      </div>
-    );
-  }
-
+  // Move all hooks to the top before any conditional returns
   const conceptScoresById = useMemo(() => {
     const entries = (scoringData?.concept_scores ?? []).map((cs) => [cs.concept_id, cs] as const);
     return new Map(entries);
@@ -191,6 +183,16 @@ function CandidateScoreDisplay(props: {
     { key: "capabilities", title: "Capabilities", icon: IconBrain },
     { key: "other", title: "Other", icon: IconList },
   ].filter(g => groups[g.key] && groups[g.key].length > 0), [groups]);
+
+  // Now check for early return after all hooks
+  if (matchScore === null) {
+    return (
+      <div className="flex items-center gap-2 py-2">
+        <IconLoader2 className="h-5 w-5 animate-spin text-gray-400" />
+        <span className="text-xs text-gray-500">Calculating...</span>
+      </div>
+    );
+  }
 
   const renderGroup = (title: string, items: any[], Icon: React.ElementType) => {
     return (
@@ -301,10 +303,6 @@ function CandidateAIScoring(props: {
 }) {
   const { matchScore, scoringData, sourcingCriteria } = props;
 
-  if (matchScore === null) {
-    return null;
-  }
-
   const {
     verdict,
     primary_issue,
@@ -312,6 +310,7 @@ function CandidateAIScoring(props: {
     concept_scores
   } = scoringData || {};
 
+  // Move all hooks to the top before any conditional returns
   const conceptScoresById = useMemo(() => {
     const entries = (concept_scores ?? []).map((cs) => [cs.concept_id, cs] as const);
     return new Map(entries);
@@ -343,6 +342,11 @@ function CandidateAIScoring(props: {
       .map((c: any) => toDisplay(c))
       .filter(Boolean);
   }, [conceptScoresById, concept_scores?.length, sourcingCriteria?.criteria]);
+
+  // Now check for early return after all hooks
+  if (matchScore === null) {
+    return null;
+  }
 
   return (
     <div className="pt-3">
@@ -427,32 +431,24 @@ export function CandidateDetails({ searchCandidate, onClose, sourcingCriteria }:
   const [expandedSkills, setExpandedSkills] = useState(false);
   const { openLinkedIn, isLoading: isOpeningLinkedIn } = useOpenLinkedInWithCredits();
 
-  if (!searchCandidate) return null;
-
-  const { candidate, matchScore, scoringResult, isRevealed } = searchCandidate;
-
-  // Parse JSON fields
-  const experiences = useMemo(() => safeJsonParse<any[]>(candidate.experiences, []), [candidate.experiences]);
-  const skills = useMemo(() => safeJsonParse<any[]>(candidate.skills, []), [candidate.skills]);
-  const educations = useMemo(() => safeJsonParse<any[]>(candidate.educations, []), [candidate.educations]);
-  const certifications = useMemo(() => safeJsonParse<any[]>(candidate.certifications, []), [candidate.certifications]);
-  const recommendations = useMemo(() => safeJsonParse<any[]>(candidate.recommendations, []), [candidate.recommendations]);
-  const languages = useMemo(() => safeJsonParse<any[]>(candidate.languages, []), [candidate.languages]);
-  const projects = useMemo(() => safeJsonParse<any[]>(candidate.projects, []), [candidate.projects]);
-  const publications = useMemo(() => safeJsonParse<any[]>(candidate.publications, []), [candidate.publications]);
-  const volunteering = useMemo(() => safeJsonParse<any[]>(candidate.volunteering, []), [candidate.volunteering]);
-  const courses = useMemo(() => safeJsonParse<any[]>(candidate.courses, []), [candidate.courses]);
-  const patents = useMemo(() => safeJsonParse<any[]>(candidate.patents, []), [candidate.patents]);
-  const honorsAndAwards = useMemo(() => safeJsonParse<any[]>(candidate.honorsAndAwards, []), [candidate.honorsAndAwards]);
-  const causes = useMemo(() => safeJsonParse<any[]>(candidate.causes, []), [candidate.causes]);
-  const locationData = useMemo(() => safeJsonParse<any>(candidate.location, null), [candidate.location]);
+  // Parse JSON fields - move all hooks to the top before any conditional returns
+  const experiences = useMemo(() => safeJsonParse<any[]>(searchCandidate?.candidate.experiences, []), [searchCandidate?.candidate.experiences]);
+  const skills = useMemo(() => safeJsonParse<any[]>(searchCandidate?.candidate.skills, []), [searchCandidate?.candidate.skills]);
+  const educations = useMemo(() => safeJsonParse<any[]>(searchCandidate?.candidate.educations, []), [searchCandidate?.candidate.educations]);
+  const certifications = useMemo(() => safeJsonParse<any[]>(searchCandidate?.candidate.certifications, []), [searchCandidate?.candidate.certifications]);
+  const recommendations = useMemo(() => safeJsonParse<any[]>(searchCandidate?.candidate.recommendations, []), [searchCandidate?.candidate.recommendations]);
+  const languages = useMemo(() => safeJsonParse<any[]>(searchCandidate?.candidate.languages, []), [searchCandidate?.candidate.languages]);
+  const projects = useMemo(() => safeJsonParse<any[]>(searchCandidate?.candidate.projects, []), [searchCandidate?.candidate.projects]);
+  const publications = useMemo(() => safeJsonParse<any[]>(searchCandidate?.candidate.publications, []), [searchCandidate?.candidate.publications]);
+  const volunteering = useMemo(() => safeJsonParse<any[]>(searchCandidate?.candidate.volunteering, []), [searchCandidate?.candidate.volunteering]);
+  const courses = useMemo(() => safeJsonParse<any[]>(searchCandidate?.candidate.courses, []), [searchCandidate?.candidate.courses]);
+  const patents = useMemo(() => safeJsonParse<any[]>(searchCandidate?.candidate.patents, []), [searchCandidate?.candidate.patents]);
+  const honorsAndAwards = useMemo(() => safeJsonParse<any[]>(searchCandidate?.candidate.honorsAndAwards, []), [searchCandidate?.candidate.honorsAndAwards]);
+  const causes = useMemo(() => safeJsonParse<any[]>(searchCandidate?.candidate.causes, []), [searchCandidate?.candidate.causes]);
+  const locationData = useMemo(() => safeJsonParse<any>(searchCandidate?.candidate.location, null), [searchCandidate?.candidate.location]);
   const scoringData = useMemo<ScoringData>(() => {
-    return safeJsonParse<ScoringData>(scoringResult, null);
-  }, [scoringResult]);
-
-  // Extract name parts
-  const fullName = candidate.fullName || "Unknown";
-  const locationText = locationData?.name || locationData?.linkedinText || locationData?.city;
+    return safeJsonParse<ScoringData>(searchCandidate?.scoringResult, null);
+  }, [searchCandidate?.scoringResult]);
 
   // Get current role from experiences
   const currentRoles = useMemo(() => {
@@ -463,6 +459,15 @@ export function CandidateDetails({ searchCandidate, onClose, sourcingCriteria }:
       return isPresent || hasNoEndDate;
     });
   }, [experiences]);
+
+  // Now check for early return after all hooks
+  if (!searchCandidate) return null;
+
+  const { candidate, matchScore, scoringResult, isRevealed } = searchCandidate;
+
+  // Extract name parts
+  const fullName = candidate.fullName || "Unknown";
+  const locationText = locationData?.name || locationData?.linkedinText || locationData?.city;
 
   const firstCurrentRole = currentRoles[0] || experiences[0] || {};
   const currentRole = firstCurrentRole.role_title || firstCurrentRole.title || firstCurrentRole.position || candidate.headline || "----";

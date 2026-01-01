@@ -88,15 +88,7 @@ function CandidateScoreDisplay(props: {
 }) {
   const { matchScore, scoringData, sourcingCriteria } = props;
 
-  if (matchScore === null) {
-    return (
-      <div className="flex items-center gap-2 py-2">
-        <IconLoader2 className="h-5 w-5 animate-spin text-gray-400" />
-        <span className="text-xs text-gray-500">Calculating...</span>
-      </div>
-    );
-  }
-
+  // Move all hooks to the top before any conditional returns
   const conceptScoresById = useMemo(() => {
     const entries = (scoringData?.concept_scores ?? []).map((cs) => [cs.concept_id, cs] as const);
     return new Map(entries);
@@ -162,6 +154,16 @@ function CandidateScoreDisplay(props: {
     { key: "capabilities", title: "Capabilities", icon: IconBrain },
     { key: "other", title: "Other", icon: IconList },
   ].filter(g => groups[g.key] && groups[g.key].length > 0), [groups]);
+
+  // Now check for early return after all hooks
+  if (matchScore === null) {
+    return (
+      <div className="flex items-center gap-2 py-2">
+        <IconLoader2 className="h-5 w-5 animate-spin text-gray-400" />
+        <span className="text-xs text-gray-500">Calculating...</span>
+      </div>
+    );
+  }
 
   const renderGroup = (title: string, items: any[], Icon: React.ElementType) => {
     return (
