@@ -73,6 +73,8 @@ export const creditsKeys = {
   all: ["credits"] as const,
   organization: (organizationId: string) =>
     [...creditsKeys.all, "organization", organizationId] as const,
+  usage: (organizationId: string, start: Date | string | null, end: Date | string | null) =>
+    [...creditsKeys.organization(organizationId), "usage", { start, end }] as const,
 };
 
 

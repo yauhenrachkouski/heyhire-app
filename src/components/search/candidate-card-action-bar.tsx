@@ -8,7 +8,7 @@ import {
 import { toast } from "sonner";
 import type { Table } from "@tanstack/react-table";
 import { Separator } from "@/components/ui/separator";
-import { Icon } from "@/components/custom/icon";
+import { Icon } from "@/components/icon";
 
 interface SelectedCandidate {
   id: string;

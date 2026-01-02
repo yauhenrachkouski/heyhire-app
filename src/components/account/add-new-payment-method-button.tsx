@@ -2,7 +2,7 @@
 
 import { getCustomerPortalPaymentMethodSession } from "@/actions/stripe"
 import { Button } from "@/components/ui/button"
-import { Icon } from "@/components/custom/icon"
+import { Icon } from "@/components/icon"
 
 export function AddNewPaymentMethodButton() {
   const handleUpdatePaymentMethod = async () => {

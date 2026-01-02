@@ -13,7 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Icon } from "@/components/custom/icon"
+import { Icon } from "@/components/icon"
 import type { Member } from "@/actions/members"
 import { InviteMemberDialog } from "../../members/invite-member-dialog"
 import { cancelInvitation } from "@/actions/invitations"

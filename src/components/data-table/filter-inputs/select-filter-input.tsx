@@ -12,7 +12,7 @@ import {
   FacetedItem,
   FacetedList,
   FacetedTrigger,
-} from "@/components/custom/faceted";
+} from "@/components/faceted";
 import type { ExtendedColumnFilter } from "@/types/data-table";
 
 interface SelectFilterInputProps<TData> {

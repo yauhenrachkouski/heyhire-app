@@ -19,7 +19,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@/components/custom/form";
+} from "@/components/form";
 import {
   Select,
   SelectContent,

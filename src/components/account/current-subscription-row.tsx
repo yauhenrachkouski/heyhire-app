@@ -1,17 +1,16 @@
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
+"use client"
+
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
-import { toast } from "sonner"
 import { subscription as subscriptionSchema } from "@/db/schema"
 import type { PlanId } from "@/types/plans"
 import { isPlanId } from "@/types/plans"
 import { PLAN_LIMITS } from "@/types/plans"
 import { useActiveOrganization } from "@/lib/auth-client"
-import { useEffect } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { getCreditsUsageForPeriod } from "@/actions/credits"
-import { UnlockProNowButton } from "@/components/account/unlock-pro-now-button"
+import { creditsKeys } from "@/lib/credits"
 
 interface PricingPlan {
   name: string;
@@ -40,18 +39,47 @@ interface CurrentSubscriptionRowProps {
   subscription: typeof subscriptionSchema.$inferSelect | null;
   nextBillingLabel?: string | null;
   nextBillingAmountLabel?: string | null;
+  initialPeriodUsed?: number;
 }
 
-export function CurrentSubscriptionRow({ subscription: initialSubscription, nextBillingLabel, nextBillingAmountLabel }: CurrentSubscriptionRowProps) {
-  const [subscription, setSubscription] = useState(initialSubscription);
-  const [isLoading, setIsLoading] = useState(false);
+export function CurrentSubscriptionRow({ 
+  subscription, 
+  nextBillingLabel, 
+  nextBillingAmountLabel,
+  initialPeriodUsed 
+}: CurrentSubscriptionRowProps) {
   const { data: activeOrg } = useActiveOrganization();
-  const [periodUsed, setPeriodUsed] = useState<number | null>(null);
-  const [periodUsageError, setPeriodUsageError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setSubscription(initialSubscription);
-  }, [initialSubscription]);
+  const orgId = activeOrg?.id;
+  const start = subscription?.periodStart;
+  const end = subscription?.periodEnd;
+
+  const { data: periodUsageData } = useQuery({
+    queryKey: creditsKeys.usage(orgId ?? "", start ?? null, end ?? null),
+    queryFn: async () => {
+      if (!orgId || !start || !end) {
+        return { used: null, error: null };
+      }
+
+      const result = await getCreditsUsageForPeriod({
+        organizationId: orgId,
+        startDate: new Date(start),
+        endDate: new Date(end),
+      });
+
+      return { used: result.error ? null : result.used, error: result.error };
+    },
+    enabled: !!orgId && !!start && !!end,
+    initialData: initialPeriodUsed !== undefined ? { used: initialPeriodUsed, error: null } : undefined,
+    placeholderData: (previousData) => previousData,
+    staleTime: 0,
+    gcTime: 60 * 1000,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
+  });
+
+  const periodUsed = periodUsageData?.used ?? null;
+  const periodUsageError = periodUsageData?.error ?? null;
 
   const getStatusBadge = () => {
     if (!subscription) {
@@ -84,36 +112,6 @@ export function CurrentSubscriptionRow({ subscription: initialSubscription, next
       day: "numeric",
     });
   };
-
-  useEffect(() => {
-    const orgId = activeOrg?.id;
-    const start = subscription?.periodStart;
-    const end = subscription?.periodEnd;
-    if (!orgId || !start || !end) {
-      setPeriodUsed(null);
-      setPeriodUsageError(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    const run = async () => {
-      const res = await getCreditsUsageForPeriod({
-        organizationId: orgId,
-        startDate: new Date(start),
-        endDate: new Date(end),
-        creditType: "contact_lookup",
-      });
-      if (cancelled) return;
-      setPeriodUsed(res.error ? null : res.used);
-      setPeriodUsageError(res.error);
-    };
-
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeOrg?.id, subscription?.periodStart, subscription?.periodEnd]);
 
   const currentPlan: PlanId | null = isPlanId(subscription?.plan) ? subscription.plan : null
   const currentPlanData = plans.find((p) => p.planId === currentPlan);

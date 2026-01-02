@@ -6,11 +6,12 @@ import { InvoicesCard } from '@/components/account/invoices-card'
 import { CancellationSection } from '@/components/account/cancellation-section'
 import { getUserSubscription } from '@/actions/stripe'
 import { redirect } from 'next/navigation'
-import { Icon } from '@/components/custom/icon'
+import { Icon } from '@/components/icon'
 import { Button } from '@/components/ui/button'
 import { TrialBanner } from '@/components/account/trial-banner'
 import { getOrganizationMembership } from '@/actions/account'
 import { ADMIN_ROLES } from '@/lib/roles'
+import { getCreditsUsageForPeriod } from '@/actions/credits'
 
 export default async function BillingPage() {
   // Fetch session data on the server
@@ -55,6 +56,19 @@ export default async function BillingPage() {
 
   const nextBillingAmountLabel = subscription?.plan === 'pro' ? '$69' : null
 
+  // Fetch initial period usage for SSR
+  let initialPeriodUsed: number | undefined = undefined;
+  if (activeOrgId && subscription?.periodStart && subscription?.periodEnd) {
+    const result = await getCreditsUsageForPeriod({
+      organizationId: activeOrgId,
+      startDate: new Date(subscription.periodStart),
+      endDate: new Date(subscription.periodEnd),
+    });
+    if (!result.error) {
+      initialPeriodUsed = result.used;
+    }
+  }
+
   return (
     <>
       {/* Billing & Subscription */}
@@ -66,7 +80,10 @@ export default async function BillingPage() {
         />
       )}
 
-      <BillingSection subscription={subscription} />
+      <BillingSection 
+        subscription={subscription} 
+        initialPeriodUsed={initialPeriodUsed}
+      />
       {canManageBilling && <PaymentMethodBlock />}
       <InvoicesCard subscription={subscription} />
       {subscription && canManageBilling && <CancellationSection subscription={subscription} />}

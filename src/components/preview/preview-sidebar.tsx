@@ -18,7 +18,7 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { Icon } from "@/components/custom/icon"
+import { Icon } from "@/components/icon"
 import { Button } from "@/components/ui/button"
 
 interface RecentSearch {

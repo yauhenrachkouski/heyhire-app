@@ -5,7 +5,7 @@ import Image, { type StaticImageData } from "next/image"
 import { Button } from "@/components/ui/button"
 import { getCustomerPaymentMethods, setDefaultPaymentMethod, removePaymentMethod } from "@/actions/stripe"
 import { Badge } from "@/components/ui/badge"
-import { Icon } from "@/components/custom/icon"
+import { Icon } from "@/components/icon"
 import { AddNewPaymentMethodButton } from "@/components/account/add-new-payment-method-button"
 import {
   DropdownMenu,

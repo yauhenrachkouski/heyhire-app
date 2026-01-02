@@ -4,7 +4,7 @@ import * as React from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
-import { Icon } from "@/components/custom/icon";
+import { Icon } from "@/components/icon";
 import { PlansModal } from "@/components/sidebar/plans-modal";
 import { formatCreditBalance } from "@/lib/credits";
 import { usePlansModal } from "@/providers/plans-modal-provider";

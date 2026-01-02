@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
-import { Icon } from "@/components/custom/icon"
+import { Icon } from "@/components/icon"
 import { startProBillingNow } from "@/actions/stripe"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"

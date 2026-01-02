@@ -1,4 +1,4 @@
-import { Breadcrumbs } from "@/components/custom/breadcrumbs"
+import { Breadcrumbs } from "@/components/breadcrumbs"
 import { getSearchById } from "@/actions/search"
 import { notFound } from "next/navigation"
 

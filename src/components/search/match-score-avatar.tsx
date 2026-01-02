@@ -1,6 +1,6 @@
 "use client";
 
-import { ProfileAvatar } from "@/components/custom/profile-avatar";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { cn } from "@/lib/utils";
 
 interface MatchScoreAvatarProps {

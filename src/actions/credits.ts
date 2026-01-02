@@ -6,6 +6,7 @@ import { eq, and, desc, gte, lte, sql } from "drizzle-orm";
 import { generateId } from "@/lib/id";
 import { Resend } from "resend";
 import { CreditsRunningLowEmail } from "@/emails";
+import { getSessionWithOrg } from "@/lib/auth-helpers";
 import type {
   AddCreditsParams,
   DeductCreditsParams,
@@ -59,6 +60,12 @@ export async function getCreditsUsageForPeriod(params: {
 }): Promise<{ used: number; error: string | null }> {
   try {
     const { organizationId, startDate, endDate, creditType } = params;
+
+    // Verify access
+    const { activeOrgId } = await getSessionWithOrg();
+    if (activeOrgId !== organizationId) {
+      return { used: 0, error: "Unauthorized" };
+    }
 
     const whereConditions = [
       eq(creditTransactions.organizationId, organizationId),

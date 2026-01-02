@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Icon } from '@/components/custom/icon'
+import { Icon } from '@/components/icon'
 import {
   AlertDialog,
   AlertDialogAction,
