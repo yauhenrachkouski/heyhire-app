@@ -4,8 +4,7 @@ import { db } from "@/db/drizzle";
 import { candidates, searchCandidates, search, searchCandidateStrategies, sourcingStrategies, creditTransactions } from "@/db/schema";
 import { eq, and, gte, lte, lt, gt, or, isNull, inArray, count, desc, asc, sql } from "drizzle-orm";
 import { generateId } from "@/lib/id";
-import type { CandidateProfile, ParsedQuery } from "@/types/search";
-import { scoreCandidateMatch, prepareCandidateForScoring } from "@/actions/scoring";
+import type { CandidateProfile } from "@/types/search";
 import { assertNotReadOnlyForOrganization, requireSearchReadAccess } from "@/lib/request-access";
 import { getSessionWithOrg } from "@/lib/auth-helpers";
 import { CREDIT_TYPES } from "@/lib/credits";
@@ -95,8 +94,7 @@ function transformCandidateToDb(candidate: CandidateProfile) {
 export async function saveCandidatesFromSearch(
   searchId: string,
   candidateProfiles: CandidateProfile[],
-  _rawText: string,
-  _parsedQuery: ParsedQuery
+  _rawText: string
 ): Promise<{ success: boolean; saved: number; linked: number }> {
   console.log("[Candidates] Batch saving", candidateProfiles.length, "candidates for search:", searchId);
   
@@ -311,149 +309,6 @@ export async function saveCandidatesFromSearch(
 /**
  * Score a single candidate and update the database
  */
-export async function scoreSingleCandidate(searchCandidateId: string) {
-  console.log("[Candidates] Scoring single candidate:", searchCandidateId);
-
-  try {
-    // 1. Fetch search candidate with candidate and search details
-    const searchCandidate = await db.query.searchCandidates.findFirst({
-      where: eq(searchCandidates.id, searchCandidateId),
-      with: {
-        candidate: true,
-        search: true,
-      },
-    });
-
-    if (!searchCandidate) {
-      throw new Error("Search candidate not found");
-    }
-
-    if (!searchCandidate.candidate) {
-      throw new Error("Candidate profile not found");
-    }
-
-    if (!searchCandidate.search) {
-      throw new Error("Search details not found");
-    }
-
-    // 2. Prepare data for scoring
-    const candidateData = searchCandidate.candidate;
-    const searchData = searchCandidate.search;
-    
-    // Parse search params (parsedQuery)
-    let parsedQuery: ParsedQuery;
-    try {
-      parsedQuery = JSON.parse(searchData.params);
-    } catch (e) {
-      console.error("Failed to parse search params", e);
-      throw new Error("Invalid search params");
-    }
-
-    // Prepare candidate object (expanding JSON fields)
-    const candidateForScoring = prepareCandidateForScoring(candidateData);
-
-    // 3. Call scoring API
-    const scoreResult = await scoreCandidateMatch(
-      candidateForScoring,
-      parsedQuery,
-      searchData.query,
-      candidateData.id
-    );
-
-    // 4. Update database with score
-    if (scoreResult.success && scoreResult.data) {
-      const notesJson = JSON.stringify(scoreResult.data);
-      await updateMatchScore(
-        searchCandidateId,
-        scoreResult.data.match_score,
-        notesJson
-      );
-      console.log("[Candidates] Successfully scored:", searchCandidateId, "Score:", scoreResult.data.match_score);
-      return { success: true, score: scoreResult.data.match_score };
-    } else {
-      console.error("[Candidates] Failed to score:", searchCandidateId, scoreResult.error);
-      return { success: false, error: scoreResult.error };
-    }
-  } catch (error) {
-    console.error("[Candidates] Error in scoreSingleCandidate:", error);
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
-  }
-}
-
-/**
- * Score a batch of candidates in parallel
- * This updates the database as each candidate is scored, allowing for progressive UI updates
- * No concurrency limit - executes all scoring tasks immediately
- */
-export async function scoreBatchCandidates(searchCandidateIds: string[]) {
-  console.log("[Candidates] Scoring batch of candidates:", searchCandidateIds.length);
-  
-  if (searchCandidateIds.length === 0) {
-    return { success: true, scored: 0, errors: 0 };
-  }
-
-  // 1. Fetch all search candidates at once
-  const searchCandidatesList = await db.query.searchCandidates.findMany({
-    where: inArray(searchCandidates.id, searchCandidateIds),
-    with: {
-      candidate: true,
-      search: true,
-    },
-  });
-
-  if (searchCandidatesList.length === 0) {
-    return { success: false, error: "No candidates found" };
-  }
-
-  // Run all scorings in parallel
-  const results = await Promise.all(searchCandidatesList.map(async (searchCandidate) => {
-    try {
-      if (!searchCandidate.candidate || !searchCandidate.search) {
-        return false;
-      }
-
-      const candidateData = searchCandidate.candidate;
-      const searchData = searchCandidate.search;
-      
-      let parsedQuery: ParsedQuery;
-      try {
-        parsedQuery = JSON.parse(searchData.params);
-      } catch (e) {
-        return false;
-      }
-
-      const candidateForScoring = prepareCandidateForScoring(candidateData);
-
-      const scoreResult = await scoreCandidateMatch(
-        candidateForScoring,
-        parsedQuery,
-        searchData.query,
-        candidateData.id
-      );
-
-      if (scoreResult.success && scoreResult.data) {
-        const notesJson = JSON.stringify(scoreResult.data);
-        await updateMatchScore(
-          searchCandidate.id,
-          scoreResult.data.match_score,
-          notesJson
-        );
-        console.log("[Candidates] Batch: Scored:", searchCandidate.id, "Score:", scoreResult.data.match_score);
-        return true;
-      }
-      return false;
-    } catch (error) {
-      console.error("[Candidates] Batch: Error scoring:", searchCandidate.id, error);
-      return false;
-    }
-  }));
-  
-  const scoredCount = results.filter(Boolean).length;
-  const errorCount = results.filter(r => !r).length;
-
-  return { success: true, scored: scoredCount, errors: errorCount };
-}
-
 /**
  * Get a candidate by LinkedIn URL
  */

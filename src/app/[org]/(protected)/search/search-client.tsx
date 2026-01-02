@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import posthog from 'posthog-js';
 import { toast } from "sonner";
 import { SearchInput } from "@/components/search/search-input";
 import { saveSearch } from "@/actions/search";
 import { triggerSourcingWorkflow } from "@/actions/jobs";
-import type { ParsedQuery, SourcingCriteria } from "@/types/search";
+import type { SourcingCriteria } from "@/types/search";
 import { useSession, useActiveOrganization } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -14,16 +14,12 @@ import { recentSearchesKeys } from "@/lib/query-keys/search";
 
 interface SearchClientProps {
   viewMode?: "table" | "cards"; // Kept for compatibility but unused
-  initialQuery?: ParsedQuery;
-  initialQueryText?: string;
 }
 
-export function SearchClient({ initialQuery, initialQueryText }: SearchClientProps) {
-  const [parsedQuery, setParsedQuery] = useState<ParsedQuery | null>(initialQuery ?? null);
-  const [queryText, setQueryText] = useState<string>(initialQueryText ?? "");
+export function SearchClient({}: SearchClientProps) {
+  const [queryText, setQueryText] = useState<string>("");
   const [isSearching, setIsSearching] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
   const [sourcingCriteria, setSourcingCriteria] = useState<SourcingCriteria | null>(null);
 
   const { data: session } = useSession();
@@ -31,22 +27,8 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  // Auto-trigger search when initial query is provided
-  useEffect(() => {
-    if (initialQuery && !hasSearched) {
-      handleStartSearch("autorun");
-    }
-  }, [initialQuery]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleQueryParsed = (query: ParsedQuery, newQueryText?: string, criteria?: SourcingCriteria) => {
-    setParsedQuery(query);
-    if (criteria) {
-      setSourcingCriteria(criteria);
-    }
-    if (newQueryText) {
-      setQueryText(newQueryText);
-    }
-    setHasSearched(false);
+  const handleCriteriaChange = (criteria: SourcingCriteria | null) => {
+    setSourcingCriteria(criteria);
   };
 
   const handleParsingChange = (parsing: boolean) => {
@@ -54,7 +36,7 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
   };
 
   const handleStartSearch = async (source: "manual" | "autorun" = "manual") => {
-    if (!parsedQuery || !sourcingCriteria) {
+    if (!sourcingCriteria) {
       toast.error("Error", {
         description: "Please parse a job description first",
       });
@@ -74,7 +56,6 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
       // Save search to database first
       const saveResult = await saveSearch(
         queryText,
-        parsedQuery,
         sourcingCriteria,
         session.user.id,
         activeOrg.id
@@ -156,9 +137,7 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
         query_text_length: queryText.length,
       });
 
-      toast("Search Started", {
-        description: "Redirecting to results...",
-      });
+      toast("Search Started");
 
       // Navigate to results page immediately
       // Don't refresh before push to avoid race conditions
@@ -185,7 +164,6 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
   const handleQueryTextChange = (text: string) => {
     setQueryText(text);
     if (!text.trim()) {
-      setParsedQuery(null);
       setSourcingCriteria(null);
     }
   };
@@ -196,7 +174,7 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
         {/* Search Box */}
         <div className="w-full max-w-3xl relative space-y-4">
           <SearchInput
-            onQueryParsed={handleQueryParsed}
+            onCriteriaChange={handleCriteriaChange}
             onParsingChange={handleParsingChange}
             onSearch={() => handleStartSearch("manual")}
             isLoading={isSearching}

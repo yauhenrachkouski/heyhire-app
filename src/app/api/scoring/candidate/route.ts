@@ -2,7 +2,6 @@ import { db } from "@/db/drizzle";
 import { search, searchCandidates } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { realtime } from "@/lib/realtime";
-import type { ParsedQuery } from "@/types/search";
 import { NextResponse } from "next/server";
 import { Receiver } from "@upstash/qstash";
 import { jobParsingResponseV3Schema } from "@/types/search";
@@ -17,8 +16,6 @@ interface CandidateScoringPayload {
   searchCandidateId: string;
   candidateId: string;
   candidateData: Record<string, unknown>;
-  rawText: string;
-  parsedQuery: ParsedQuery;
   total: number;
 }
 
@@ -52,7 +49,7 @@ export async function POST(request: Request) {
     
     // Parse the body
     const payload: CandidateScoringPayload = JSON.parse(body);
-    const { searchId, searchCandidateId, candidateId, candidateData, rawText, parsedQuery, total } = payload;
+    const { searchId, searchCandidateId, candidateId, candidateData, total } = payload;
 
     if (!candidateId || !searchId) {
       console.error("[Scoring] Missing required fields:", { candidateId, searchId });

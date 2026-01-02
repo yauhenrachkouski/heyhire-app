@@ -21,19 +21,14 @@ import { searchCandidatesKeys } from "@/lib/query-keys/search";
 
 function CandidateDetailsSkeleton() {
   return (
-    <div className="relative flex flex-col h-full bg-white">
-      {/* Floating close button skeleton */}
-      <div className="sticky top-2 z-20 flex justify-end px-2 pt-2">
-        <Skeleton className="h-8 w-8 rounded-md" />
-      </div>
-
+    <div className="relative flex flex-col h-full bg-background">
       {/* Scrollable content */}
       <ScrollArea className="flex-1 overflow-hidden">
-        <div className="p-4 pt-2">
+        <div className="p-4">
           <div className="space-y-6">
             {/* Profile Header */}
             <div>
-              <div className="flex gap-4 mb-4">
+              <div className="flex gap-4 mb-4 items-start">
                 {/* Avatar skeleton */}
                 <div className="shrink-0 flex flex-col items-center gap-2">
                   <Skeleton className="h-16 w-16 rounded-full" />
@@ -41,7 +36,10 @@ function CandidateDetailsSkeleton() {
 
                 {/* Name and role skeleton */}
                 <div className="flex-1 min-w-0 space-y-1.5">
-                  <Skeleton className="h-5 w-48" />
+                  <div className="flex items-start justify-between gap-2">
+                    <Skeleton className="h-5 w-48" />
+                    <Skeleton className="h-6 w-6 rounded-md" />
+                  </div>
                   <Skeleton className="h-4 w-64" />
                   <Skeleton className="h-3 w-32" />
                 </div>
@@ -119,7 +117,14 @@ function CandidateDetailsSkeleton() {
   );
 }
 
-export function SearchRightSidebar() {
+import { cn } from "@/lib/utils";
+
+interface SearchRightSidebarProps {
+  className?: string;
+  topOffset?: number;
+}
+
+export function SearchRightSidebar({ className, topOffset = 0 }: SearchRightSidebarProps) {
   const searchParams = useSearchParams();
   const candidateId = searchParams.get("candidateId");
   const router = useRouter();
@@ -167,7 +172,14 @@ export function SearchRightSidebar() {
       side="right"
       variant="floating"
       collapsible="none"
-      className="shrink-0 border-l bg-background shadow-none min-w-[500px] w-[600px] p-0 hidden md:flex sticky top-4 h-[calc(100svh-2rem)] overflow-hidden"
+      style={{ 
+        top: topOffset,
+        height: topOffset ? `calc(100svh - ${topOffset}px)` : '100svh'
+      } as React.CSSProperties}
+      className={cn(
+        "shrink-0 border-l bg-background shadow-none min-w-[500px] w-[600px] p-0 hidden md:flex sticky overflow-hidden z-20",
+        className
+      )}
     >
       <div className="flex h-full flex-col overflow-hidden">
         {isLoading ? (

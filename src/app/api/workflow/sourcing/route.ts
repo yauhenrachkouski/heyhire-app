@@ -409,13 +409,6 @@ export const { POST } = serve<SourcingWorkflowPayload>(
     let candidatesData: unknown[] = [];
     let lastSavedCount = 0;
     
-    // Get search record early for incremental saves
-    const searchRecordForSave = await context.run("get-search-params-early", async () => {
-      return await db.query.search.findFirst({
-        where: eq(search.id, searchId),
-      });
-    });
-    
     // Import save function for incremental saves
     const { saveCandidatesFromSearch } = await import("@/actions/candidates");
 
@@ -469,13 +462,12 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       const currentCandidates = pollData.candidates || pollData.results || [];
       
       // Save new candidates incrementally if we have more than before
-      if (currentCandidates.length > lastSavedCount && searchRecordForSave) {
+      if (currentCandidates.length > lastSavedCount) {
         const newCandidates = currentCandidates.slice(lastSavedCount);
         console.log(`[Workflow] Saving ${newCandidates.length} new candidates incrementally`);
         
         await context.run(`save-candidates-incremental-${pollCount}`, async () => {
-          const parsedQuery = JSON.parse(searchRecordForSave.params);
-          await saveCandidatesFromSearch(searchId, newCandidates as any, rawText, parsedQuery);
+          await saveCandidatesFromSearch(searchId, newCandidates as any, rawText);
           
           // Emit event so client refreshes the list
           await realtime.channel(channel).emit("candidates.added", {
@@ -555,13 +547,12 @@ export const { POST } = serve<SourcingWorkflowPayload>(
     // This handles the final batch when status changes to "completed"
     const remainingCandidates = candidatesData.length - lastSavedCount;
     
-    if (remainingCandidates > 0 && searchRecordForSave) {
+    if (remainingCandidates > 0) {
       await context.run("save-candidates-final", async () => {
         console.log("[Workflow] Saving final batch of", remainingCandidates, "candidates");
-        const parsedQuery = JSON.parse(searchRecordForSave.params);
         const finalBatch = candidatesData.slice(lastSavedCount);
         // @ts-expect-error - finalBatch is typed correctly from API
-        await saveCandidatesFromSearch(searchId, finalBatch, rawText, parsedQuery);
+        await saveCandidatesFromSearch(searchId, finalBatch, rawText);
         
         await realtime.channel(channel).emit("progress.updated", {
           progress: 95,

@@ -4,7 +4,6 @@ import { searchCandidates, search } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { realtime } from "@/lib/realtime";
 import { prepareCandidateForScoring } from "@/actions/scoring";
-import type { ParsedQuery } from "@/types/search";
 import { NextResponse } from "next/server";
 
 const qstash = new Client({
@@ -50,14 +49,6 @@ export async function POST(request: Request) {
         { error: "Missing cached scoring model. Call /api/scoring/model first." },
         { status: 409 }
       );
-    }
-
-    let parsedQuery: ParsedQuery;
-    try {
-      parsedQuery = JSON.parse(searchRecord.params);
-    } catch (e) {
-      console.error("[Scoring] Failed to parse search params:", e);
-      return NextResponse.json({ error: "Invalid search params" }, { status: 400 });
     }
 
     // Get all unscored candidates for this search
@@ -111,8 +102,6 @@ export async function POST(request: Request) {
           searchCandidateId: sc.id,
           candidateId: sc.candidate.id,
           candidateData: prepareCandidateForScoring(sc.candidate),
-          rawText: searchRecord.query,
-          parsedQuery,
           total,
         },
         delay: delaySeconds,
@@ -140,7 +129,6 @@ export async function POST(request: Request) {
     );
   }
 }
-
 
 
 

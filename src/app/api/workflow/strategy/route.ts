@@ -150,21 +150,11 @@ export const { POST } = serve<StrategyWorkflowPayload>(
     // Step 5: Save candidates
     if (candidatesData.length > 0) {
       const { saveCandidatesFromSearch } = await import("@/actions/candidates");
-      
-      const searchRecord = await context.run("get-search-params", async () => {
-        return await db.query.search.findFirst({
-          where: eq(search.id, searchId),
-        });
-      });
 
-      if (searchRecord) {
-        const parsedQuery = JSON.parse(searchRecord.params);
-        
-        await context.run("save-candidates", async () => {
-          // @ts-expect-error - candidatesData typed from API
-          await saveCandidatesFromSearch(searchId, candidatesData, rawText, parsedQuery);
-        });
-      }
+      await context.run("save-candidates", async () => {
+        // @ts-expect-error - candidatesData typed from API
+        await saveCandidatesFromSearch(searchId, candidatesData, rawText);
+      });
     }
 
     // Step 6: Update strategy as completed

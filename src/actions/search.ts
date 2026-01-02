@@ -3,14 +3,12 @@
 import "server-only";
 
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
-import { headers } from "next/headers";
 import { getErrorMessage } from "@/lib/handle-error";
-import { parsedQuerySchema, type ParsedQuery, type SourcingCriteria } from "@/types/search";
+import { type SourcingCriteria } from "@/types/search";
 import { db } from "@/db/drizzle";
 import { search, user } from "@/db/schema";
 import { eq, desc, ilike, and } from "drizzle-orm";
 import { generateId } from "@/lib/id";
-import { auth } from "@/lib/auth";
 import { assertNotReadOnlyForOrganization, getSignedInUser, requireOrganizationReadAccess, requireSearchReadAccess } from "@/lib/request-access";
 const SEARCH_NAME_MAX_LENGTH = 50;
 
@@ -56,7 +54,6 @@ export async function updateSearchName(
  */
 export async function saveSearch(
   queryText: string,
-  parsedQuery: ParsedQuery,
   criteria: SourcingCriteria,
   userId: string,
   organizationId: string
@@ -84,7 +81,7 @@ export async function saveSearch(
       id,
       name,
       query: queryText,
-      params: JSON.stringify(parsedQuery),
+      params: JSON.stringify(criteria),
       parseResponse: JSON.stringify(criteria),
       parseSchemaVersion: criteria.schema_version ?? null,
       parseError: null,
@@ -124,7 +121,6 @@ export async function getRecentSearches(
     id: string;
     name: string;
     query: string;
-    params: ParsedQuery;
     createdAt: Date;
   }>;
   error?: string;
@@ -147,7 +143,6 @@ export async function getRecentSearches(
           id: s.id,
           name: s.name,
           query: s.query,
-          params: JSON.parse(s.params) as ParsedQuery,
           createdAt: s.createdAt,
         }));
       },
@@ -246,7 +241,6 @@ export async function getSearchById(
     id: string;
     name: string;
     query: string;
-    params: ParsedQuery;
     parseResponse: SourcingCriteria | null;
     createdAt: Date;
     status: string;
@@ -269,7 +263,6 @@ export async function getSearchById(
         id: search.id,
         name: search.name,
         query: search.query,
-        params: search.params,
         parseResponse: search.parseResponse,
         createdAt: search.createdAt,
         status: search.status,
@@ -303,7 +296,6 @@ export async function getSearchById(
       id: s.id,
       name: s.name,
       query: s.query,
-      params: JSON.parse(s.params) as ParsedQuery,
       parseResponse: s.parseResponse ? (JSON.parse(s.parseResponse) as SourcingCriteria) : null,
       createdAt: s.createdAt,
       status: s.status,

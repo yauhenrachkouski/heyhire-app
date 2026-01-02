@@ -7,25 +7,19 @@ import {
   strategyGenerationResponseSchema,
   strategyExecutionResponseSchema,
   strategyResultsResponseSchema,
-  type ParseQueryResponse,
   type SourcingCriteria,
   type StrategyGenerationResponse,
   type StrategyExecutionResponse,
   type StrategyResultsResponse,
   type SourcingStrategyItem,
-  type CandidateProfile,
 } from "@/types/search";
 import { getErrorMessage } from "@/lib/handle-error";
-import { saveCandidatesFromSearch } from "@/actions/candidates";
 import { db } from "@/db/drizzle";
 import { search } from "@/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { Client } from "@upstash/qstash";
 import { realtime } from "@/lib/realtime";
-import { sourcingStrategies } from "@/db/schema";
-import { generateId } from "@/lib/id";
-import { mapCriteriaToParsedQuery } from "@/lib/search/mappers";
 
 const API_BASE_URL = "http://57.131.25.45";
 
@@ -41,7 +35,7 @@ const qstashClient = new Client({
  */
 export async function parseJob(
   message: string
-): Promise<ParseQueryResponse & { criteria?: SourcingCriteria }> {
+): Promise<{ success: boolean; criteria?: SourcingCriteria; error?: string }> {
   try {
     console.log("[Search] Parsing job with message:", message);
     console.log("[Search] API base URL:", API_BASE_URL || "(empty)");
@@ -87,13 +81,9 @@ export async function parseJob(
     console.log("[Search] Parse response:", JSON.stringify(data, null, 2));
 
     const validated = jobParsingResponseV3Schema.parse(data);
-    const parsedQuery = mapCriteriaToParsedQuery(validated.criteria, validated.concepts);
-    
-    console.log("[Search] Mapped ParsedQuery:", JSON.stringify(parsedQuery, null, 2));
 
     return {
       success: true,
-      data: parsedQuery,
       criteria: validated,
     };
   } catch (error) {

@@ -50,6 +50,7 @@ export const jobParsingResponseV3Schema = z.object({
   schema_version: z.number().optional().default(1),
   project_id: z.string().nullable().optional(),
   search_name: z.string().nullable().optional(),
+  job_title: z.string().nullable().optional(),
   criteria: z.array(criterionSchema).default([]),
   concepts: z.object({}).catchall(conceptSchema).optional().catch({}),
 });
@@ -185,106 +186,3 @@ export const strategyResultsResponseSchema = z.object({
 }).passthrough();
 
 export type StrategyResultsResponse = z.infer<typeof strategyResultsResponseSchema>;
-
-// --- Scoring Schemas ---
-
-export const scoreResultSchema = z.object({
-  request_id: z.string(),
-  candidate_id: z.string(),
-  match_score: z.number(),
-  verdict: z.string(),
-  primary_issue: z.string().nullable().optional(),
-  total_penalty: z.number(),
-  high_importance_missing: z.array(z.string()),
-  candidate_summary: z.string().nullable().optional(),
-  reasoning: z.object({
-    location_analysis: z.string(),
-    title_analysis: z.string(),
-    skills_analysis: z.string(),
-    experience_analysis: z.string(),
-    overall_assessment: z.string(),
-  }),
-  criteria_scores: z.array(z.object({
-    criterion: z.string(),
-    importance: z.string(), // API may return values outside low/medium/high
-    found: z.boolean(),
-    evidence: z.string().nullable(),
-    penalty: z.number(),
-    reasoning: z.string(),
-  })),
-});
-
-export type ScoreResult = z.infer<typeof scoreResultSchema>;
-
-// --- UI Schemas ---
-
-const categoryTagSchema = z.object({
-  category: z.enum([
-    "job_title",
-    "location",
-    "years_of_experience",
-    "industry",
-    "skills",
-    "company",
-    "education",
-    "company_size",
-    "revenue_range",
-    "remote_preference",
-    "funding_types",
-    "founded_year_range",
-    "web_technologies",
-    "job_family",
-    "seniority",
-    "employment_type",
-    "language",
-    "soft_skills",
-    "hard_skills",
-    "tools",
-    "education_level",
-    "education_field",
-    "university",
-    "excluded_company"
-  ]),
-  value: z.string(),
-  // Matches v3 criteria priority levels (we keep "mandatory" distinct from "high")
-  importance: z.enum(["low", "medium", "high", "mandatory"]).default("medium").optional(),
-  // Optional linkage back to v3 criterion for syncing edits in UI
-  criterion_id: z.string().optional(),
-});
-
-export type CategoryTag = z.infer<typeof categoryTagSchema>;
-
-const multiValueFieldSchema = z.object({
-  values: z.array(z.string()),
-  operator: z.enum(["OR", "AND"]).default("OR"),
-});
-
-export const parsedQuerySchema = z.object({
-  job_title: z.union([z.string(), multiValueFieldSchema]).default(""),
-  location: z.union([z.string(), multiValueFieldSchema]).default(""),
-  years_of_experience: z.union([z.string(), multiValueFieldSchema]).default(""),
-  industry: z.union([z.string(), multiValueFieldSchema]).default(""),
-  skills: z.union([z.string(), multiValueFieldSchema]).default(""),
-  company: z.union([z.string(), multiValueFieldSchema]).default(""),
-  education: z.union([z.string(), multiValueFieldSchema]).default(""),
-  is_current: z.boolean().nullable().optional(),
-  company_size: z.union([z.string(), multiValueFieldSchema]).default(""),
-  revenue_range: z.union([z.string(), multiValueFieldSchema]).default(""),
-  remote_preference: z.string().default(""),
-  funding_types: z.union([z.string(), multiValueFieldSchema]).default(""),
-  founded_year_range: z.string().default(""),
-  web_technologies: z.union([z.string(), multiValueFieldSchema]).default(""),
-  tags: z.array(categoryTagSchema).default([]),
-});
-
-export type ParsedQuery = z.infer<typeof parsedQuerySchema>;
-
-// --- Response Schemas ---
-
-const parseQueryResponseSchema = z.object({
-  success: z.boolean(),
-  data: parsedQuerySchema.optional(),
-  error: z.string().optional(),
-});
-
-export type ParseQueryResponse = z.infer<typeof parseQueryResponseSchema>;

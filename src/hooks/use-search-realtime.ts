@@ -24,6 +24,7 @@ interface UseSearchRealtimeOptions {
   onCompleted?: (candidatesCount: number) => void;
   onFailed?: (error: string) => void;
   onCandidatesAdded?: (data: { count: number; total: number }) => void;
+  onScoringStarted?: (data: { total: number }) => void;
   onScoringProgress?: (data: { candidateId: string; searchCandidateId: string; score: number; scored: number; total: number; scoringResult?: any }) => void;
   onScoringCompleted?: (data: { scored: number; errors: number }) => void;
 }
@@ -41,6 +42,7 @@ export function useSearchRealtime({
   onCompleted,
   onFailed,
   onCandidatesAdded,
+  onScoringStarted,
   onScoringProgress,
   onScoringCompleted,
 }: UseSearchRealtimeOptions) {
@@ -148,6 +150,7 @@ export function useSearchRealtime({
           total: data.total,
           errors: 0,
         });
+        onScoringStarted?.(data);
       } else if (payload.event === "scoring.progress") {
         const data = payload.data as { candidateId: string; searchCandidateId: string; score: number; scored: number; total: number; scoringResult?: any };
         setScoringState((prev) => ({
@@ -171,7 +174,7 @@ export function useSearchRealtime({
           isScoring: false,
         }));
       }
-    }, [onCompleted, onFailed, onCandidatesAdded, onScoringProgress, onScoringCompleted]),
+    }, [onCompleted, onFailed, onCandidatesAdded, onScoringStarted, onScoringProgress, onScoringCompleted]),
   });
 
   // Optimistic status update for immediate UI feedback (e.g., "Get +100" button)

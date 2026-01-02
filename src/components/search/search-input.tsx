@@ -26,17 +26,16 @@ import {
   IconBan,
 } from "@tabler/icons-react";
 import { parseJob } from "@/actions/jobs";
-import type { ParsedQuery, SourcingCriteria } from "@/types/search";
+import type { Concept, Criterion, SourcingCriteria } from "@/types/search";
 import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
 import { cn } from "@/lib/utils";
-import { mapCriteriaToParsedQuery } from "@/lib/search/mappers";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { BottomToolbar, RunSearchButton, ScenarioGroupList } from "./search-input.parts";
 import type { Scenario, ScenarioImportance } from "./search-input.types";
 
 interface SearchInputProps {
-  onQueryParsed: (query: ParsedQuery, queryText?: string, criteria?: SourcingCriteria) => void;
+  onCriteriaChange: (criteria: SourcingCriteria | null) => void;
   onParsingChange?: (isParsing: boolean) => void;
   onSearch?: () => Promise<void>;
   isLoading?: boolean;
@@ -124,8 +123,84 @@ const GROUP_ORDER = [
   "Company Profile",
 ];
 
+const EXCLUDE_OPERATORS = new Set(["must_exclude", "must_not_be_in_list"]);
+
+const toStringValues = (value: unknown): string[] => {
+  if (value === null || value === undefined) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" || typeof item === "number" ? String(item) : ""))
+      .filter(Boolean);
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    return [String(value)];
+  }
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const languageCode =
+      typeof obj.language_code === "string" ? obj.language_code : undefined;
+    const minimumLevelRaw =
+      (typeof obj.minimum_level === "string" && obj.minimum_level) ||
+      (typeof obj["minimum _level"] === "string" && obj["minimum _level"]);
+    if (languageCode) {
+      const levelSuffix = minimumLevelRaw ? ` (${minimumLevelRaw})` : "";
+      return [`${languageCode}${levelSuffix}`];
+    }
+    const candidate =
+      (typeof obj.name === "string" && obj.name) ||
+      (typeof obj.label === "string" && obj.label) ||
+      (typeof obj.value === "string" && obj.value) ||
+      (typeof obj.title === "string" && obj.title);
+    if (candidate) return [candidate];
+    if (typeof obj.city === "string" && typeof obj.country === "string") {
+      return [`${obj.city}, ${obj.country}`];
+    }
+    return [JSON.stringify(obj)];
+  }
+  return [];
+};
+
+const resolveCriterionValues = (
+  criterion: Criterion,
+  concepts: Record<string, Concept> | undefined
+): string[] => {
+  const concept = criterion.concept_id ? concepts?.[criterion.concept_id] : undefined;
+  const conceptLabel =
+    concept?.display_label && concept.display_label.trim() ? concept.display_label.trim() : "";
+  const values = conceptLabel ? [conceptLabel] : toStringValues(criterion.value);
+  return values.map((value) => value.trim()).filter(Boolean);
+};
+
+const getScenarioCategory = (criterion: Criterion): string => {
+  switch (criterion.type) {
+    case "logistics_location":
+      return "location";
+    case "logistics_work_mode":
+      return "remote_preference";
+    case "language_requirement":
+      return "language";
+    case "minimum_years_of_experience":
+    case "minimum_relevant_years_of_experience":
+      return "years_of_experience";
+    case "company_constraint":
+      return EXCLUDE_OPERATORS.has(criterion.operator) ? "excluded_company" : "company";
+    case "capability_requirement":
+      return "hard_skills";
+    case "tool_requirement":
+      return "tools";
+    case "domain_requirement":
+      return "industry";
+    case "certification_requirement":
+      return "education_field";
+    case "career_signal_constraints":
+      return "job_title";
+    default:
+      return criterion.type;
+  }
+};
+
 export function SearchInput({ 
-  onQueryParsed, 
+  onCriteriaChange, 
   onParsingChange, 
   onSearch, 
   isLoading = false, 
@@ -244,12 +319,7 @@ export function SearchInput({
     })();
 
     setParsedCriteria(updatedCriteria);
-    const nextParsedQuery = mapCriteriaToParsedQuery(
-      updatedCriteria.criteria,
-      updatedCriteria.concepts
-    );
-
-    onQueryParsed(nextParsedQuery, undefined, updatedCriteria);
+    onCriteriaChange(updatedCriteria);
   }, [selectedScenarios, scenarios]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleScenarioToggle = (id: string) => {
@@ -278,28 +348,27 @@ export function SearchInput({
     );
   };
 
-  const generateScenariosFromTags = (parsed: ParsedQuery, criteria?: SourcingCriteria | null) => {
-    if (!parsed.tags || parsed.tags.length === 0) return [];
+  const generateScenariosFromCriteria = (criteria: SourcingCriteria) => {
+    const concepts = criteria.concepts ?? {};
 
-    return parsed.tags.map((tag, index) => {
-      // Create unique ID for each tag
-      const id = `${tag.category}_${tag.value}_${index}`;
-      const displayName = CATEGORY_DISPLAY_NAMES[tag.category] || tag.category.replace(/_/g, " ");
-      const group = CATEGORY_GROUPS[tag.category] || "Other";
+    return criteria.criteria.flatMap((criterion, index) => {
+      const values = resolveCriterionValues(criterion, concepts);
+      if (values.length === 0) return [];
 
-      // Find matching criterion to get operator
-      const criterion = criteria?.criteria?.find((c) => c.id === tag.criterion_id);
+      const category = getScenarioCategory(criterion);
+      const displayName = CATEGORY_DISPLAY_NAMES[category] || category.replace(/_/g, " ");
+      const group = CATEGORY_GROUPS[category] || "Other";
 
-      return {
-        id,
-        label: `${displayName}: ${tag.value}`,
-        category: tag.category,
-        value: tag.value,
-        importance: tag.importance || "medium",
-        criterionId: tag.criterion_id,
+      return values.map((value, valueIndex) => ({
+        id: `${criterion.id}_${index}_${valueIndex}`,
+        label: `${displayName}: ${value}`,
+        category,
+        value,
+        importance: criterion.priority_level as ScenarioImportance,
+        criterionId: criterion.id,
         group,
-        operator: criterion?.operator,
-      };
+        operator: criterion.operator,
+      }));
     });
   };
 
@@ -314,6 +383,11 @@ export function SearchInput({
     // Close scenarios while parsing
     setActivePanel(null);
     
+    // Show toast to inform user we're processing
+    toast.loading("Analyzing your search criteria...", {
+      id: "parse-loading",
+    });
+    
     try {
       const result = await parseJob(searchQuery);
       
@@ -323,31 +397,30 @@ export function SearchInput({
         return;
       }
 
-      if (result.success && result.data) {
-        // Pass criteria to parent for search flow
-        // IMPORTANT: We pass undefined for queryText to prevent the parent from overwriting our current input
-        onQueryParsed(result.data, undefined, result.criteria);
-        setParsedCriteria(result.criteria ?? null);
+      if (result.success && result.criteria) {
+        onCriteriaChange(result.criteria);
+        setParsedCriteria(result.criteria);
 
-        // Generate scenarios from the parsed query
-        const generated = generateScenariosFromTags(result.data, result.criteria);
-        if (result.criteria) {
-          skipScenarioSyncRef.current = true;
-        }
+        const generated = generateScenariosFromCriteria(result.criteria);
+        skipScenarioSyncRef.current = true;
         setScenarios(generated);
         setSelectedScenarios(generated.map((s) => s.id)); // Select all by default
 
-        const hasCriteria = (result.criteria?.criteria?.length ?? 0) > 0;
+        const hasCriteria = (result.criteria.criteria?.length ?? 0) > 0;
         const hasScenarios = generated.length > 0;
         const isIncomplete = !hasCriteria && !hasScenarios;
         const trimmedQuery = searchQuery.trim();
+        
+        // Dismiss loading toast
+        toast.dismiss("parse-loading");
+        
         if (isIncomplete && trimmedQuery && lastIncompleteQueryRef.current !== trimmedQuery) {
           lastIncompleteQueryRef.current = trimmedQuery;
-          toast("Search needs more detail", {
-            description: "Add more relevant requirements or preferences to refine results.",
-          });
+          toast.warning("Add more details to refine your search");
         } else if (!isIncomplete) {
           lastIncompleteQueryRef.current = "";
+          // Show success toast for complete parse
+          toast.success(`${generated.length} criteria found. We are ready to search!`);
         }
         
         // Show criteria panel if we have any
@@ -360,7 +433,6 @@ export function SearchInput({
 
         setLastParsedQuery(searchQuery);
         
-        console.log("[SearchInput] Parsed query:", result.data);
         console.log("[SearchInput] Criteria:", result.criteria);
       } else {
         // ... rest of the error handling ...
@@ -370,6 +442,7 @@ export function SearchInput({
         setScenarios([]);
         setSelectedScenarios([]);
         skipScenarioSyncRef.current = false;
+        onCriteriaChange(null);
 
         const rawError = result.error || "Failed to parse query";
         console.error("[SearchInput] Parse failed:", rawError);
@@ -387,9 +460,10 @@ export function SearchInput({
         if (userMessage.length > 300) {
           userMessage = `${userMessage.slice(0, 300)}…`;
         }
-        toast.error("Error", {
-          description: userMessage,
-        });
+        
+        // Dismiss loading toast and show error
+        toast.dismiss("parse-loading");
+        toast.error(`Failed to parse: ${userMessage}`);
       }
     } catch (error) {
       console.error("Search error:", error);
@@ -399,9 +473,11 @@ export function SearchInput({
       setScenarios([]);
       setSelectedScenarios([]);
       skipScenarioSyncRef.current = false;
-      toast.error("Error", {
-        description: "An unexpected error occurred",
-      });
+      onCriteriaChange(null);
+      
+      // Dismiss loading toast and show error
+      toast.dismiss("parse-loading");
+      toast.error("Something went wrong. Please try again");
     } finally {
       if (searchQuery === lastSentQueryRef.current) {
         setIsParsing(false);
@@ -421,6 +497,7 @@ export function SearchInput({
     setLastParsedQuery("");
     lastIncompleteQueryRef.current = "";
     skipScenarioSyncRef.current = false;
+    onCriteriaChange(null);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -741,6 +818,16 @@ export function SearchInput({
               rows={4}
             />
 
+            {/* Job Title Display */}
+            {parsedCriteria?.job_title && (
+              <div className="px-4 pb-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <IconBriefcase className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">Role:</span>
+                  <span className="font-medium text-foreground">{parsedCriteria.job_title}</span>
+                </div>
+              </div>
+            )}
             
             {/* Bottom Toolbar */}
               <BottomToolbar

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQueryClient, useInfiniteQuery, useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useQueryState, parseAsInteger, parseAsString } from "nuqs";
-import type { ParsedQuery, SourcingCriteria } from "@/types/search";
+import type { SourcingCriteria } from "@/types/search";
 import { CandidateCardListInfinite } from "@/components/search/candidate-card-list-infinite";
 
 import { InlineFilters } from "@/components/search/inline-filters";
@@ -36,7 +36,6 @@ interface SearchResultsClientProps {
     id: string;
     name: string;
     query: string;
-    params: ParsedQuery;
     parseResponse: SourcingCriteria | null;
     createdAt: Date | string;
     status: string;
@@ -102,7 +101,6 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
   const { data: activeOrg } = useActiveOrganization();
   const isReadOnly = useIsReadOnly();
 
-  const [currentParsedQuery, setCurrentParsedQuery] = useState<ParsedQuery>(search.params);
   const [isEditingName, setIsEditingName] = useState(false);
   const [searchName, setSearchName] = useState(search.name);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -128,8 +126,7 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
   useEffect(() => {
     console.log("[SearchResultsClient] Search changed to:", search.id);
     setSearchName(search.name);
-    setCurrentParsedQuery(search.params);
-  }, [search.id, search.name, search.params]);
+  }, [search.id, search.name]);
 
   useEffect(() => {
     if (isEditingName && titleRef.current) {
@@ -271,8 +268,19 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
     });
   }, [queryClient, search.id, candidatesQueryKey]);
 
+  const handleScoringStarted = useCallback((data: { total: number }) => {
+    console.log("[SearchResultsClient] Scoring started for", data.total, "candidates");
+    toast.loading(`Evaluating ${data.total} candidates...`, {
+      id: "scoring-progress",
+    });
+  }, []);
+
   const handleScoringCompleted = useCallback((data: { scored: number; errors: number }) => {
     console.log("[SearchResultsClient] Scoring completed. Scored:", data.scored, "Errors:", data.errors);
+    // Dismiss the scoring toast
+    toast.dismiss("scoring-progress");
+    toast.success(`Evaluated ${data.scored} candidates`);
+    
     // Invalidate to get fresh counts
     queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.progress(search.id) });
     queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.details(search.id) });
@@ -291,6 +299,7 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
     onCompleted: handleSearchCompleted,
     onFailed: handleSearchFailed,
     onCandidatesAdded: handleCandidatesAdded,
+    onScoringStarted: handleScoringStarted,
     onScoringProgress: handleScoringProgress,
     onScoringCompleted: handleScoringCompleted,
   });
@@ -368,10 +377,6 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
   const shouldShowSkeletons = (isInitialLoading && !initialData) || (isFilterFetching && candidates.length === 0);
 
   // ========== Handlers ==========
-  const handleRemoveFilter = (category: keyof ParsedQuery) => {
-    setCurrentParsedQuery(prevParams => ({ ...prevParams, [category]: undefined }));
-  };
-
   const handleSaveName = async () => {
     if (isReadOnly) {
       if (titleRef.current) titleRef.current.innerText = search.name;
@@ -438,6 +443,21 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
       }
     });
   };
+
+  // Measure sticky criteria height to position sidebar correctly
+  const [criteriaHeight, setCriteriaHeight] = useState(0);
+  const criteriaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!criteriaRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setCriteriaHeight(entry.target.getBoundingClientRect().height);
+      }
+    });
+    observer.observe(criteriaRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   // ========== Render ==========
   return (
@@ -577,7 +597,10 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
       </div>
 
       {/* Sticky Criteria Display */}
-      <div className="sticky top-0 z-1 bg-background border-b">
+      <div 
+        ref={criteriaRef}
+        className="sticky top-0 z-30 bg-background border-b"
+      >
         <CriteriaDisplay data={search.parseResponse} />
       </div>
 
@@ -704,7 +727,7 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
             </div>
           </div>
         </div>
-        <SearchRightSidebar />
+        <SearchRightSidebar topOffset={criteriaHeight} />
       </div>
     </div>
   );

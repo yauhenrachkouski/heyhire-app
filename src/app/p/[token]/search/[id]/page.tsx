@@ -5,7 +5,6 @@ import { db } from "@/db/drizzle"
 import * as schema from "@/db/schema"
 import { hashShareToken } from "@/lib/demo"
 import { SearchResultsClient } from "@/app/[org]/(protected)/search/[id]/search-results-client"
-import type { ParsedQuery } from "@/types/search"
 
 interface PreviewSearchPageProps {
   params: Promise<{ token: string; id: string }>
@@ -28,7 +27,6 @@ export default async function PreviewSearchPage({
       id: schema.search.id,
       name: schema.search.name,
       query: schema.search.query,
-      params: schema.search.params,
       parseResponse: schema.search.parseResponse,
       createdAt: schema.search.createdAt,
       status: schema.search.status,
@@ -66,7 +64,6 @@ export default async function PreviewSearchPage({
             id: row.id,
             name: row.name,
             query: row.query,
-            params: JSON.parse(row.params) as ParsedQuery,
             parseResponse: row.parseResponse ? JSON.parse(row.parseResponse) : null,
             createdAt: row.createdAt,
             status: row.status,
