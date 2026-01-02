@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { TrialBanner } from '@/components/account/trial-banner'
 import { getOrganizationMembership } from '@/actions/account'
 import { ADMIN_ROLES } from '@/lib/roles'
-import { getCreditsUsageForPeriod } from '@/actions/credits'
+import { getCreditsUsageForPeriod, getOrganizationCredits } from '@/actions/credits'
 
 export default async function BillingPage() {
   // Fetch session data on the server
@@ -58,6 +58,7 @@ export default async function BillingPage() {
 
   // Fetch initial period usage for SSR
   let initialPeriodUsed: number | undefined = undefined;
+  let organizationCredits: number | undefined = undefined;
   if (activeOrgId && subscription?.periodStart && subscription?.periodEnd) {
     const result = await getCreditsUsageForPeriod({
       organizationId: activeOrgId,
@@ -67,6 +68,9 @@ export default async function BillingPage() {
     if (!result.error) {
       initialPeriodUsed = result.used;
     }
+  }
+  if (activeOrgId) {
+    organizationCredits = await getOrganizationCredits(activeOrgId);
   }
 
   return (
@@ -83,6 +87,7 @@ export default async function BillingPage() {
       <BillingSection 
         subscription={subscription} 
         initialPeriodUsed={initialPeriodUsed}
+        currentBalance={organizationCredits}
       />
       {canManageBilling && <PaymentMethodBlock />}
       <InvoicesCard subscription={subscription} />

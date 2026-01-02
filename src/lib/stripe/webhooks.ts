@@ -63,6 +63,34 @@ async function isStripeEventProcessed(eventId: string): Promise<boolean> {
     return !!existing;
 }
 
+async function isBillingActionProcessed(key: string): Promise<boolean> {
+    const existing = await db.query.stripeWebhookEvents.findFirst({
+        where: eq(stripeWebhookEvents.stripeEventId, key),
+    });
+    return !!existing;
+}
+
+async function markBillingActionProcessed(params: {
+    key: string;
+    type: string;
+    referenceId?: string | null;
+    stripeCustomerId?: string | null;
+    stripeSubscriptionId?: string | null;
+}) {
+    try {
+        await db.insert(stripeWebhookEvents).values({
+            id: generateId(),
+            stripeEventId: params.key,
+            stripeEventType: params.type,
+            referenceId: params.referenceId ?? null,
+            stripeCustomerId: params.stripeCustomerId ?? null,
+            stripeSubscriptionId: params.stripeSubscriptionId ?? null,
+        });
+    } catch (e) {
+        log.info("Billing action already marked processed", { key: params.key, error: String(e) });
+    }
+}
+
 async function markStripeEventProcessed(params: {
     event: Stripe.Event;
     referenceId?: string | null;
@@ -278,7 +306,15 @@ async function handleInvoicePaymentSucceeded(ctx: WebhookContext) {
     }
     const ownerId = await getOrgOwnerId(subscriptionRecord.referenceId);
 
-    if (ownerId) {
+    const periodStartKey = stripeSub?.current_period_start
+        ? String(stripeSub.current_period_start)
+        : subscriptionRecord.periodStart
+            ? String(Math.floor(subscriptionRecord.periodStart.getTime() / 1000))
+            : "unknown";
+    const creditsKey = `better_auth:credits_reset:${subscriptionRecord.id}:${periodStartKey}`;
+    const creditsAlreadyGranted = await isBillingActionProcessed(creditsKey);
+
+    if (ownerId && !creditsAlreadyGranted) {
         await grantPlanCreditsWithTransaction(
             subscriptionRecord.referenceId,
             ownerId,
@@ -287,6 +323,31 @@ async function handleInvoicePaymentSucceeded(ctx: WebhookContext) {
             ctx.event
         );
 
+        await markBillingActionProcessed({
+            key: creditsKey,
+            type: "credits_reset",
+            referenceId,
+            stripeCustomerId: stripeSub.customer as string,
+            stripeSubscriptionId: stripeSub.id,
+        });
+
+        trackServerEvent(ownerId, "credits_reset", subscriptionRecord.referenceId, {
+            internal_subscription_id: subscriptionRecord.id,
+            plan: subscriptionRecord.plan,
+            period_start: periodStartKey,
+            stripe_invoice_id: invoice.id,
+        });
+    }
+
+    if (creditsAlreadyGranted) {
+        log.info("Credits already reset for billing period", {
+            referenceId,
+            internal_subscription_id: subscriptionRecord.id,
+            periodStart: periodStartKey,
+        });
+    }
+
+    if (ownerId) {
         trackServerEvent(ownerId, "subscription_invoice_paid", subscriptionRecord.referenceId, {
             internal_subscription_id: subscriptionRecord.id,
             plan: subscriptionRecord.plan,

@@ -15,7 +15,7 @@ import { logger } from "@/lib/axiom/server";
 import { InvitationAcceptedEmail, InvitationEmail, MagicLinkEmail, WelcomeEmail } from "@/emails";
 import { generateId } from "@/lib/id";
 import { ADMIN_ROLES } from "@/lib/roles";
-import { CREDIT_TYPES, getTrialCreditAllocation } from "@/lib/credits";
+import { CREDIT_TYPES, getPlanCreditAllocation, getTrialCreditAllocation } from "@/lib/credits";
 import { PLAN_LIMITS } from "@/types/plans";
 
 
@@ -115,6 +115,75 @@ async function revokeOrgCreditsToZero(params: {
 
    trackServerEvent(ownerId, params.type, params.referenceId, {
       internal_subscription_id: params.internalSubscriptionId,
+   });
+
+   await markBillingActionProcessed({
+      key: params.key,
+      type: params.type,
+      referenceId: params.referenceId,
+      stripeCustomerId: params.stripeCustomerId,
+      stripeSubscriptionId: params.stripeSubscriptionId,
+   });
+}
+
+async function grantPlanCreditsToLimit(params: {
+   key: string;
+   type: string;
+   referenceId: string;
+   plan: string;
+   internalSubscriptionId: string;
+   stripeEventId?: string | null;
+   stripeCustomerId?: string | null;
+   stripeSubscriptionId?: string | null;
+}) {
+   if (await isBillingActionProcessed(params.key)) return;
+
+   const owner = await db.query.member.findFirst({
+      where: and(
+         eq(schema.member.organizationId, params.referenceId),
+         eq(schema.member.role, "owner")
+      ),
+   });
+   const ownerId = owner?.userId;
+   if (!ownerId) return;
+
+   const creditsToGrant = getPlanCreditAllocation(params.plan, CREDIT_TYPES.CONTACT_LOOKUP);
+   if (creditsToGrant <= 0) return;
+
+   await db.transaction(async (tx) => {
+      const org = await tx.query.organization.findFirst({
+         where: eq(schema.organization.id, params.referenceId),
+         columns: { credits: true },
+      });
+
+      const balanceBefore = org?.credits ?? 0;
+      await tx
+         .update(schema.organization)
+         .set({ credits: creditsToGrant })
+         .where(eq(schema.organization.id, params.referenceId));
+
+      await tx.insert(schema.creditTransactions).values({
+         id: generateId(),
+         organizationId: params.referenceId,
+         userId: ownerId,
+         type: "subscription_grant",
+         creditType: CREDIT_TYPES.CONTACT_LOOKUP,
+         amount: creditsToGrant - balanceBefore,
+         balanceBefore,
+         balanceAfter: creditsToGrant,
+         relatedEntityId: params.internalSubscriptionId,
+         description: `Plan reset: ${creditsToGrant} credits for ${params.plan} plan`,
+         metadata: JSON.stringify({
+            reason: params.type,
+            stripeEventId: params.stripeEventId,
+            subscriptionId: params.internalSubscriptionId,
+         }),
+      });
+   });
+
+   trackServerEvent(ownerId, params.type, params.referenceId, {
+      internal_subscription_id: params.internalSubscriptionId,
+      plan: params.plan,
    });
 
    await markBillingActionProcessed({
@@ -432,12 +501,56 @@ export const auth = betterAuth({
                   planName: plan.name,
                });
             },
-            onSubscriptionUpdate: async ({ subscription }) => {
+            onSubscriptionUpdate: async ({ event, subscription }) => {
                const status = subscription.status;
-               if (status !== "unpaid" && status !== "incomplete_expired") return;
-
                const referenceId = subscription.referenceId;
                if (!referenceId) return;
+
+               const stripeSubscription = event?.data?.object as Stripe.Subscription | undefined;
+               const previousAttributes = (event?.data as { previous_attributes?: Record<string, unknown> })?.previous_attributes;
+               const stripeStatus = stripeSubscription?.status ?? null;
+               const periodStart = stripeSubscription?.current_period_start;
+               const periodStartKey = periodStart
+                  ? String(periodStart)
+                  : subscription.periodStart
+                     ? String(Math.floor(subscription.periodStart.getTime() / 1000))
+                     : "unknown";
+
+               const isActivation = previousAttributes?.status === "trialing" && stripeStatus === "active";
+               const isPeriodRoll = typeof previousAttributes?.current_period_start === "number" && stripeStatus === "active";
+
+               if (subscription.plan && (isActivation || isPeriodRoll)) {
+                  const creditsKey = `better_auth:credits_reset:${subscription.id}:${periodStartKey}`;
+                  await grantPlanCreditsToLimit({
+                     key: creditsKey,
+                     type: "credits_reset",
+                     referenceId,
+                     plan: subscription.plan,
+                     internalSubscriptionId: subscription.id,
+                     stripeEventId: event?.id ?? null,
+                     stripeCustomerId: subscription.stripeCustomerId,
+                     stripeSubscriptionId: subscription.stripeSubscriptionId,
+                  });
+               }
+
+               if (isActivation) {
+                  const owner = await db.query.member.findFirst({
+                     where: and(
+                        eq(schema.member.organizationId, referenceId),
+                        eq(schema.member.role, "owner")
+                     ),
+                  });
+                  const ownerId = owner?.userId;
+                  if (ownerId) {
+                     trackServerEvent(ownerId, "subscription_activated", referenceId, {
+                        internal_subscription_id: subscription.id,
+                        plan: subscription.plan,
+                        stripe_subscription_id: subscription.stripeSubscriptionId,
+                     });
+                  }
+               }
+
+               if (status !== "unpaid" && status !== "incomplete_expired") return;
 
                await revokeOrgCreditsToZero({
                   key: `better_auth:subscription_inactive:${subscription.id}:${status}`,

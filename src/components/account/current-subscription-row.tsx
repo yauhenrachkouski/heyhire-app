@@ -40,13 +40,15 @@ interface CurrentSubscriptionRowProps {
   nextBillingLabel?: string | null;
   nextBillingAmountLabel?: string | null;
   initialPeriodUsed?: number;
+  currentBalance?: number;
 }
 
 export function CurrentSubscriptionRow({ 
   subscription, 
   nextBillingLabel, 
   nextBillingAmountLabel,
-  initialPeriodUsed 
+  initialPeriodUsed,
+  currentBalance
 }: CurrentSubscriptionRowProps) {
   const { data: activeOrg } = useActiveOrganization();
 
@@ -54,6 +56,7 @@ export function CurrentSubscriptionRow({
   const start = subscription?.periodStart;
   const end = subscription?.periodEnd;
 
+  const shouldUseUsageQuery = currentBalance === undefined || currentBalance === null;
   const { data: periodUsageData } = useQuery({
     queryKey: creditsKeys.usage(orgId ?? "", start ?? null, end ?? null),
     queryFn: async () => {
@@ -69,8 +72,8 @@ export function CurrentSubscriptionRow({
 
       return { used: result.error ? null : result.used, error: result.error };
     },
-    enabled: !!orgId && !!start && !!end,
-    initialData: initialPeriodUsed !== undefined ? { used: initialPeriodUsed, error: null } : undefined,
+    enabled: shouldUseUsageQuery && !!orgId && !!start && !!end,
+    initialData: shouldUseUsageQuery && initialPeriodUsed !== undefined ? { used: initialPeriodUsed, error: null } : undefined,
     placeholderData: (previousData) => previousData,
     staleTime: 0,
     gcTime: 60 * 1000,
@@ -118,7 +121,9 @@ export function CurrentSubscriptionRow({
 
   const isTrialing = subscription?.status === "trialing";
   const allocation = currentPlan ? (isTrialing ? PLAN_LIMITS[currentPlan].trialCredits : PLAN_LIMITS[currentPlan].credits) : null;
-  const used = periodUsed ?? 0;
+  const used = currentBalance !== undefined && currentBalance !== null && allocation !== null
+    ? Math.max(allocation - currentBalance, 0)
+    : (periodUsed ?? 0);
   const progressValue = allocation && allocation > 0 ? Math.min(100, Math.round((used / allocation) * 100)) : 0;
   const periodLabel = subscription?.periodStart && subscription?.periodEnd
     ? `${formatDate(subscription.periodStart)} – ${formatDate(subscription.periodEnd)}`
