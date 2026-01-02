@@ -509,7 +509,7 @@ export const auth = betterAuth({
                const stripeSubscription = event?.data?.object as Stripe.Subscription | undefined;
                const previousAttributes = (event?.data as { previous_attributes?: Record<string, unknown> })?.previous_attributes;
                const stripeStatus = stripeSubscription?.status ?? null;
-               const periodStart = stripeSubscription?.current_period_start;
+               const periodStart = stripeSubscription?.items?.data?.[0]?.current_period_start;
                const periodStartKey = periodStart
                   ? String(periodStart)
                   : subscription.periodStart

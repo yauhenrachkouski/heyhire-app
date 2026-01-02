@@ -3,7 +3,6 @@
 import type { Table } from "@tanstack/react-table";
 import type * as React from "react";
 
-import { DataTableViewOptions } from "@/components/data-table/data-table-view-options";
 import { cn } from "@/lib/utils";
 
 interface DataTableAdvancedToolbarProps<TData>
@@ -28,9 +27,7 @@ export function DataTableAdvancedToolbar<TData>({
       {...props}
     >
       <div className="flex flex-1 flex-wrap items-center gap-2">{children}</div>
-      <div className="flex items-center gap-2">
-        <DataTableViewOptions table={table} />
-      </div>
+      <div className="flex items-center gap-2" />
     </div>
   );
 }

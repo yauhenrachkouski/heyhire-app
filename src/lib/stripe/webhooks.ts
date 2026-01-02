@@ -307,8 +307,9 @@ async function handleInvoicePaymentSucceeded(ctx: WebhookContext) {
     }
     const ownerId = await getOrgOwnerId(subscriptionRecord.referenceId);
 
-    const periodStartKey = stripeSub?.current_period_start
-        ? String(stripeSub.current_period_start)
+    const periodStart = stripeSub?.items?.data?.[0]?.current_period_start;
+    const periodStartKey = periodStart
+        ? String(periodStart)
         : subscriptionRecord.periodStart
             ? String(Math.floor(subscriptionRecord.periodStart.getTime() / 1000))
             : "unknown";

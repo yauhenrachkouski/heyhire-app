@@ -47,7 +47,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { SearchInterpretation } from "@/components/search/search-interpretation";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -561,6 +560,7 @@ export function SearchInput({
   const [lastParsedQuery, setLastParsedQuery] = useState("");
   const [isTextareaFocused, setIsTextareaFocused] = useState(false);
   const lastSentQueryRef = useRef("");
+  const lastIncompleteQueryRef = useRef("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -801,6 +801,19 @@ export function SearchInput({
         const generated = generateScenariosFromQuery(result.data, result.criteria);
         setScenarios(generated);
         setSelectedScenarios(generated.map(s => s.id)); // Select all by default
+
+        const hasCriteria = (result.criteria?.criteria?.length ?? 0) > 0;
+        const hasScenarios = generated.length > 0;
+        const isIncomplete = !hasCriteria && !hasScenarios;
+        const trimmedQuery = searchQuery.trim();
+        if (isIncomplete && trimmedQuery && lastIncompleteQueryRef.current !== trimmedQuery) {
+          lastIncompleteQueryRef.current = trimmedQuery;
+          toast("Search needs more detail", {
+            description: "Add more relevant requirements or preferences to refine results.",
+          });
+        } else if (!isIncomplete) {
+          lastIncompleteQueryRef.current = "";
+        }
         
         // Show criteria panel if we have any
         if (generated.length > 0) {
@@ -872,6 +885,7 @@ export function SearchInput({
     setScenarios([]);
     setSelectedScenarios([]);
     setLastParsedQuery("");
+    lastIncompleteQueryRef.current = "";
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
