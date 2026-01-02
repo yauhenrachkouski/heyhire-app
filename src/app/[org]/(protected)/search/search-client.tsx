@@ -200,7 +200,6 @@ export function SearchClient({ initialQuery, initialQueryText }: SearchClientPro
             onParsingChange={handleParsingChange}
             onSearch={() => handleStartSearch("manual")}
             isLoading={isSearching}
-            hasParsedQuery={!!parsedQuery && !!sourcingCriteria}
             value={queryText}
             onQueryTextChange={handleQueryTextChange}
             organizationId={activeOrg?.id}

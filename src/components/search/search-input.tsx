@@ -1,18 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import posthog from "posthog-js";
-import { Button } from "@/components/ui/button";
-import { 
-  IconLoader2, 
-  IconSend, 
-  IconMicrophone, 
-  IconSparkles, 
-  IconX,
+import {
+  IconSparkles,
   IconBriefcase,
   IconMapPin,
   IconTool,
-  IconBuildingSkyscraper,
   IconSchool,
   IconCalendarStats,
   IconCoin,
@@ -21,7 +15,6 @@ import {
   IconBuildingBank,
   IconHome,
   IconCalendar,
-  IconInfoCircle,
   IconLanguage,
   IconClock,
   IconMessage,
@@ -31,423 +24,27 @@ import {
   IconCertificate,
   IconTargetArrow,
   IconBan,
-  IconAlertTriangle,
 } from "@tabler/icons-react";
 import { parseJob } from "@/actions/jobs";
 import type { ParsedQuery, SourcingCriteria } from "@/types/search";
 import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
 import { cn } from "@/lib/utils";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { mapCriteriaToParsedQuery } from "@/lib/search/mappers";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
-
-function RunSearchButton({
-  onClick,
-  disabled,
-}: {
-  onClick: () => void | Promise<void>;
-  disabled: boolean;
-}) {
-  return (
-    <div className="pt-3 border-t border-border/30 bg-background">
-      <Button type="button" onClick={onClick} disabled={disabled} className="w-full">
-        Run search
-      </Button>
-    </div>
-  );
-}
-
-function BottomToolbar({
-  queryLength,
-  maxQueryLength,
-  isTooLong,
-  isRecording,
-  isParsing,
-  showScenarios,
-  canToggleScenarios,
-  scenariosCount,
-  criteriaCount,
-  onMicClick,
-  onToggleScenarios,
-}: {
-  queryLength: number;
-  maxQueryLength: number;
-  isTooLong: boolean;
-  isRecording: boolean;
-  isParsing: boolean;
-  showScenarios: boolean;
-  canToggleScenarios: boolean;
-  scenariosCount: number;
-  criteriaCount: number;
-  onMicClick: () => void | Promise<void>;
-  onToggleScenarios: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between px-3 pb-3 pt-1 bg-background border-t border-border/30">
-      <div className="flex items-center gap-1">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={onMicClick}
-                className={cn(
-                  "rounded-md transition-colors",
-                  isRecording
-                    ? "bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                )}
-              >
-                <IconMicrophone className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Voice Message</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-
-        <div className="h-4 w-px bg-border/50 mx-2" />
-
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onToggleScenarios}
-          className={cn(
-            "flex items-center gap-2 px-2 py-1.5 h-auto text-sm rounded-md transition-colors",
-            "transition-[width,height,opacity] duration-200",
-            showScenarios
-              ? "bg-muted text-foreground font-medium"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted",
-            !canToggleScenarios && "opacity-0 pointer-events-none w-0 p-0 overflow-hidden"
-          )}
-        >
-          {isParsing ? (
-            <IconLoader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <IconSparkles className="h-4 w-4" />
-          )}
-          <span className="font-mono text-sm">Matching criteria</span>
-          <Badge className="rounded-full px-1.5 flex items-center justify-center text-[10px] bg-muted text-foreground border border-border">
-            {isParsing ? (
-              <IconLoader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              criteriaCount
-            )}
-          </Badge>
-        </Button>
-
-      </div>
-
-      <div className="flex items-center gap-3">
-        <span className="text-xs font-mono">
-          <span className={cn(isTooLong ? "text-destructive" : "text-muted-foreground")}>{queryLength}</span>
-          <span className="text-muted-foreground"> / {maxQueryLength.toLocaleString()}</span>
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function ScenarioGroupList({
-  sortedGroups,
-  groupedScenarios,
-  selectedScenarios,
-  onScenarioToggle,
-  onImportanceChange,
-  getCategoryIcon,
-  getCategoryDisplayName,
-  getGroupId,
-}: {
-  sortedGroups: string[];
-  groupedScenarios: Record<string, Scenario[]>;
-  selectedScenarios: string[];
-  onScenarioToggle: (id: string) => void;
-  onImportanceChange: (id: string, importance: "low" | "medium" | "high" | "mandatory") => void;
-  getCategoryIcon: (category: string) => React.ReactNode;
-  getCategoryDisplayName: (category: string) => string;
-  getGroupId: (groupName: string) => string;
-}) {
-  const getOperatorConfig = (operator?: string) => {
-    if (!operator) return null;
-    switch (operator) {
-      case "must_include": 
-        return { label: "Include", className: "text-emerald-700 bg-emerald-50 border-emerald-200" };
-      case "must_exclude": 
-        return { label: "Exclude", className: "text-red-700 bg-red-50 border-red-200" };
-      case "must_be_in_list": 
-        return { label: "In List", className: "text-blue-700 bg-blue-50 border-blue-200" };
-      case "must_not_be_in_list": 
-        return { label: "Not In List", className: "text-orange-700 bg-orange-50 border-orange-200" };
-      case "greater_than_or_equal": 
-        return { label: "≥", className: "text-indigo-700 bg-indigo-50 border-indigo-200" };
-      case "less_than_or_equal": 
-        return { label: "≤", className: "text-indigo-700 bg-indigo-50 border-indigo-200" };
-      default: 
-        return { label: operator.replace(/_/g, " "), className: "text-muted-foreground bg-muted border-border" };
-    }
-  };
-
-  const getGroupIcon = (groupName: string) => {
-    const groupScenarios = groupedScenarios[groupName];
-    if (!groupScenarios || groupScenarios.length === 0) {
-      return null;
-    }
-    return getCategoryIcon(groupScenarios[0].category);
-  };
-
-  return (
-    <div className="space-y-6 flex-1 pb-4">
-      {sortedGroups.map((groupName) => (
-        <div key={groupName} id={getGroupId(groupName)} className="space-y-3 scroll-mt-4">
-          <h4 className="flex items-center justify-between text-xs font-bold text-foreground uppercase tracking-wider border-b border-border/30 pb-2">
-            <span className="flex items-center gap-2">
-              <span className="text-muted-foreground/70 shrink-0">{getGroupIcon(groupName)}</span>
-              <span>{groupName}</span>
-            </span>
-            <span className="rounded-full border border-border/60 bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
-              {groupedScenarios[groupName]?.length ?? 0}
-            </span>
-          </h4>
-
-          <div className="space-y-2">
-            {groupedScenarios[groupName].map((scenario) => {
-              const operatorConfig = getOperatorConfig(scenario.operator);
-              
-              return (
-                <div
-                  key={scenario.id}
-                  className={cn(
-                    "flex items-center justify-between gap-3 bg-background border border-border/50 p-2.5 rounded-lg transition-colors hover:border-border group/item",
-                    !selectedScenarios.includes(scenario.id) && "opacity-60 bg-muted/20"
-                  )}
-                >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <Checkbox 
-                      checked={selectedScenarios.includes(scenario.id)}
-                      onCheckedChange={() => onScenarioToggle(scenario.id)}
-                      className="shrink-0 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground border-muted-foreground/40"
-                    />
-                    
-                    <button
-                      type="button"
-                      onClick={() => onScenarioToggle(scenario.id)}
-                      className="flex items-center gap-2.5 flex-1 min-w-0 text-left"
-                    >
-                      <div className="flex flex-col min-w-0 gap-0.5">
-                        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                          {getCategoryDisplayName(scenario.category)}
-                        </span>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium line-clamp-2 wrap-break-word leading-snug">
-                            {scenario.value}
-                          </span>
-                          {(scenario.operator === "must_exclude" || scenario.operator === "must_not_be_in_list") && (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-semibold whitespace-nowrap rounded-sm text-red-700 bg-red-50 border-red-200">
-                              Exclude
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <TooltipProvider>
-                      <Tooltip delayDuration={0}>
-                        <TooltipTrigger asChild>
-                          <IconInfoCircle className="size-3.5 text-muted-foreground/40 hover:text-muted-foreground cursor-help transition-colors" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" align="end">
-                          <div className="flex flex-col gap-1">
-                            <p className="font-medium border-b border-background/20 pb-1 mb-1">Match Importance</p>
-                            <div className="grid grid-cols-[32px_1fr] gap-2">
-                              <span className="font-medium opacity-70">Low</span>
-                              <span>Nice to have</span>
-                            </div>
-                            <div className="grid grid-cols-[32px_1fr] gap-2">
-                              <span className="font-medium opacity-70">Med</span>
-                              <span>Important</span>
-                            </div>
-                            <div className="grid grid-cols-[32px_1fr] gap-2">
-                              <span className="font-medium opacity-70">High</span>
-                              <span>Strong preference</span>
-                            </div>
-                            <div className="grid grid-cols-[32px_1fr] gap-2">
-                              <span className="font-medium opacity-70">Must</span>
-                              <span>Mandatory</span>
-                            </div>
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    <ToggleGroup
-                      type="single"
-                      value={scenario.importance}
-                      variant="outline"
-                      onValueChange={(val) => val && onImportanceChange(scenario.id, val as any)}
-                      disabled={!selectedScenarios.includes(scenario.id)}
-                    >
-                      <ToggleGroupItem value="low" size="sm" className="h-7 px-2 text-xs">
-                        Low
-                      </ToggleGroupItem>
-                      <ToggleGroupItem value="medium" size="sm" className="h-7 px-2 text-xs">
-                        Med
-                      </ToggleGroupItem>
-                      <ToggleGroupItem value="high" size="sm" className="h-7 px-2 text-xs">
-                        High
-                      </ToggleGroupItem>
-                      <ToggleGroupItem 
-                        value="mandatory" 
-                        size="sm"
-                        className={cn(
-                          "h-7 px-2 text-xs",
-                          "data-[state=on]:bg-destructive/10 data-[state=on]:text-destructive data-[state=on]:border-destructive/50",
-                          "hover:bg-destructive/5 hover:text-destructive hover:border-destructive/30",
-                          "border-destructive/20"
-                        )}
-                      >
-                        <IconAlertTriangle className="size-3 mr-1" />
-                        <span className="font-semibold">Must</span>
-                      </ToggleGroupItem>
-                    </ToggleGroup>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
+import { BottomToolbar, RunSearchButton, ScenarioGroupList } from "./search-input.parts";
+import type { Scenario, ScenarioImportance } from "./search-input.types";
 
 interface SearchInputProps {
   onQueryParsed: (query: ParsedQuery, queryText?: string, criteria?: SourcingCriteria) => void;
   onParsingChange?: (isParsing: boolean) => void;
   onSearch?: () => Promise<void>;
   isLoading?: boolean;
-  hasParsedQuery?: boolean;
   value?: string; // Allow controlled query value
   onQueryTextChange?: (text: string) => void; // Notify parent of text changes
   className?: string;
-  hideInterpretation?: boolean;
   hideSearchButton?: boolean;
   organizationId?: string;
-}
-
-/**
- * Helper to format a field value (handles both single and multi-value)
- */
-function formatFieldForDisplay(field: string | { values: string[]; operator: string } | undefined): string {
-  if (!field) return "";
-  
-  if (typeof field === 'string') {
-    return `"${field}"`;
-  }
-  
-  if (typeof field === 'object' && 'values' in field) {
-    const { values, operator } = field;
-    if (values.length === 0) return "";
-    if (values.length === 1) return `"${values[0]}"`;
-    
-    const quotedValues = values.map((v) => `"${v}"`).join(` ${operator} `);
-    return `(${quotedValues})`;
-  }
-  
-  return "";
-}
-
-/**
- * Generate boolean search string from parsed query
- * Format: "Job Title" AND (skill1 OR skill2) AND (location1 OR location2) AND industry
- * Supports all fields including new ones
- */
-function generateBooleanSearch(parsedQuery: ParsedQuery): string {
-  const parts: string[] = [];
-
-  // Add "current" modifier
-  if (parsedQuery.is_current) {
-    parts.push('"Current"');
-  }
-
-  // Add job title
-  const jobTitle = formatFieldForDisplay(parsedQuery.job_title);
-  if (jobTitle) parts.push(jobTitle);
-
-  // Add skills
-  const skills = formatFieldForDisplay(parsedQuery.skills);
-  if (skills) parts.push(skills);
-
-  // Add location
-  const location = formatFieldForDisplay(parsedQuery.location);
-  if (location) parts.push(location);
-
-  // Add company
-  const company = formatFieldForDisplay(parsedQuery.company);
-  if (company) parts.push(company);
-
-  // Add industry
-  const industry = formatFieldForDisplay(parsedQuery.industry);
-  if (industry) parts.push(industry);
-
-  // Add years of experience
-  const experience = formatFieldForDisplay(parsedQuery.years_of_experience);
-  if (experience) parts.push(experience);
-
-  // Add education
-  const education = formatFieldForDisplay(parsedQuery.education);
-  if (education) parts.push(education);
-
-  // Add remote preference
-  if (parsedQuery.remote_preference) {
-    parts.push(`"${parsedQuery.remote_preference}"`);
-  }
-
-  // Add company size
-  const companySize = formatFieldForDisplay(parsedQuery.company_size);
-  if (companySize) parts.push(companySize);
-
-  // Add funding types
-  const funding = formatFieldForDisplay(parsedQuery.funding_types);
-  if (funding) parts.push(funding);
-
-  // Add web technologies
-  const webTech = formatFieldForDisplay(parsedQuery.web_technologies);
-  if (webTech) parts.push(webTech);
-
-  // Add revenue range
-  const revenue = formatFieldForDisplay(parsedQuery.revenue_range);
-  if (revenue) parts.push(revenue);
-
-  // Add founded year range
-  if (parsedQuery.founded_year_range) {
-    parts.push(`"${parsedQuery.founded_year_range}"`);
-  }
-
-  // Join all parts with AND
-  return parts.join(" AND ");
-}
-
-interface Scenario {
-  id: string;
-  label: string;
-  category: string;
-  value: string;
-  importance: "low" | "medium" | "high" | "mandatory";
-  criterionId?: string;
-  group: string; // Group name for UI display
-  operator?: string;
 }
 
 // User-friendly display names for categories
@@ -532,11 +129,9 @@ export function SearchInput({
   onParsingChange, 
   onSearch, 
   isLoading = false, 
-  hasParsedQuery = false,
   value,
   onQueryTextChange,
   className,
-  hideInterpretation = false,
   hideSearchButton = false,
   organizationId,
 }: SearchInputProps) {
@@ -547,13 +142,10 @@ export function SearchInput({
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isTooLong, setIsTooLong] = useState(false);
-  const [parsedQuery, setParsedQuery] = useState<ParsedQuery | null>(null);
-  const [originalParsedQuery, setOriginalParsedQuery] = useState<ParsedQuery | null>(null);
   const [parsedCriteria, setParsedCriteria] = useState<SourcingCriteria | null>(null);
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
   const criteriaScrollRef = useRef<HTMLDivElement | null>(null);
   const activeGroupRef = useRef<string | null>(null);
-  const [booleanSearch, setBooleanSearch] = useState("");
   const [activePanel, setActivePanel] = useState<"criteria" | null>(null);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [selectedScenarios, setSelectedScenarios] = useState<string[]>([]);
@@ -561,6 +153,7 @@ export function SearchInput({
   const [isTextareaFocused, setIsTextareaFocused] = useState(false);
   const lastSentQueryRef = useRef("");
   const lastIncompleteQueryRef = useRef("");
+  const skipScenarioSyncRef = useRef(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -581,13 +174,14 @@ export function SearchInput({
 
   };
 
+  const hasCriteria = (parsedCriteria?.criteria?.length ?? 0) > 0;
   const isRunSearchDisabled =
     isTooLong ||
     isLoading ||
     isSearching ||
     isParsing ||
     !query.trim() ||
-    scenarios.length === 0 ||
+    !hasCriteria ||
     query.trim() !== lastParsedQuery.trim();
 
   // Update query when value prop changes
@@ -606,36 +200,15 @@ export function SearchInput({
 
   // Update parsed query when scenarios are toggled
   useEffect(() => {
-    if (!originalParsedQuery) return;
+    if (!parsedCriteria) return;
+    if (skipScenarioSyncRef.current) {
+      skipScenarioSyncRef.current = false;
+      return;
+    }
 
-    const newQuery = { ...originalParsedQuery };
-    
-    // If a category is NOT in selected scenarios, remove it from the query
-    scenarios.forEach(scenario => {
-      if (!selectedScenarios.includes(scenario.id)) {
-        // @ts-ignore - dynamic access to typed object
-        newQuery[scenario.category as keyof ParsedQuery] = undefined;
-      }
-    });
-    
-    // Also update tags with importance info (prefer criterion linkage when available)
-    newQuery.tags = newQuery.tags.map((tag) => {
-      const scenario = scenarios.find((s) => {
-        if (tag.criterion_id && s.criterionId) return s.criterionId === tag.criterion_id;
-        return s.category === tag.category && s.value === tag.value;
-      });
-      if (scenario) {
-        return { ...tag, importance: scenario.importance };
-      }
-      return tag;
-    });
-
-    setParsedQuery(newQuery);
     // Keep v3 criteria in sync when possible (so strategy generation uses the edited priorities)
     const updatedCriteria = (() => {
-      if (!parsedCriteria) return undefined;
-
-      const rank: Record<Scenario["importance"], number> = {
+      const rank: Record<ScenarioImportance, number> = {
         low: 1,
         medium: 2,
         high: 3,
@@ -650,7 +223,7 @@ export function SearchInput({
       );
 
       // Per criterion, use the highest selected importance
-      const maxImportanceByCriterion = new Map<string, Scenario["importance"]>();
+      const maxImportanceByCriterion = new Map<string, ScenarioImportance>();
       for (const s of selectedScenarioObjs) {
         if (!s.criterionId) continue;
         const prev = maxImportanceByCriterion.get(s.criterionId);
@@ -670,12 +243,14 @@ export function SearchInput({
       return { ...parsedCriteria, criteria: nextCriteria };
     })();
 
-    if (updatedCriteria) {
-      setParsedCriteria(updatedCriteria);
-    }
+    setParsedCriteria(updatedCriteria);
+    const nextParsedQuery = mapCriteriaToParsedQuery(
+      updatedCriteria.criteria,
+      updatedCriteria.concepts
+    );
 
-    onQueryParsed(newQuery, undefined, updatedCriteria);
-  }, [selectedScenarios, originalParsedQuery, scenarios]); // eslint-disable-line react-hooks/exhaustive-deps
+    onQueryParsed(nextParsedQuery, undefined, updatedCriteria);
+  }, [selectedScenarios, scenarios]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleScenarioToggle = (id: string) => {
     setSelectedScenarios(prev => {
@@ -684,7 +259,7 @@ export function SearchInput({
     });
   };
 
-  const handleImportanceChange = (id: string, importance: "low" | "medium" | "high" | "mandatory") => {
+  const handleImportanceChange = (id: string, importance: ScenarioImportance) => {
     setScenarios(prev =>
       prev.map(s => {
         if (s.id !== id) return s;
@@ -703,74 +278,33 @@ export function SearchInput({
     );
   };
 
-  const generateScenariosFromQuery = (parsed: ParsedQuery, criteria?: SourcingCriteria | null) => {
-    const newScenarios: Scenario[] = [];
-    
-    // Use tags directly as they are now fully populated by the backend mapper
-    if (parsed.tags && parsed.tags.length > 0) {
-      parsed.tags.forEach((tag, index) => {
-        // Create unique ID for each tag
-        const id = `${tag.category}_${tag.value}_${index}`;
-        const displayName = CATEGORY_DISPLAY_NAMES[tag.category] || tag.category.replace(/_/g, ' ');
-        const group = CATEGORY_GROUPS[tag.category] || "Other";
-        
-        // Find matching criterion to get operator
-        const criterion = criteria?.criteria?.find(c => c.id === tag.criterion_id);
+  const generateScenariosFromTags = (parsed: ParsedQuery, criteria?: SourcingCriteria | null) => {
+    if (!parsed.tags || parsed.tags.length === 0) return [];
 
-        newScenarios.push({
-          id,
-          label: `${displayName}: ${tag.value}`,
-          category: tag.category,
-          value: tag.value,
-          importance: tag.importance || 'medium',
-          criterionId: tag.criterion_id,
-          group,
-          operator: criterion?.operator,
-        });
-      });
-      return newScenarios;
-    }
+    return parsed.tags.map((tag, index) => {
+      // Create unique ID for each tag
+      const id = `${tag.category}_${tag.value}_${index}`;
+      const displayName = CATEGORY_DISPLAY_NAMES[tag.category] || tag.category.replace(/_/g, " ");
+      const group = CATEGORY_GROUPS[tag.category] || "Other";
 
-    // Fallback to legacy field checking if tags are empty (for backward compatibility)
-    if (parsed.job_title) {
-      const val = formatFieldForDisplay(parsed.job_title).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'job_title', label: `Job Titles: ${val}`, category: 'job_title', value: val, importance: 'medium', group: 'Role' });
-    }
-    if (parsed.location) {
-      const val = formatFieldForDisplay(parsed.location).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'location', label: `Location: ${val}`, category: 'location', value: val, importance: 'medium', group: 'Location' });
-    }
-    if (parsed.skills) {
-      const val = formatFieldForDisplay(parsed.skills).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'skills', label: `Skills: ${val}`, category: 'skills', value: val, importance: 'medium', group: 'Skills' });
-    }
-    if (parsed.company) {
-      const val = formatFieldForDisplay(parsed.company).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'company', label: `Company: ${val}`, category: 'company', value: val, importance: 'medium', group: 'Companies' });
-    }
-    if (parsed.industry) {
-      const val = formatFieldForDisplay(parsed.industry).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'industry', label: `Industry: ${val}`, category: 'industry', value: val, importance: 'medium', group: 'Industry' });
-    }
-    if (parsed.education) {
-      const val = formatFieldForDisplay(parsed.education).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'education', label: `Education: ${val}`, category: 'education', value: val, importance: 'medium', group: 'Education' });
-    }
-    if (parsed.years_of_experience) {
-      const val = formatFieldForDisplay(parsed.years_of_experience).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'years_of_experience', label: `Experience: ${val}`, category: 'years_of_experience', value: val, importance: 'medium', group: 'Experience' });
-    }
-    if (parsed.funding_types) {
-      const val = formatFieldForDisplay(parsed.funding_types).replace(/"/g, '');
-      if (val) newScenarios.push({ id: 'funding_types', label: `Funding: ${val}`, category: 'funding_types', value: val, importance: 'medium', group: 'Company Profile' });
-    }
-    
-    return newScenarios;
+      // Find matching criterion to get operator
+      const criterion = criteria?.criteria?.find((c) => c.id === tag.criterion_id);
+
+      return {
+        id,
+        label: `${displayName}: ${tag.value}`,
+        category: tag.category,
+        value: tag.value,
+        importance: tag.importance || "medium",
+        criterionId: tag.criterion_id,
+        group,
+        operator: criterion?.operator,
+      };
+    });
   };
 
   const handleParse = async (searchQuery: string) => {
     if (!searchQuery.trim()) {
-      setBooleanSearch("");
       return;
     }
 
@@ -793,14 +327,15 @@ export function SearchInput({
         // Pass criteria to parent for search flow
         // IMPORTANT: We pass undefined for queryText to prevent the parent from overwriting our current input
         onQueryParsed(result.data, undefined, result.criteria);
-        setParsedQuery(result.data);
-        setOriginalParsedQuery(result.data);
         setParsedCriteria(result.criteria ?? null);
-        
+
         // Generate scenarios from the parsed query
-        const generated = generateScenariosFromQuery(result.data, result.criteria);
+        const generated = generateScenariosFromTags(result.data, result.criteria);
+        if (result.criteria) {
+          skipScenarioSyncRef.current = true;
+        }
         setScenarios(generated);
-        setSelectedScenarios(generated.map(s => s.id)); // Select all by default
+        setSelectedScenarios(generated.map((s) => s.id)); // Select all by default
 
         const hasCriteria = (result.criteria?.criteria?.length ?? 0) > 0;
         const hasScenarios = generated.length > 0;
@@ -819,22 +354,22 @@ export function SearchInput({
         if (generated.length > 0) {
           setActivePanel("criteria");
           setActiveGroup(generated[0]?.group ?? null);
+        } else {
+          setActiveGroup(null);
         }
 
-        // Generate boolean search string
-        const booleanSearchString = generateBooleanSearch(result.data);
-        setBooleanSearch(booleanSearchString);
         setLastParsedQuery(searchQuery);
         
         console.log("[SearchInput] Parsed query:", result.data);
         console.log("[SearchInput] Criteria:", result.criteria);
       } else {
         // ... rest of the error handling ...
-        setBooleanSearch("");
-        setParsedQuery(null);
         setParsedCriteria(null);
         setActivePanel(null);
         setActiveGroup(null);
+        setScenarios([]);
+        setSelectedScenarios([]);
+        skipScenarioSyncRef.current = false;
 
         const rawError = result.error || "Failed to parse query";
         console.error("[SearchInput] Parse failed:", rawError);
@@ -858,10 +393,12 @@ export function SearchInput({
       }
     } catch (error) {
       console.error("Search error:", error);
-      setBooleanSearch("");
       setParsedCriteria(null);
       setActivePanel(null);
       setActiveGroup(null);
+      setScenarios([]);
+      setSelectedScenarios([]);
+      skipScenarioSyncRef.current = false;
       toast.error("Error", {
         description: "An unexpected error occurred",
       });
@@ -876,9 +413,6 @@ export function SearchInput({
   const debouncedParse = useDebouncedCallback(handleParse, 800);
 
   const resetParsedState = () => {
-    setBooleanSearch("");
-    setParsedQuery(null);
-    setOriginalParsedQuery(null);
     setParsedCriteria(null);
     setActivePanel(null);
     setActiveGroup(null);
@@ -886,6 +420,7 @@ export function SearchInput({
     setSelectedScenarios([]);
     setLastParsedQuery("");
     lastIncompleteQueryRef.current = "";
+    skipScenarioSyncRef.current = false;
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -980,12 +515,7 @@ export function SearchInput({
       // Automatically parse the transcribed text
       if (newQuery.length > MAX_QUERY_LENGTH) {
         setIsTooLong(true);
-        setBooleanSearch("");
-        setParsedQuery(null);
-        setOriginalParsedQuery(null);
-        setActivePanel(null);
-        setScenarios([]);
-        setSelectedScenarios([]);
+        resetParsedState();
         return;
       }
 
@@ -1094,8 +624,11 @@ export function SearchInput({
     }
   }, [activePanel, activeGroup, sortedGroups]);
 
-  const getGroupId = (groupName: string) =>
-    `criteria-group-${groupName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  const getGroupId = useCallback(
+    (groupName: string) =>
+      `criteria-group-${groupName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    []
+  );
 
   useEffect(() => {
     activeGroupRef.current = activeGroup;
@@ -1218,7 +751,6 @@ export function SearchInput({
                 isParsing={isParsing}
                 showScenarios={activePanel === "criteria"}
                 canToggleScenarios={query.trim().length > 0}
-                scenariosCount={scenarios.length}
                 criteriaCount={parsedCriteria?.criteria?.length ?? scenarios.length}
                 onMicClick={handleMicClick}
                 onToggleScenarios={() => {
