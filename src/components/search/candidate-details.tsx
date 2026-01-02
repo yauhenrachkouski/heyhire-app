@@ -85,8 +85,9 @@ type ScoringReasoning = {
   experience_analysis?: string | null;
 } | null;
 
-type ConceptScore = {
-  concept_id: string;
+type CriteriaScore = {
+  criteria_key?: string;
+  criteria_id?: string;
   group_id: string;
   weight: number;
   raw_match_score: number;
@@ -101,7 +102,7 @@ type ScoringResult = {
   verdict?: string;
   primary_issue?: string;
   high_importance_missing?: string[];
-  concept_scores?: ConceptScore[];
+  concept_scores?: CriteriaScore[];
   reasoning?: ScoringReasoning;
   candidate_summary?: string | null;
   missing_critical?: string[];
@@ -116,16 +117,26 @@ function CandidateScoreDisplay(props: {
 }) {
   const { matchScore, scoringData, sourcingCriteria } = props;
 
+  const getScoreKey = (score: CriteriaScore) => {
+    const key = score.criteria_key ?? score.criteria_id ?? "";
+    return String(key || "");
+  };
+
   // Move all hooks to the top before any conditional returns
   const conceptScoresById = useMemo(() => {
-    const entries = (scoringData?.concept_scores ?? []).map((cs) => [cs.concept_id, cs] as const);
+    const entries = (scoringData?.concept_scores ?? [])
+      .map((cs) => {
+        const key = getScoreKey(cs);
+        return key ? ([key, cs] as const) : null;
+      })
+      .filter(Boolean) as Array<readonly [string, CriteriaScore]>;
     return new Map(entries);
   }, [scoringData?.concept_scores]);
 
   const getCriteriaKeyV3 = (criterion: any) => {
-    const conceptId = (criterion?.concept_id as string | undefined) ?? undefined;
+    const criteriaKey = (criterion?.criteria_key as string | undefined) ?? undefined;
     const id = (criterion?.id as string | undefined) ?? undefined;
-    return conceptId ?? id ?? "";
+    return criteriaKey ?? id ?? "";
   };
 
   const getCriteriaValueString = (value: any) => {
@@ -163,17 +174,9 @@ function CandidateScoreDisplay(props: {
       g.skills = c.filter((x) => ["tool_requirement", "language_requirement"].includes(x.type));
       g.capabilities = c.filter((x) => x.type === "capability_requirement");
       g.other = c.filter((x) => !["logistics_location", "minimum_years_of_experience", "minimum_relevant_years_of_experience", "tool_requirement", "language_requirement", "capability_requirement"].includes(x.type));
-    } else if (scoringData?.concept_scores?.length) {
-      g.other = scoringData.concept_scores.map((cs) => ({
-        id: cs.concept_id,
-        value: cs.concept_id,
-        type: "unknown",
-        priority_level: "medium",
-        operator: "include",
-      }));
     }
     return g;
-  }, [sourcingCriteria, scoringData?.concept_scores]);
+  }, [sourcingCriteria]);
 
   const groupConfig = useMemo(() => [
     { key: "location", title: "Location", icon: IconMapPin },
@@ -412,7 +415,7 @@ export function CandidateDetails({ searchCandidate, onClose, sourcingCriteria }:
   const additionalCurrentRolesCount = currentRoles.length > 1 ? currentRoles.length - 1 : 0;
 
   const reasoning = scoringData?.reasoning;
-  const conceptScores = scoringData?.concept_scores || [];
+  const criteriaScores = scoringData?.concept_scores || [];
 
   return (
     <TooltipProvider>
@@ -554,38 +557,43 @@ export function CandidateDetails({ searchCandidate, onClose, sourcingCriteria }:
                       )}
                       
                       {/* Criteria Scores (v3) */}
-                      {conceptScores.length > 0 && (
+                      {criteriaScores.length > 0 && (
                         <div className="border rounded-lg p-3">
                           <p className="text-xs font-semibold text-foreground mb-2">Criteria Breakdown</p>
                           <div className="space-y-2">
-                            {conceptScores.slice(0, 8).map((cs: any, idx: number) => (
-                              <div key={idx} className="flex items-start justify-between gap-2 text-xs">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-medium break-all">{cs.concept_id}</span>
-                                    <Badge variant="outline" className="text-xs shrink-0">
-                                      {cs.status}
-                                    </Badge>
-                                    {String(cs.status).toLowerCase() === "pass" ? (
-                                      <span className="text-green-600">✓</span>
-                                    ) : String(cs.status).toLowerCase().includes("fail") ? (
-                                      <span className="text-red-600">✗</span>
-                                    ) : (
-                                      <span className="text-amber-600">~</span>
+                            {criteriaScores.slice(0, 8).map((cs: any, idx: number) => {
+                              const criteriaKey =
+                                String(cs.criteria_key || cs.criteria_id || "") || "Unknown criteria";
+
+                              return (
+                                <div key={idx} className="flex items-start justify-between gap-2 text-xs">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="font-medium break-all">{criteriaKey}</span>
+                                      <Badge variant="outline" className="text-xs shrink-0">
+                                        {cs.status}
+                                      </Badge>
+                                      {String(cs.status).toLowerCase() === "pass" ? (
+                                        <span className="text-green-600">✓</span>
+                                      ) : String(cs.status).toLowerCase().includes("fail") ? (
+                                        <span className="text-red-600">✗</span>
+                                      ) : (
+                                        <span className="text-amber-600">~</span>
+                                      )}
+                                    </div>
+                                    {cs.evidence_snippet && cs.evidence_snippet !== "N/A" && (
+                                      <p className="text-muted-foreground mt-1">{cs.evidence_snippet}</p>
                                     )}
                                   </div>
-                                  {cs.evidence_snippet && cs.evidence_snippet !== "N/A" && (
-                                    <p className="text-muted-foreground mt-1">{cs.evidence_snippet}</p>
-                                  )}
+                                  <span className="text-muted-foreground font-medium">
+                                    {typeof cs.final_concept_score === "number" ? cs.final_concept_score : ""}
+                                  </span>
                                 </div>
-                                <span className="text-muted-foreground font-medium">
-                                  {typeof cs.final_concept_score === "number" ? cs.final_concept_score : ""}
-                                </span>
-                              </div>
-                            ))}
-                            {conceptScores.length > 8 && (
+                              );
+                            })}
+                            {criteriaScores.length > 8 && (
                               <p className="text-xs text-muted-foreground">
-                                +{conceptScores.length - 8} more criteria
+                                +{criteriaScores.length - 8} more criteria
                               </p>
                             )}
                           </div>

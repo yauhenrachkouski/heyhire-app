@@ -44,8 +44,9 @@ type ScoringCriterion = {
   reasoning: string;
 };
 
-type ConceptScore = {
-  concept_id: string;
+type CriteriaScore = {
+  criteria_key?: string;
+  criteria_id?: string;
   group_id: string;
   weight: number;
   raw_match_score: number;
@@ -60,7 +61,7 @@ type ScoringResult = {
   verdict?: string;
   primary_issue?: string;
   high_importance_missing?: string[];
-  concept_scores?: ConceptScore[];
+  concept_scores?: CriteriaScore[];
   reasoning?: ScoringReasoning;
   candidate_summary?: string | null;
   missing_critical?: string[];
@@ -84,16 +85,26 @@ function CandidateScoreDisplay(props: {
 }) {
   const { matchScore, scoringData, sourcingCriteria } = props;
 
+  const getScoreKey = (score: CriteriaScore) => {
+    const key = score.criteria_key ?? score.criteria_id ?? "";
+    return String(key || "");
+  };
+
   // Move all hooks to the top before any conditional returns
   const conceptScoresById = useMemo(() => {
-    const entries = (scoringData?.concept_scores ?? []).map((cs) => [cs.concept_id, cs] as const);
+    const entries = (scoringData?.concept_scores ?? [])
+      .map((cs) => {
+        const key = getScoreKey(cs);
+        return key ? ([key, cs] as const) : null;
+      })
+      .filter(Boolean) as Array<readonly [string, CriteriaScore]>;
     return new Map(entries);
   }, [scoringData?.concept_scores]);
 
   const getCriteriaKeyV3 = (criterion: any) => {
-    const conceptId = (criterion?.concept_id as string | undefined) ?? undefined;
+    const criteriaKey = (criterion?.criteria_key as string | undefined) ?? undefined;
     const id = (criterion?.id as string | undefined) ?? undefined;
-    return conceptId ?? id ?? "";
+    return criteriaKey ?? id ?? "";
   };
 
   const getCriteriaValueString = (value: any) => {
@@ -131,17 +142,9 @@ function CandidateScoreDisplay(props: {
       g.skills = c.filter((x) => ["tool_requirement", "language_requirement"].includes(x.type));
       g.capabilities = c.filter((x) => x.type === "capability_requirement");
       g.other = c.filter((x) => !["logistics_location", "minimum_years_of_experience", "minimum_relevant_years_of_experience", "tool_requirement", "language_requirement", "capability_requirement"].includes(x.type));
-    } else if (scoringData?.concept_scores?.length) {
-      g.other = scoringData.concept_scores.map((cs) => ({
-        id: cs.concept_id,
-        value: cs.concept_id,
-        type: "unknown",
-        priority_level: "medium",
-        operator: "include",
-      }));
     }
     return g;
-  }, [sourcingCriteria, scoringData?.concept_scores]);
+  }, [sourcingCriteria]);
 
   const groupConfig = useMemo(() => [
     { key: "location", title: "Location", icon: IconMapPin },

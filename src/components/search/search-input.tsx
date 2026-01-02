@@ -26,7 +26,7 @@ import {
   IconBan,
 } from "@tabler/icons-react";
 import { parseJob } from "@/actions/jobs";
-import type { Concept, Criterion, SourcingCriteria } from "@/types/search";
+import type { Criterion, SourcingCriteria } from "@/types/search";
 import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -160,14 +160,8 @@ const toStringValues = (value: unknown): string[] => {
   return [];
 };
 
-const resolveCriterionValues = (
-  criterion: Criterion,
-  concepts: Record<string, Concept> | undefined
-): string[] => {
-  const concept = criterion.concept_id ? concepts?.[criterion.concept_id] : undefined;
-  const conceptLabel =
-    concept?.display_label && concept.display_label.trim() ? concept.display_label.trim() : "";
-  const values = conceptLabel ? [conceptLabel] : toStringValues(criterion.value);
+const resolveCriterionValues = (criterion: Criterion): string[] => {
+  const values = toStringValues(criterion.value);
   return values.map((value) => value.trim()).filter(Boolean);
 };
 
@@ -349,10 +343,8 @@ export function SearchInput({
   };
 
   const generateScenariosFromCriteria = (criteria: SourcingCriteria) => {
-    const concepts = criteria.concepts ?? {};
-
     return criteria.criteria.flatMap((criterion, index) => {
-      const values = resolveCriterionValues(criterion, concepts);
+      const values = resolveCriterionValues(criterion);
       if (values.length === 0) return [];
 
       const category = getScenarioCategory(criterion);
