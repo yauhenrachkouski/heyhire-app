@@ -20,6 +20,7 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { Client } from "@upstash/qstash";
 import { realtime } from "@/lib/realtime";
+import { generateId } from "@/lib/id";
 
 const API_BASE_URL = "http://57.131.25.45";
 
@@ -259,7 +260,7 @@ export async function startBackgroundSearch(
   criteria: SourcingCriteria,
   searchId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+  const requestId = `req_${generateId()}`;
   
   try {
     console.log("[Search Job] Starting background search for:", searchId);

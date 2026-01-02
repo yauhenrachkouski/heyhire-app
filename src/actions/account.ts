@@ -8,6 +8,7 @@ import { account, user, organization as orgTable, member } from '@/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { Resend } from 'resend'
 import { AccountDeletedEmail } from '@/emails'
+import { generateId } from '@/lib/id'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -353,7 +354,7 @@ export async function createOrganizationWithSetup(data: {
     }
 
     const organizationName = data.name.trim() || 'Default Workspace'
-    const slug = `${organizationName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${crypto.randomUUID().slice(0, 8)}`
+    const slug = `${organizationName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${generateId().slice(0, 8)}`
 
     console.log('[createOrganizationWithSetup] Creating organization with slug:', slug)
 
@@ -452,7 +453,7 @@ export async function createDefaultOrganization() {
     }
 
     // Generate a unique organization ID
-    const organizationId = crypto.randomUUID()
+    const organizationId = generateId()
     const organizationName = 'Default Workspace'
     const slug = `${organizationName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${organizationId.slice(0, 8)}`
 
@@ -466,7 +467,7 @@ export async function createDefaultOrganization() {
 
     // Create membership with owner role
     await db.insert(member).values({
-      id: crypto.randomUUID(),
+      id: generateId(),
       organizationId: organizationId,
       userId: session.user.id,
       role: 'owner'

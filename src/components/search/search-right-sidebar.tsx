@@ -122,9 +122,17 @@ import { cn } from "@/lib/utils";
 interface SearchRightSidebarProps {
   className?: string;
   topOffset?: number;
+  initialCandidateDetail?: {
+    candidateId: string;
+    result: {
+      success: boolean;
+      data?: any;
+      error?: string;
+    };
+  };
 }
 
-export function SearchRightSidebar({ className, topOffset = 0 }: SearchRightSidebarProps) {
+export function SearchRightSidebar({ className, topOffset = 0, initialCandidateDetail }: SearchRightSidebarProps) {
   const searchParams = useSearchParams();
   const candidateId = searchParams.get("candidateId");
   const router = useRouter();
@@ -143,6 +151,12 @@ export function SearchRightSidebar({ className, topOffset = 0 }: SearchRightSide
   }, [searchParams, router, pathname]);
 
   // Fetch candidate details
+  const initialDetailResult = React.useMemo(() => {
+    if (!candidateId || !initialCandidateDetail) return undefined;
+    if (initialCandidateDetail.candidateId !== candidateId) return undefined;
+    return initialCandidateDetail.result;
+  }, [candidateId, initialCandidateDetail]);
+
   const { data: candidateResult, isLoading } = useQuery({
     queryKey: searchCandidatesKeys.detail(candidateId || ""),
     queryFn: async () => {
@@ -151,6 +165,7 @@ export function SearchRightSidebar({ className, topOffset = 0 }: SearchRightSide
     },
     enabled: !!candidateId,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    initialData: initialDetailResult,
   });
 
   const searchCandidate = candidateResult?.success ? candidateResult.data : null;
@@ -202,4 +217,3 @@ export function SearchRightSidebar({ className, topOffset = 0 }: SearchRightSide
     </Sidebar>
   );
 }
-

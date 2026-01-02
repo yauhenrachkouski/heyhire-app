@@ -58,7 +58,7 @@ export async function POST(request: Request) {
 
     console.log(`[Scoring] Scoring candidate ${candidateId} for search ${searchId}`);
 
-    const requestId = `score_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    const requestId = `score_${generateId()}`;
 
     const searchRecord = await db.query.search.findFirst({
       where: eq(search.id, searchId),

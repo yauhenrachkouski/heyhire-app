@@ -38,6 +38,30 @@ function decodeCursor(cursor: string): CandidatesCursor | null {
   }
 }
 
+function stripNullBytes(value: string | null | undefined) {
+  if (!value) return value ?? null;
+  return value.replace(/\u0000/g, "");
+}
+
+function sanitizeForJson(value: any): any {
+  if (value === null || value === undefined) return value;
+  if (typeof value === "string") return stripNullBytes(value);
+  if (Array.isArray(value)) return value.map(sanitizeForJson);
+  if (typeof value === "object") {
+    const result: Record<string, any> = {};
+    Object.entries(value).forEach(([key, entry]) => {
+      result[key] = sanitizeForJson(entry);
+    });
+    return result;
+  }
+  return value;
+}
+
+function safeJsonStringify(value: any) {
+  if (value === null || value === undefined) return null;
+  return JSON.stringify(sanitizeForJson(value));
+}
+
 /**
  * Transform API CandidateProfile to database candidate format
  */
@@ -45,43 +69,52 @@ function transformCandidateToDb(candidate: CandidateProfile) {
   const rawData = candidate.raw_data;
   
   return {
-    linkedinUrl: candidate.linkedinUrl || "",
-    linkedinUsername: candidate.publicIdentifier || null,
-    linkedinUrn: candidate.id || null,
-    fullName: candidate.fullName || null,
-    firstName: candidate.firstName || null,
-    lastName: candidate.lastName || null,
-    headline: candidate.headline || null,
-    position: candidate.position || rawData?.experience?.find((e: any) => !e.endDate || e.endDate.text === 'Present' || e.endDate?.text?.toLowerCase() === 'present')?.position || null,
-    summary: candidate.summary || rawData?.about || null,
-    photoUrl: rawData?.profilePicture?.url || rawData?.photo || null,
+    linkedinUrl: stripNullBytes(candidate.linkedinUrl) || "",
+    linkedinUsername: stripNullBytes(candidate.publicIdentifier) || null,
+    linkedinUrn: stripNullBytes(candidate.id) || null,
+    fullName: stripNullBytes(candidate.fullName) || null,
+    firstName: stripNullBytes(candidate.firstName) || null,
+    lastName: stripNullBytes(candidate.lastName) || null,
+    headline: stripNullBytes(candidate.headline) || null,
+    position: stripNullBytes(
+      candidate.position ||
+      rawData?.experience?.find((e: any) => !e.endDate || e.endDate.text === "Present" || e.endDate?.text?.toLowerCase() === "present")?.position
+    ) || null,
+    summary: stripNullBytes(candidate.summary || rawData?.about) || null,
+    photoUrl: stripNullBytes(rawData?.profilePicture?.url || rawData?.photo) || null,
     registeredAt: rawData?.registeredAt ? new Date(rawData.registeredAt) : null,
     topSkills: rawData?.topSkills || null,
     openToWork: rawData?.openToWork || false,
     hiring: rawData?.hiring || false,
-    location: candidate.location ? JSON.stringify(candidate.location) : null,
-    locationText: candidate.location_text || candidate.location?.linkedinText || null,
-    email: candidate.email || null,
+    location: safeJsonStringify(candidate.location),
+    locationText: stripNullBytes(candidate.location_text || candidate.location?.linkedinText) || null,
+    email: stripNullBytes(candidate.email) || null,
     isPremium: rawData?.premium || false,
     followerCount: rawData?.followerCount || null,
     connectionCount: rawData?.connectionsCount || null,
-    currentPositions: rawData?.currentPosition ? JSON.stringify(rawData.currentPosition) : null,
-    experiences: rawData?.experience ? JSON.stringify(rawData.experience) : 
-                 (candidate.experiences ? JSON.stringify(candidate.experiences) : null),
-    educations: rawData?.education ? JSON.stringify(rawData.education) : 
-                (candidate.educations ? JSON.stringify(candidate.educations) : null),
-    certifications: rawData?.certifications ? JSON.stringify(rawData.certifications) : null,
-    skills: candidate.skills ? JSON.stringify(candidate.skills) : null,
-    languages: rawData?.languages ? JSON.stringify(rawData.languages) : null,
-    projects: rawData?.projects ? JSON.stringify(rawData.projects) : null,
-    publications: rawData?.publications ? JSON.stringify(rawData.publications) : null,
-    volunteering: rawData?.volunteering ? JSON.stringify(rawData.volunteering) : null,
-    courses: rawData?.courses ? JSON.stringify(rawData.courses) : null,
-    patents: rawData?.patents ? JSON.stringify(rawData.patents) : null,
-    honorsAndAwards: rawData?.honorsAndAwards ? JSON.stringify(rawData.honorsAndAwards) : null,
-    causes: rawData?.causes ? JSON.stringify(rawData.causes) : null,
+    currentPositions: safeJsonStringify(rawData?.currentPosition),
+    experiences: rawData?.experience
+      ? safeJsonStringify(rawData.experience)
+      : candidate.experiences
+        ? safeJsonStringify(candidate.experiences)
+        : null,
+    educations: rawData?.education
+      ? safeJsonStringify(rawData.education)
+      : candidate.educations
+        ? safeJsonStringify(candidate.educations)
+        : null,
+    certifications: safeJsonStringify(rawData?.certifications),
+    skills: safeJsonStringify(candidate.skills),
+    languages: safeJsonStringify(rawData?.languages),
+    projects: safeJsonStringify(rawData?.projects),
+    publications: safeJsonStringify(rawData?.publications),
+    volunteering: safeJsonStringify(rawData?.volunteering),
+    courses: safeJsonStringify(rawData?.courses),
+    patents: safeJsonStringify(rawData?.patents),
+    honorsAndAwards: safeJsonStringify(rawData?.honorsAndAwards),
+    causes: safeJsonStringify(rawData?.causes),
     verified: rawData?.verified || false,
-    sourceData: rawData ? JSON.stringify(rawData) : null,
+    sourceData: safeJsonStringify(rawData),
   };
 }
 

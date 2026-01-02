@@ -75,6 +75,14 @@ interface SearchResultsClientProps {
       sortBy: string;
     };
   };
+  initialCandidateDetail?: {
+    candidateId: string;
+    result: {
+      success: boolean;
+      data?: any;
+      error?: string;
+    };
+  };
 }
 
 // Progress/counts type
@@ -90,7 +98,7 @@ interface SearchProgress {
   searchProgress?: number;
 }
 
-export function SearchResultsClient({ search, initialData }: SearchResultsClientProps) {
+export function SearchResultsClient({ search, initialData, initialCandidateDetail }: SearchResultsClientProps) {
   console.log("[SearchResultsClient] Rendering for search:", search.id, 
     "hasInitialData:", !!initialData, 
     "candidates:", initialData?.candidates?.length ?? 0,
@@ -727,7 +735,7 @@ export function SearchResultsClient({ search, initialData }: SearchResultsClient
             </div>
           </div>
         </div>
-        <SearchRightSidebar topOffset={criteriaHeight} />
+        <SearchRightSidebar topOffset={criteriaHeight} initialCandidateDetail={initialCandidateDetail} />
       </div>
     </div>
   );

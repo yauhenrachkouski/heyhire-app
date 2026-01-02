@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { getSearchById } from "@/actions/search";
 import { SearchResultsClient } from "./search-results-client";
-import { getCandidatesForSearch, getSearchProgress } from "@/actions/candidates";
+import { getCandidatesForSearch, getSearchCandidateById, getSearchProgress } from "@/actions/candidates";
 
 interface SearchPageProps {
   params: Promise<{ id: string }>;
@@ -11,6 +11,8 @@ interface SearchPageProps {
 export default async function SearchPage({ params, searchParams }: SearchPageProps) {
   const { id } = await params;
   const resolvedSearchParams = await searchParams;
+  const candidateParam = resolvedSearchParams.candidateId;
+  const candidateId = Array.isArray(candidateParam) ? candidateParam[0] : candidateParam;
   
   console.log("[SearchPage] Loading search:", id);
   
@@ -31,6 +33,7 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
 
   // Prefetch candidates (cursor-mode to match infinite scroll)
   let initialData;
+  let initialCandidateDetail;
   try {
       console.log("[SearchPage] Prefetching candidates");
       const { data: candidatesData, pagination } = await getCandidatesForSearch(search.id, {
@@ -73,11 +76,29 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
   } catch (error) {
       console.error("[SearchPage] Error prefetching candidates:", error);
   }
+
+  if (candidateId) {
+    try {
+      console.log("[SearchPage] Prefetching candidate details:", candidateId);
+      const result = await getSearchCandidateById(candidateId);
+      initialCandidateDetail = JSON.parse(JSON.stringify({
+        candidateId,
+        result,
+      }));
+    } catch (error) {
+      console.error("[SearchPage] Error prefetching candidate details:", error);
+    }
+  }
   
   return (
     <div className="container mx-auto">
       {/* Key ensures component remounts when navigating between searches */}
-      <SearchResultsClient key={search.id} search={JSON.parse(JSON.stringify(search))} initialData={initialData} />
+      <SearchResultsClient
+        key={search.id}
+        search={JSON.parse(JSON.stringify(search))}
+        initialData={initialData}
+        initialCandidateDetail={initialCandidateDetail}
+      />
     </div>
   );
 }

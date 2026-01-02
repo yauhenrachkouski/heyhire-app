@@ -5,6 +5,7 @@ import { db } from "@/db/drizzle";
 import { search, sourcingStrategies } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { realtime } from "@/lib/realtime";
+import { generateId } from "@/lib/id";
 import {
   strategyGenerationResponseSchema,
   strategyExecutionResponseSchema,
@@ -165,7 +166,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
 
     // Branch B: Generate new strategies (only if no existing ones used)
     if (allGeneratedStrategies.length === 0) {
-      const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const requestId = `req_${generateId()}`;
       
       const generateResponse = await context.call<{
         request_id: string;
