@@ -71,7 +71,6 @@ function transformCandidateToDb(candidate: CandidateProfile) {
     educations: rawData?.education ? JSON.stringify(rawData.education) : 
                 (candidate.educations ? JSON.stringify(candidate.educations) : null),
     certifications: rawData?.certifications ? JSON.stringify(rawData.certifications) : null,
-    recommendations: rawData?.receivedRecommendations ? JSON.stringify(rawData.receivedRecommendations) : null,
     skills: candidate.skills ? JSON.stringify(candidate.skills) : null,
     languages: rawData?.languages ? JSON.stringify(rawData.languages) : null,
     projects: rawData?.projects ? JSON.stringify(rawData.projects) : null,

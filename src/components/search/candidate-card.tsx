@@ -47,11 +47,14 @@ type ScoringCriterion = {
 type CriteriaScore = {
   criteria_key?: string;
   criteria_id?: string;
+  criterion_id?: string;
+  concept_id?: string;
   group_id: string;
   weight: number;
   raw_match_score: number;
   confidence: number;
   final_concept_score: number;
+  final_score?: number;
   status: string;
   evidence_snippet: string;
 };
@@ -62,6 +65,7 @@ type ScoringResult = {
   primary_issue?: string;
   high_importance_missing?: string[];
   concept_scores?: CriteriaScore[];
+  criteria_scores?: CriteriaScore[];
   reasoning?: ScoringReasoning;
   candidate_summary?: string | null;
   missing_critical?: string[];
@@ -86,19 +90,33 @@ function CandidateScoreDisplay(props: {
   const { matchScore, scoringData, sourcingCriteria } = props;
 
   const getScoreKey = (score: CriteriaScore) => {
-    const key = score.criteria_key ?? score.criteria_id ?? "";
+    const key = score.criteria_key ?? score.criteria_id ?? score.criterion_id ?? "";
     return String(key || "");
   };
 
+  const buildScoreMap = (scores: CriteriaScore[]) => {
+    const map = new Map<string, CriteriaScore>();
+    scores.forEach((score) => {
+      const keys = [
+        getScoreKey(score),
+        score.concept_id ? String(score.concept_id) : "",
+      ].filter(Boolean);
+      keys.forEach((key) => {
+        if (!map.has(key)) {
+          map.set(key, score);
+        }
+      });
+    });
+    return map;
+  };
+
   // Move all hooks to the top before any conditional returns
+  const criteriaScoresById = useMemo(() => {
+    return buildScoreMap(scoringData?.criteria_scores ?? []);
+  }, [scoringData?.criteria_scores]);
+
   const conceptScoresById = useMemo(() => {
-    const entries = (scoringData?.concept_scores ?? [])
-      .map((cs) => {
-        const key = getScoreKey(cs);
-        return key ? ([key, cs] as const) : null;
-      })
-      .filter(Boolean) as Array<readonly [string, CriteriaScore]>;
-    return new Map(entries);
+    return buildScoreMap(scoringData?.concept_scores ?? []);
   }, [scoringData?.concept_scores]);
 
   const getCriteriaKeyV3 = (criterion: any) => {
@@ -185,9 +203,13 @@ function CandidateScoreDisplay(props: {
             let status: "match" | "missing" | "neutral" = "neutral";
 
             const criteriaKeyV3 = getCriteriaKeyV3(item);
-            const conceptScore = criteriaKeyV3 ? conceptScoresById.get(criteriaKeyV3) : undefined;
-            if (conceptScore) {
-              const s = String(conceptScore.status).toLowerCase();
+            const conceptId = String(item?.concept_id ?? "");
+            const criteriaScore =
+              (criteriaKeyV3 ? criteriaScoresById.get(criteriaKeyV3) : undefined) ??
+              (criteriaKeyV3 ? conceptScoresById.get(criteriaKeyV3) : undefined) ??
+              (conceptId ? conceptScoresById.get(conceptId) : undefined);
+            if (criteriaScore) {
+              const s = String(criteriaScore.status).toLowerCase();
               const priorityLevel = String(item?.priority_level ?? "").toLowerCase();
               if (s === "pass" || s.includes("pass")) status = "match";
               else if (s.includes("fail")) status = "missing";
@@ -209,7 +231,7 @@ function CandidateScoreDisplay(props: {
                 priority={(item.priority_level || item.importance)?.toLowerCase()}
                 operator={item.operator}
                 status={status}
-                scoreStatus={conceptScore?.status ?? null}
+                scoreStatus={criteriaScore?.status ?? null}
                 compact={true}
                 hideIcon={true}
               />
