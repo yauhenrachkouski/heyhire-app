@@ -5,7 +5,8 @@ import { IconCheck, IconInfoCircle, IconLock } from "@tabler/icons-react";
 import { SubscribeFAQ } from "@/components/subscribe/subscribe-faq";
 import { SubscribeSupport } from "@/components/subscribe/subscribe-support";
 import { SubscribeCheckoutButton } from "@/components/subscribe/subscribe-checkout-button";
-import { PricingUnlockButton } from "@/components/subscribe/pricing-unlock-button";
+import { UnlockProNowButton } from "@/components/account/unlock-pro-now-button";
+import { PLAN_LIMITS } from "@/types/plans";
 import {
   Tooltip,
   TooltipContent,
@@ -95,6 +96,7 @@ export function SubscribeCardsServer({
 
           const isCurrent = !!currentPlan && currentPlan === plan.planId;
           const isTrialUserForPro = isCurrent && isTrialing;
+          const planCredits = PLAN_LIMITS[plan.planId].credits;
 
           const ctaText = (() => {
             if (isTrialUserForPro) return "Unlock full Pro now";
@@ -140,7 +142,7 @@ export function SubscribeCardsServer({
                   <div className="mt-3 space-y-1">
                     <>
                       <p className="text-xs text-muted-foreground">Billed monthly after trial</p>
-                      <p className="text-xs text-muted-foreground">1,000 reveals/month</p>
+                      <p className="text-xs text-muted-foreground">{planCredits} reveals/month</p>
                     </>
                   </div>
                 </div>
@@ -179,9 +181,14 @@ export function SubscribeCardsServer({
               <CardFooter className="flex flex-col gap-2">
                 {isTrialUserForPro ? (
                   <>
-                    <PricingUnlockButton className="w-full" variant="default">
+                    <UnlockProNowButton
+                      className="w-full"
+                      variant="default"
+                      size="lg"
+                      planId={plan.planId}
+                    >
                       Unlock full Pro now
-                    </PricingUnlockButton>
+                    </UnlockProNowButton>
                     <p className="text-xs text-muted-foreground text-center">
                       Charged today • Trial ends now
                     </p>
@@ -252,4 +259,3 @@ export function SubscribeCardsServer({
     </div>
   );
 }
-

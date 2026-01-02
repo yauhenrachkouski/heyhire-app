@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button"
 import { startProBillingNow } from "@/actions/stripe"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { PLAN_LIMITS } from "@/types/plans"
+import type { PlanId } from "@/types/plans"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,7 +17,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { PaymentMethodBlock } from "@/components/account/payment-method-block"
 
 interface UnlockProNowButtonProps {
   variant?: "default" | "outline"
@@ -24,6 +25,7 @@ interface UnlockProNowButtonProps {
   children: React.ReactNode
   nextBillingAmountLabel?: string | null
   nextBillingLabel?: string | null
+  planId?: PlanId
 }
 
 export function UnlockProNowButton({
@@ -33,6 +35,7 @@ export function UnlockProNowButton({
   children,
   nextBillingAmountLabel,
   nextBillingLabel,
+  planId = "pro",
 }: UnlockProNowButtonProps) {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -57,6 +60,8 @@ export function UnlockProNowButton({
     })
   }
 
+  const credits = PLAN_LIMITS[planId].credits
+
   return (
     <>
       <Button
@@ -72,20 +77,12 @@ export function UnlockProNowButton({
       <AlertDialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Start Pro billing now?</AlertDialogTitle>
+            <AlertDialogTitle>Start full Pro Plan now</AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-3">
-                <p>You'll be charged {nextBillingAmountLabel || '$69'} today.</p>
-                <p>Your trial will end immediately.</p>
-                <p>You'll get 1,000 reveals available right away.</p>
-                {nextBillingLabel && (
-                  <p>Next billing date: {nextBillingLabel}.</p>
-                )}
-
-                <div className="pt-2">
-                  <PaymentMethodBlock />
-                </div>
-              </div>
+              <p>
+                You'll be charged {nextBillingAmountLabel || '$69'} today. You'll get {credits}{" "}
+                reveals available right away.
+              </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
