@@ -7,6 +7,7 @@ import { generateId } from "@/lib/id";
 import { logger } from "@/lib/axiom/server";
 import { getPlanCreditAllocation, CREDIT_TYPES } from "@/lib/credits";
 import { Resend } from "resend";
+import { revalidatePath } from "next/cache";
 import {
     PaymentFailedEmail,
     TrialEndingSoonEmail,
@@ -357,6 +358,9 @@ async function handleInvoicePaymentSucceeded(ctx: WebhookContext) {
 
     log.info("Invoice processed", { ...eventContext, internalId: subscriptionRecord.id });
 
+    revalidatePath(`/${referenceId}`, "layout");
+    revalidatePath(`/${referenceId}/billing`);
+
     await markStripeEventProcessed({
         event: ctx.event,
         referenceId,
@@ -428,6 +432,9 @@ async function handleInvoicePaymentFailed(ctx: WebhookContext) {
             log.warn("Failed to send payment failed email", { eventId: ctx.event.id, error: String(e) });
         }
     }
+
+    revalidatePath(`/${referenceId}`, "layout");
+    revalidatePath(`/${referenceId}/billing`);
 
     await markStripeEventProcessed({
         event: ctx.event,
