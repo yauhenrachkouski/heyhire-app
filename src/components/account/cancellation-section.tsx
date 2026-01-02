@@ -94,6 +94,13 @@ export function CancellationSection({ subscription }: CancellationSectionProps) 
           >
             Resume plan
           </Button>
+        ) : subscription.status === "canceled" ? (
+          <Button
+            disabled
+            variant="secondary"
+          >
+            Subscription ended
+          </Button>
         ) : (
           <AlertDialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
             <AlertDialogTrigger asChild>

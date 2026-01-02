@@ -6,18 +6,23 @@ import { consumeCreditsForLinkedInOpen } from "@/actions/consumption";
 import { useQueryClient } from "@tanstack/react-query";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { creditsKeys } from "@/lib/credits";
-import { useRouter } from "next/navigation";
 import { usePlansModal } from "@/providers/plans-modal-provider";
+import { searchCandidatesKeys } from "@/lib/query-keys/search";
+
+type OpenLinkedInParams = {
+  candidateId: string;
+  linkedinUrl?: string | null;
+  searchCandidateId?: string;
+};
 
 export function useOpenLinkedInWithCredits() {
   const [isLoading, setIsLoading] = useState(false);
   const queryClient = useQueryClient();
   const { data: activeOrg } = useActiveOrganization();
-  const router = useRouter();
   const { openPlansModal } = usePlansModal();
 
   const openLinkedIn = useCallback(
-    async (params: { candidateId: string; linkedinUrl?: string | null }) => {
+    async (params: OpenLinkedInParams) => {
       if (!params.linkedinUrl) return;
 
       setIsLoading(true);
@@ -35,7 +40,7 @@ export function useOpenLinkedInWithCredits() {
               onClick: () => openPlansModal(),
             },
           });
-          return;
+          return result;
         }
 
         if (activeOrg?.id) {
@@ -46,14 +51,60 @@ export function useOpenLinkedInWithCredits() {
           await queryClient.invalidateQueries({ queryKey: creditsKeys.all });
         }
 
-        router.refresh();
+        queryClient.setQueriesData(
+          { queryKey: searchCandidatesKeys.lists() },
+          (oldData: any) => {
+            if (!oldData || typeof oldData !== "object" || !Array.isArray(oldData.pages)) {
+              return oldData;
+            }
+            const nextPages = oldData.pages.map((page: any) => {
+              if (!page || !Array.isArray(page.candidates)) return page;
+              const nextCandidates = page.candidates.map((candidate: any) => {
+                if (!candidate) return candidate;
+                const matchesCandidateId = candidate.candidateId === params.candidateId;
+                const matchesSearchCandidateId =
+                  params.searchCandidateId && candidate.id === params.searchCandidateId;
+                if (matchesCandidateId || matchesSearchCandidateId) {
+                  return { ...candidate, isRevealed: true };
+                }
+                return candidate;
+              });
+              return { ...page, candidates: nextCandidates };
+            });
+            return { ...oldData, pages: nextPages };
+          }
+        );
+
+        if (params.searchCandidateId) {
+          queryClient.setQueryData(
+            searchCandidatesKeys.detail(params.searchCandidateId),
+            (oldData: any) => {
+              if (!oldData || typeof oldData !== "object") return oldData;
+              if ("data" in oldData) {
+                return {
+                  ...oldData,
+                  data: { ...oldData.data, isRevealed: true },
+                };
+              }
+              return { ...oldData, isRevealed: true };
+            }
+          );
+        }
+
+        await queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.lists() });
+        if (params.searchCandidateId) {
+          await queryClient.invalidateQueries({
+            queryKey: searchCandidatesKeys.detail(params.searchCandidateId),
+          });
+        }
 
         window.open(params.linkedinUrl, "_blank", "noopener,noreferrer");
+        return result;
       } finally {
         setIsLoading(false);
       }
     },
-    [activeOrg?.id, openPlansModal, queryClient, router]
+    [activeOrg?.id, openPlansModal, queryClient]
   );
 
   return { openLinkedIn, isLoading };

@@ -4,7 +4,7 @@ import { BillingSection } from '@/components/account/billing-section'
 import { PaymentMethodBlock } from '@/components/account/payment-method-block'
 import { InvoicesCard } from '@/components/account/invoices-card'
 import { CancellationSection } from '@/components/account/cancellation-section'
-import { getUserSubscription } from '@/actions/stripe'
+import { getUserSubscription, getCustomerPaymentMethods } from '@/actions/stripe'
 import { redirect } from 'next/navigation'
 import { Icon } from '@/components/icon'
 import { Button } from '@/components/ui/button'
@@ -73,6 +73,8 @@ export default async function BillingPage() {
     organizationCredits = await getOrganizationCredits(activeOrgId);
   }
 
+  const paymentMethodsResult = canManageBilling ? await getCustomerPaymentMethods({ limit: 10 }) : null
+
   return (
     <>
       {/* Billing & Subscription */}
@@ -89,7 +91,14 @@ export default async function BillingPage() {
         initialPeriodUsed={initialPeriodUsed}
         currentBalance={organizationCredits}
       />
-      {canManageBilling && <PaymentMethodBlock />}
+      {canManageBilling && (
+        <PaymentMethodBlock
+          orgId={activeOrgId}
+          initialPaymentMethods={paymentMethodsResult?.paymentMethods ?? []}
+          initialDefaultPaymentMethodId={paymentMethodsResult?.defaultPaymentMethodId ?? null}
+          initialError={paymentMethodsResult?.error ?? null}
+        />
+      )}
       <InvoicesCard subscription={subscription} />
       {subscription && canManageBilling && <CancellationSection subscription={subscription} />}
     </>

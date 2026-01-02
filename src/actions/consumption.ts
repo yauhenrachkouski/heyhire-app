@@ -7,8 +7,7 @@ import { trackServerEvent } from "@/lib/posthog/track";
 import { db } from "@/db/drizzle";
 import { creditTransactions } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
-
-const LINKEDIN_OPEN_DESCRIPTION = "Open LinkedIn profile";
+import { LINKEDIN_OPEN_DESCRIPTION } from "@/lib/consumption";
 
 export async function consumeCreditsForLinkedInOpen(params: {
   candidateId: string;

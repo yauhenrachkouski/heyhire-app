@@ -41,6 +41,8 @@ import { usePathname } from "next/navigation"
 import type { subscription } from "@/db/schema"
 import { useQuery } from "@tanstack/react-query"
 import { recentSearchesKeys } from "@/lib/query-keys/search"
+import { creditsKeys } from "@/lib/credits"
+import { getOrganizationCredits } from "@/actions/credits"
 
 type SubscriptionType = typeof subscription.$inferSelect
 
@@ -201,6 +203,23 @@ export function AppSidebar({
     gcTime: 60 * 1000, // Keep in cache for 60 seconds after last use
     refetchOnWindowFocus: true, // Refetch when window regains focus
     refetchOnMount: true, // Refetch when component mounts if data is stale
+  })
+
+  const { data: creditsBalance } = useQuery({
+    queryKey: activeOrganization?.id
+      ? creditsKeys.organization(activeOrganization.id)
+      : creditsKeys.all,
+    queryFn: async () => {
+      if (!activeOrganization?.id) return activeOrganization?.credits ?? 0;
+      return getOrganizationCredits(activeOrganization.id);
+    },
+    enabled: !!activeOrganization?.id,
+    initialData: activeOrganization?.credits ?? 0,
+    placeholderData: (previousData) => previousData,
+    staleTime: 0,
+    gcTime: 60 * 1000,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
   })
 
   return (
@@ -374,9 +393,9 @@ export function AppSidebar({
         ))}
       </SidebarContent>
       <SidebarFooter>
-        {activeOrganization && activeOrganization.credits !== undefined && (
+        {activeOrganization && creditsBalance !== undefined && (
           <CreditBalance
-            credits={activeOrganization.credits}
+            credits={creditsBalance}
             currentPlan={currentPlan}
             trialWarning={trialWarning}
           />

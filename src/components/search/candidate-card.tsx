@@ -3,15 +3,11 @@
 import {
   IconLoader2,
   IconMapPin,
-  IconAlertTriangle,
   IconBrain,
-  IconCoin,
   IconChevronRight,
-  IconBan,
   IconBriefcase,
   IconTools,
-  IconList,
-  IconExternalLink
+  IconList
 } from "@tabler/icons-react";
 import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
@@ -24,10 +20,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useOpenLinkedInWithCredits } from "@/hooks/use-open-linkedin-with-credits";
 import { cn } from "@/lib/utils";
 import { SourcingCriteria } from "@/types/search";
 import { CriteriaBadge } from "./criteria-badge";
+import { OpenLinkedInButton } from "./open-linkedin-button";
 
 type Skill = string | { name?: string | null };
 type LocationData = { name?: string | null; linkedinText?: string | null; city?: string | null } | null;
@@ -319,8 +315,6 @@ export function CandidateCard({
   onShowCandidate,
   onCardClick,
 }: CandidateCardProps) {
-  const { openLinkedIn, isLoading: isOpeningLinkedIn } = useOpenLinkedInWithCredits();
-
   const { candidate, matchScore, scoringResult, isRevealed } = searchCandidate;
   
   const experiences = useMemo(() => safeJsonParse<any[]>(candidate.experiences, []), [candidate.experiences]);
@@ -431,35 +425,13 @@ export function CandidateCard({
 
         <div className="flex items-start shrink-0">
           <div className="flex flex-col gap-2">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="default"
-                    type="button"
-                    className="font-medium w-full"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openLinkedIn({ candidateId: candidate.id, linkedinUrl: candidate.linkedinUrl });
-                    }}
-                    disabled={isOpeningLinkedIn}
-                  >
-                    {isOpeningLinkedIn ? (
-                      <IconLoader2 className="h-4 w-4 animate-spin" />
-                    ) : isRevealed ? (
-                      <IconExternalLink className="h-4 w-4" />
-                    ) : (
-                      <IconCoin className="h-4 w-4" />
-                    )}
-                    <span>Open LinkedIn</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {isOpeningLinkedIn ? "Opening LinkedIn..." : isRevealed ? "Already revealed (free)" : "1 credit"}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <OpenLinkedInButton
+              candidateId={candidate.id}
+              searchCandidateId={searchCandidate.id}
+              linkedinUrl={candidate.linkedinUrl}
+              isRevealed={isRevealed}
+              onClick={(e) => e.stopPropagation()}
+            />
 
             {!isActive && (
               <TooltipProvider>

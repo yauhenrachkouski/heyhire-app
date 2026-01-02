@@ -9,8 +9,7 @@ import { scoreCandidateMatch, prepareCandidateForScoring } from "@/actions/scori
 import { assertNotReadOnlyForOrganization, requireSearchReadAccess } from "@/lib/request-access";
 import { getSessionWithOrg } from "@/lib/auth-helpers";
 import { CREDIT_TYPES } from "@/lib/credits";
-
-const LINKEDIN_OPEN_DESCRIPTION = "Open LinkedIn profile";
+import { LINKEDIN_OPEN_DESCRIPTION } from "@/lib/consumption";
 
 type CandidatesCursor =
   | {

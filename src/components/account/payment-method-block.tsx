@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, useEffect } from "react"
+import { useState, useTransition } from "react"
 import Image, { type StaticImageData } from "next/image"
 import { Button } from "@/components/ui/button"
 import { getCustomerPaymentMethods, setDefaultPaymentMethod, removePaymentMethod } from "@/actions/stripe"
@@ -25,6 +25,8 @@ import eloLogo from "@aaronfagan/ccicons/logo/elo.svg"
 import mirLogo from "@aaronfagan/ccicons/logo/mir.svg"
 import maestroLogo from "@aaronfagan/ccicons/logo/maestro.svg"
 import genericLogo from "@aaronfagan/ccicons/logo/generic.svg"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { billingKeys } from "@/lib/query-keys/billing"
 
 const brandToIcon: Record<string, StaticImageData> = {
   visa: visaLogo,
@@ -48,51 +50,75 @@ const getBrandIcon = (brand: string | null) => {
   return brandToIcon[normalized] ?? genericLogo
 }
 
-export function PaymentMethodBlock() {
-  const [paymentMethods, setPaymentMethods] = useState<Array<{
+interface PaymentMethodBlockProps {
+  orgId: string | null;
+  initialPaymentMethods: Array<{
     id: string;
     type: string;
     brand: string | null;
     last4: string | null;
     expMonth: number | null;
     expYear: number | null;
-  }>>([])
-  const [defaultPaymentMethodId, setDefaultPaymentMethodId] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
+  }>;
+  initialDefaultPaymentMethodId: string | null;
+  initialError: string | null;
+}
 
-  // Load payment methods on mount
-  useEffect(() => {
-    startTransition(async () => {
-      const result = await getCustomerPaymentMethods({ limit: 10 })
-      setPaymentMethods(result.paymentMethods || [])
-      setDefaultPaymentMethodId(result.defaultPaymentMethodId)
-      setError(result.error)
-    })
-  }, [])
+export function PaymentMethodBlock({
+  orgId,
+  initialPaymentMethods,
+  initialDefaultPaymentMethodId,
+  initialError,
+}: PaymentMethodBlockProps) {
+  const [isMutating, setIsMutating] = useState(false)
+  const [isPending, startTransition] = useTransition()
+  const queryClient = useQueryClient()
+
+  const { data } = useQuery({
+    queryKey: billingKeys.paymentMethods(orgId ?? ""),
+    queryFn: async () => getCustomerPaymentMethods({ limit: 10 }),
+    enabled: !!orgId,
+    initialData: {
+      paymentMethods: initialPaymentMethods,
+      defaultPaymentMethodId: initialDefaultPaymentMethodId,
+      error: initialError,
+    },
+    staleTime: 0,
+    gcTime: 60 * 1000,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
+  })
+
+  const paymentMethods = data?.paymentMethods ?? []
+  const defaultPaymentMethodId = data?.defaultPaymentMethodId ?? null
+  const error = data?.error ?? null
 
   const handleSetDefault = async (paymentMethodId: string) => {
-    startTransition(async () => {
-      const result = await setDefaultPaymentMethod(paymentMethodId)
-      if (result.success) {
-        setDefaultPaymentMethodId(paymentMethodId)
-        toast.success("Payment method set as default")
-      } else {
-        toast.error(result.error || "Failed to set default payment method")
-      }
-    })
+    setIsMutating(true)
+    const result = await setDefaultPaymentMethod(paymentMethodId)
+    if (result.success) {
+      toast.success("Payment method set as default")
+      await queryClient.invalidateQueries({
+        queryKey: billingKeys.paymentMethods(orgId ?? ""),
+      })
+    } else {
+      toast.error(result.error || "Failed to set default payment method")
+    }
+    setIsMutating(false)
   }
 
   const handleRemove = async (paymentMethodId: string) => {
-    startTransition(async () => {
-      const result = await removePaymentMethod(paymentMethodId)
-      if (result.success) {
-        setPaymentMethods(prev => prev.filter(pm => pm.id !== paymentMethodId))
-        toast.success("Payment method removed")
-      } else {
-        toast.error(result.error || "Failed to remove payment method")
-      }
-    })
+    setIsMutating(true)
+    const result = await removePaymentMethod(paymentMethodId)
+    if (result.success) {
+      toast.success("Payment method removed")
+      await queryClient.invalidateQueries({
+        queryKey: billingKeys.paymentMethods(orgId ?? ""),
+      })
+    } else {
+      toast.error(result.error || "Failed to remove payment method")
+    }
+    setIsMutating(false)
   }
 
   const formatBrand = (brand: string | null) => {
@@ -114,7 +140,7 @@ export function PaymentMethodBlock() {
         </div>
 
         <div className="flex">
-          <AddNewPaymentMethodButton />
+          <AddNewPaymentMethodButton organizationId={orgId} />
         </div>
       </div>
 
@@ -162,19 +188,19 @@ export function PaymentMethodBlock() {
 
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" aria-label="Payment method actions" disabled={isPending}>
+                      <Button variant="ghost" size="icon" aria-label="Payment method actions" disabled={isPending || isMutating}>
                         <Icon name="dots-vertical" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
-                        disabled={isDefault}
+                        disabled={isDefault || isMutating}
                         onClick={() => handleSetDefault(pm.id)}
                       >
                         Set as default
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        disabled={isDefault}
+                        disabled={isDefault || isMutating}
                         onClick={() => handleRemove(pm.id)}
                       >
                         Remove

@@ -1,7 +1,9 @@
 "use client"
 
+import * as React from "react"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { subscription as subscriptionSchema } from "@/db/schema"
 import type { PlanId } from "@/types/plans"
@@ -11,6 +13,9 @@ import { useActiveOrganization } from "@/lib/auth-client"
 import { useQuery } from "@tanstack/react-query"
 import { getCreditsUsageForPeriod } from "@/actions/credits"
 import { creditsKeys } from "@/lib/credits"
+import { resumeSubscription } from "@/actions/stripe"
+import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 
 interface PricingPlan {
   name: string;
@@ -51,6 +56,8 @@ export function CurrentSubscriptionRow({
   currentBalance
 }: CurrentSubscriptionRowProps) {
   const { data: activeOrg } = useActiveOrganization();
+  const [isResuming, setIsResuming] = React.useState(false);
+  const router = useRouter();
 
   const orgId = activeOrg?.id;
   const start = subscription?.periodStart;
@@ -195,8 +202,35 @@ export function CurrentSubscriptionRow({
             {subscription.cancelAtPeriodEnd && (
               <Alert variant="destructive">
                 <AlertDescription>
-                  Your subscription will be canceled on {formatDate(subscription.periodEnd)}.
-                  You'll lose access to premium features after this date.
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      Your subscription will be canceled on {formatDate(subscription.periodEnd)}.
+                      You'll lose access to premium features after this date.
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="default"
+                      disabled={isResuming}
+                      onClick={async () => {
+                        setIsResuming(true);
+                        try {
+                          const result = await resumeSubscription();
+                          if (result.success) {
+                            toast.success("Subscription Resumed");
+                            router.refresh();
+                          } else {
+                            toast.error(result.error || "Failed to resume subscription");
+                          }
+                        } catch (error) {
+                          toast.error("An unexpected error occurred");
+                        } finally {
+                          setIsResuming(false);
+                        }
+                      }}
+                    >
+                      {isResuming ? "Resuming..." : "Resume plan"}
+                    </Button>
+                  </div>
                 </AlertDescription>
               </Alert>
             )}

@@ -66,7 +66,7 @@ export type EmailLogoProps = {
 };
 
 export function EmailLogo({ appUrl }: EmailLogoProps) {
-  return <Img alt="Heyhire" src="https://heyhire.ai/favicon.png" style={emailStyles.logo} />;
+  return <Img alt="Heyhire" src="https://app.heyhire.ai/favicon.png" style={emailStyles.logo} />;
 }
 
 export function EmailSignature() {
