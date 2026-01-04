@@ -251,25 +251,44 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
     queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.progress(search.id) });
   }, [queryClient, search.id]);
 
-  const handleScoringProgress = useCallback((data: { candidateId: string; searchCandidateId: string; score: number; scored: number; total: number; scoringResult?: any }) => {
-    console.log("[SearchResultsClient] Score update:", data.searchCandidateId, "=", data.score);
-    
-    // Update candidate in cache
-    queryClient.setQueryData(candidatesQueryKey, (oldData: any) => {
+  const updateCandidateScoreInCache = useCallback((data: { searchCandidateId: string; score: number; scoringResult?: any }) => {
+    const serializedResult = data.scoringResult ? JSON.stringify(data.scoringResult) : undefined;
+
+    // Update across all cached candidate lists for this search (any filters)
+    queryClient.setQueriesData({ queryKey: searchCandidatesKeys.details(search.id) }, (oldData: any) => {
       if (!oldData?.pages) return oldData;
       
       return {
         ...oldData,
         pages: oldData.pages.map((page: any) => ({
           ...page,
-          candidates: page.candidates.map((c: any) => 
-            c.id === data.searchCandidateId 
-              ? { ...c, matchScore: data.score, scoringResult: data.scoringResult ? JSON.stringify(data.scoringResult) : c.scoringResult }
+          candidates: page.candidates.map((c: any) =>
+            c.id === data.searchCandidateId
+              ? { ...c, matchScore: data.score, scoringResult: serializedResult ?? c.scoringResult }
               : c
           ),
         })),
       };
     });
+
+    // Update candidate detail cache (sidebar)
+    queryClient.setQueryData(searchCandidatesKeys.detail(data.searchCandidateId), (oldData: any) => {
+      if (!oldData?.success || !oldData?.data) return oldData;
+      return {
+        ...oldData,
+        data: {
+          ...oldData.data,
+          matchScore: data.score,
+          scoringResult: serializedResult ?? oldData.data.scoringResult,
+        },
+      };
+    });
+  }, [queryClient, search.id]);
+
+  const handleScoringProgress = useCallback((data: { candidateId: string; searchCandidateId: string; score: number; scored: number; total: number; scoringResult?: any }) => {
+    console.log("[SearchResultsClient] Score update:", data.searchCandidateId, "=", data.score);
+    
+    updateCandidateScoreInCache(data);
 
     // Update progress in cache
     queryClient.setQueryData(searchCandidatesKeys.progress(search.id), (old: SearchProgress | undefined) => {
@@ -277,7 +296,7 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
       const errors = old.errors ?? 0;
       return { ...old, scored: data.scored, unscored: Math.max(data.total - data.scored - errors, 0) };
     });
-  }, [queryClient, search.id, candidatesQueryKey]);
+  }, [queryClient, search.id, updateCandidateScoreInCache]);
 
   const handleScoringStarted = useCallback((data: { total: number }) => {
     console.log("[SearchResultsClient] Scoring started for", data.total, "candidates");
