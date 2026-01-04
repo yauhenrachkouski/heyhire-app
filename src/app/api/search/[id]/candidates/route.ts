@@ -67,6 +67,7 @@ export async function GET(
             total: scoringProgress.total,
             scored: scoringProgress.scored,
             unscored: scoringProgress.unscored,
+            errors: scoringProgress.errors,
             isScoringComplete: scoringProgress.isScoringComplete,
             excellent: scoringProgress.excellent,
             good: scoringProgress.good,

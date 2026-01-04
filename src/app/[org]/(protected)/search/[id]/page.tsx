@@ -58,6 +58,7 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
           total: scoringProgress.total,
           scored: scoringProgress.scored,
           unscored: scoringProgress.unscored,
+          errors: scoringProgress.errors,
           isScoringComplete: scoringProgress.isScoringComplete,
           excellent: scoringProgress.excellent,
           good: scoringProgress.good,

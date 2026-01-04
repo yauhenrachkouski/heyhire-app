@@ -1,6 +1,6 @@
 import { db } from "@/db/drizzle";
 import { search, searchCandidates } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { count, eq, sql } from "drizzle-orm";
 import { realtime } from "@/lib/realtime";
 import { NextResponse } from "next/server";
 import { Receiver } from "@upstash/qstash";
@@ -69,6 +69,50 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Search not found" }, { status: 404 });
     }
 
+    const channel = `search:${searchId}`;
+
+    const getScoringCounts = async () => {
+      const [counts] = await db
+        .select({
+          scored: count(searchCandidates.matchScore),
+          errors: count(
+            sql`CASE WHEN ${searchCandidates.matchScore} IS NULL AND ${searchCandidates.scoringError} IS NOT NULL THEN 1 END`
+          ),
+        })
+        .from(searchCandidates)
+        .where(eq(searchCandidates.searchId, searchId));
+      return {
+        scored: counts?.scored ?? 0,
+        errors: counts?.errors ?? 0,
+      };
+    };
+
+    const maybeEmitScoringCompleted = async () => {
+      const { scored, errors } = await getScoringCounts();
+      if (total > 0 && scored + errors >= total) {
+        console.log(`[Scoring] All candidates scored (with ${errors} errors) for search ${searchId}`);
+        await realtime.channel(channel).emit("scoring.completed", {
+          scored,
+          errors,
+        });
+      }
+      return { scored, errors };
+    };
+
+    const recordScoringError = async (errorMessage: string) => {
+      await db
+        .update(searchCandidates)
+        .set({
+          scoringError: errorMessage,
+          scoringErrorAt: new Date(),
+          scoringUpdatedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(searchCandidates.id, searchCandidateId));
+
+      return maybeEmitScoringCompleted();
+    };
+
     const parseStoredJson = (value: string | null) => {
       if (!value) return null;
       try {
@@ -110,15 +154,7 @@ export async function POST(request: Request) {
             parseUpdatedAt: new Date(),
           })
           .where(eq(search.id, searchId));
-        await db
-          .update(searchCandidates)
-          .set({
-            scoringError: errorMessage,
-            scoringErrorAt: new Date(),
-            scoringUpdatedAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(eq(searchCandidates.id, searchCandidateId));
+        await recordScoringError(errorMessage);
         return NextResponse.json({ success: false, error: errorMessage });
       }
     }
@@ -132,15 +168,7 @@ export async function POST(request: Request) {
           parseUpdatedAt: new Date(),
         })
         .where(eq(search.id, searchId));
-      await db
-        .update(searchCandidates)
-        .set({
-          scoringError: errorMessage,
-          scoringErrorAt: new Date(),
-          scoringUpdatedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(searchCandidates.id, searchCandidateId));
+      await recordScoringError(errorMessage);
       return NextResponse.json({ success: false, error: errorMessage });
     }
 
@@ -160,15 +188,7 @@ export async function POST(request: Request) {
 
     if (!scoringModel || !scoringModelId) {
       const errorMessage = "Missing cached scoring model. Call /api/scoring/model first.";
-      await db
-        .update(searchCandidates)
-        .set({
-          scoringError: errorMessage,
-          scoringErrorAt: new Date(),
-          scoringUpdatedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(searchCandidates.id, searchCandidateId));
+      await recordScoringError(errorMessage);
       return NextResponse.json({ success: false, error: errorMessage }, { status: 409 });
     }
 
@@ -231,15 +251,7 @@ export async function POST(request: Request) {
     }
 
     if (matchScore === undefined || matchScore === null) {
-      await db
-        .update(searchCandidates)
-        .set({
-          scoringError: lastError ?? "Scoring failed",
-          scoringErrorAt: new Date(),
-          scoringUpdatedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(searchCandidates.id, searchCandidateId));
+      await recordScoringError(lastError ?? "Scoring failed");
       return NextResponse.json({ success: false, error: lastError ?? "Scoring failed" });
     }
 
@@ -260,17 +272,11 @@ export async function POST(request: Request) {
       })
       .where(eq(searchCandidates.id, searchCandidateId));
 
-    // Count how many are now scored for this search
-    const scoredCandidates = await db.query.searchCandidates.findMany({
-      where: eq(searchCandidates.searchId, searchId),
-      columns: { matchScore: true },
-    });
-    const scored = scoredCandidates.filter(c => c.matchScore !== null).length;
+    const { scored, errors } = await getScoringCounts();
 
     console.log(`[Scoring] Scored ${candidateId}: ${matchScore} (${scored}/${total})`);
 
     // Emit progress event
-    const channel = `search:${searchId}`;
     await realtime.channel(channel).emit("scoring.progress", {
       candidateId,
       searchCandidateId,
@@ -280,12 +286,12 @@ export async function POST(request: Request) {
       scoringResult: result, // Include full scoring result for immediate UI update
     });
 
-    // Check if all candidates are scored
-    if (scored >= total) {
-      console.log(`[Scoring] All candidates scored for search ${searchId}`);
+    // Check if all candidates are scored or errored
+    if (total > 0 && scored + errors >= total) {
+      console.log(`[Scoring] All candidates scored (with ${errors} errors) for search ${searchId}`);
       await realtime.channel(channel).emit("scoring.completed", {
         scored,
-        errors: total - scored,
+        errors,
       });
     }
 

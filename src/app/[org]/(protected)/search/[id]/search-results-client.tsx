@@ -60,6 +60,7 @@ interface SearchResultsClientProps {
       total: number;
       scored: number;
       unscored: number;
+      errors?: number;
       isScoringComplete: boolean;
       excellent: number;
       good: number;
@@ -90,6 +91,7 @@ interface SearchProgress {
   total: number;
   scored: number;
   unscored: number;
+  errors?: number;
   isScoringComplete: boolean;
   excellent: number;
   good: number;
@@ -272,7 +274,8 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
     // Update progress in cache
     queryClient.setQueryData(searchCandidatesKeys.progress(search.id), (old: SearchProgress | undefined) => {
       if (!old) return old;
-      return { ...old, scored: data.scored, unscored: data.total - data.scored };
+      const errors = old.errors ?? 0;
+      return { ...old, scored: data.scored, unscored: Math.max(data.total - data.scored - errors, 0) };
     });
   }, [queryClient, search.id, candidatesQueryKey]);
 

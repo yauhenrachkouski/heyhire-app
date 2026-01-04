@@ -848,6 +848,9 @@ export async function getSearchProgress(searchId: string) {
       .select({
         total: count(),
         scored: count(searchCandidates.matchScore),
+        errors: count(
+          sql`CASE WHEN ${searchCandidates.matchScore} IS NULL AND ${searchCandidates.scoringError} IS NOT NULL THEN 1 END`
+        ),
         // Cumulative counts to match filter behavior (70+ includes 80+, etc.)
         excellent: count(sql`CASE WHEN ${searchCandidates.matchScore} >= 80 THEN 1 END`),
         good: count(sql`CASE WHEN ${searchCandidates.matchScore} >= 70 THEN 1 END`),
@@ -864,12 +867,14 @@ export async function getSearchProgress(searchId: string) {
   const result = countResult[0];
   const total = result?.total || 0;
   const scored = result?.scored || 0;
-  const unscored = total - scored;
+  const errors = result?.errors || 0;
+  const unscored = Math.max(total - scored - errors, 0);
 
   return {
     total,
     scored,
     unscored,
+    errors,
     excellent: result?.excellent || 0,
     good: result?.good || 0,
     fair: result?.fair || 0,
