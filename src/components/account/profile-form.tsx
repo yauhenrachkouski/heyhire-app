@@ -2,8 +2,11 @@
 
 import { log } from "@/lib/axiom/client-log";
 
+const LOG_SOURCE = "components/account/profile-form";
+
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import posthog from 'posthog-js'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -25,6 +28,7 @@ interface ProfileFormProps {
 
 export function ProfileForm({ user }: ProfileFormProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [userName, setUserName] = useState(user.name)
   const lastSavedUserNameRef = useRef(user.name)
@@ -62,7 +66,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
         toast.error(result.error || 'Failed to update profile')
       }
     } catch (err) {
-      log.error("ProfileForm", "Profile update error", { error: err })
+      log.error(LOG_SOURCE, "Profile update error", { error: err })
       toast.error('Failed to update profile')
     } finally {
       setIsLoading(false)
@@ -105,12 +109,14 @@ export function ProfileForm({ user }: ProfileFormProps) {
       if (result.success && result.imageUrl) {
         setUserImage(result.imageUrl)
         toast.success('Avatar uploaded successfully')
+        // Invalidate session to update sidebar avatar via TanStack Query
+        await queryClient.invalidateQueries({ queryKey: ['session'] })
         router.refresh()
       } else {
         toast.error(result.error || 'Failed to upload avatar')
       }
     } catch (err) {
-      log.error("ProfileForm", "Avatar upload error", { error: err })
+      log.error(LOG_SOURCE, "Avatar upload error", { error: err })
       toast.error('Failed to upload avatar')
     } finally {
       setIsUploadingAvatar(false)
@@ -136,12 +142,14 @@ export function ProfileForm({ user }: ProfileFormProps) {
       if (result.success) {
         setUserImage('')
         toast.success('Avatar removed successfully')
+        // Invalidate session to update sidebar avatar via TanStack Query
+        await queryClient.invalidateQueries({ queryKey: ['session'] })
         router.refresh()
       } else {
         toast.error(result.error || 'Failed to remove avatar')
       }
     } catch (err) {
-      log.error("ProfileForm", "Avatar removal error", { error: err })
+      log.error(LOG_SOURCE, "Avatar removal error", { error: err })
       toast.error('Failed to remove avatar')
     } finally {
       setIsUploadingAvatar(false)

@@ -2,6 +2,8 @@
 
 import { log } from "@/lib/axiom/server-log";
 
+const LOG_SOURCE = "actions/invitations";
+
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { getErrorMessage } from "@/lib/handle-error";
@@ -59,7 +61,7 @@ export async function inviteMember(input: InviteMemberInput) {
       message: `Invitation sent to ${validatedInput.email}`,
     };
   } catch (error) {
-    log.error("Invitations", "Error inviting member", { error });
+    log.error(LOG_SOURCE, "invite.error", { error });
     return {
       success: false,
       error: getErrorMessage(error),
@@ -82,7 +84,7 @@ export async function getInvitations(organizationId?: string) {
       data: invitations || [],
     };
   } catch (error) {
-    log.error("Invitations", "Error fetching invitations", { error });
+    log.error(LOG_SOURCE, "fetch.error", { error });
     return {
       success: false,
       error: getErrorMessage(error),
@@ -112,7 +114,7 @@ export async function cancelInvitation(invitationId: string) {
       message: "Invitation canceled successfully",
     };
   } catch (error) {
-    log.error("Invitations", "Error canceling invitation", { error });
+    log.error(LOG_SOURCE, "cancel.error", { error });
     return {
       success: false,
       error: getErrorMessage(error),

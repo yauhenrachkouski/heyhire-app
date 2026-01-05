@@ -7,6 +7,8 @@ import heyhireLogo from '@/assets/heyhire_logo.svg'
 import { log } from "@/lib/axiom/server-log";
 import { trackServerEvent } from "@/lib/posthog/track";
 
+const LOG_SOURCE = "app/onboarding";
+
 const fetchCompanySuggestions = async (domain: string): Promise<string | null> => {
   try {
     const response = await fetch(`https://autocomplete.clearbit.com/v1/companies/suggest?query=${domain}`)
@@ -23,7 +25,7 @@ const fetchCompanySuggestions = async (domain: string): Promise<string | null> =
     
     return sorted[0]?.name || null
   } catch (e) {
-    log.error("OnboardingPage", "Failed to fetch company suggestions", { error: e })
+    log.error(LOG_SOURCE, "Failed to fetch company suggestions", { error: e })
     return null
   }
 }
@@ -33,7 +35,7 @@ const validateFavicon = async (url: string): Promise<boolean> => {
     const response = await fetch(url, { method: 'HEAD' })
     return response.ok
   } catch (e) {
-    log.error("OnboardingPage", "Failed to validate favicon", { error: e })
+    log.error(LOG_SOURCE, "Failed to validate favicon", { error: e })
     return false
   }
 }

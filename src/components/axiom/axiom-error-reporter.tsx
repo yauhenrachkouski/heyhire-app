@@ -3,10 +3,12 @@
 import { useEffect } from "react";
 import { log } from "@/lib/axiom/client-log";
 
+const LOG_SOURCE = "components/error-reporter";
+
 export function AxiomErrorReporter() {
   useEffect(() => {
     const handleError = (event: ErrorEvent) => {
-      log.error("AxiomErrorReporter", "Unhandled error", {
+      log.error(LOG_SOURCE, "unhandled_error", {
         message: event.message,
         filename: event.filename,
         lineno: event.lineno,
@@ -17,9 +19,9 @@ export function AxiomErrorReporter() {
 
     const handleRejection = (event: PromiseRejectionEvent) => {
       if (event.reason instanceof Error) {
-        log.error("AxiomErrorReporter", "Unhandled promise rejection", { error: event.reason });
+        log.error(LOG_SOURCE, "unhandled_rejection", { error: event.reason });
       } else {
-        log.error("AxiomErrorReporter", "Unhandled promise rejection", { reason: event.reason });
+        log.error(LOG_SOURCE, "unhandled_rejection", { reason: event.reason });
       }
     };
 

@@ -2,6 +2,8 @@
 
 import { log } from "@/lib/axiom/client-log";
 
+const LOG_SOURCE = "components/auth/onboarding-form";
+
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -68,7 +70,7 @@ export function OnboardingForm({
     try {
       const orgName = organizationName.trim() || 'Default Organization'
       
-      log.info("OnboardingForm", "Submitting organization creation", {
+      log.info(LOG_SOURCE, "Submitting organization creation", {
         orgName,
         size: organizationSize,
         logo: initialLogo,
@@ -82,7 +84,7 @@ export function OnboardingForm({
         googleLink: googleLink,
       })
 
-      log.info("OnboardingForm", "Organization creation result", { result })
+      log.info(LOG_SOURCE, "Organization creation result", { result })
 
       if (!result.success) {
         throw new Error(result.error || 'Failed to create organization')
@@ -92,7 +94,7 @@ export function OnboardingForm({
         try {
           await addDemoWorkspaceForCurrentUser()
         } catch (demoError) {
-          log.warn("OnboardingForm", "Failed to add demo workspace", { error: demoError })
+          log.warn(LOG_SOURCE, "Failed to add demo workspace", { error: demoError })
         }
       }
 
@@ -104,12 +106,12 @@ export function OnboardingForm({
       })
 
       toast.success('Onboarding completed successfully!')
-      log.info("OnboardingForm", "Redirecting to /subscribe")
+      log.info(LOG_SOURCE, "Redirecting to /subscribe")
       await new Promise(resolve => setTimeout(resolve, 500))
       router.refresh()
       router.push('/paywall')
     } catch (err: any) {
-      log.error("OnboardingForm", "Organization creation error", { error: err })
+      log.error(LOG_SOURCE, "Organization creation error", { error: err })
       setError(err?.message || 'Failed to create organization')
       toast.error('Failed to create organization. Please try again.')
     } finally {
@@ -120,14 +122,14 @@ export function OnboardingForm({
   const handleSkip = async () => {
     setIsLoading(true)
     try {
-      log.info("OnboardingForm", "Creating organization with predefined name", {
+      log.info(LOG_SOURCE, "Creating organization with predefined name", {
         organizationName: initialOrganizationName,
       })
       const result = await createOrganizationWithSetup({
         name: initialOrganizationName,
       })
       
-      log.info("OnboardingForm", "Organization creation result", { result })
+      log.info(LOG_SOURCE, "Organization creation result", { result })
       
       if (result.error) {
         throw new Error(result.error)
@@ -137,7 +139,7 @@ export function OnboardingForm({
         try {
           await addDemoWorkspaceForCurrentUser()
         } catch (demoError) {
-          log.warn("OnboardingForm", "Failed to add demo workspace", { error: demoError })
+          log.warn(LOG_SOURCE, "Failed to add demo workspace", { error: demoError })
         }
       }
 
@@ -149,11 +151,11 @@ export function OnboardingForm({
       })
 
       toast.success('Organization created!')
-      log.info("OnboardingForm", "Redirecting to /paywall")
+      log.info(LOG_SOURCE, "Redirecting to /paywall")
       router.refresh()
       router.push('/paywall')
     } catch (err: any) {
-      log.error("OnboardingForm", "Failed to create organization", { error: err })
+      log.error(LOG_SOURCE, "Failed to create organization", { error: err })
       toast.error('Failed to create organization. Please try again.')
     } finally {
       setIsLoading(false)

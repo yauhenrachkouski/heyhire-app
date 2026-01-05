@@ -2,6 +2,8 @@
 
 import { log } from "@/lib/axiom/client-log";
 
+const LOG_SOURCE = "providers/sidebar";
+
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { useEffect, useState } from "react"
 
@@ -16,7 +18,7 @@ export function PersistentSidebarProvider({ children }: { children: React.ReactN
         setOpen(saved === 'true')
       }
     } catch (error) {
-      log.warn("SidebarProvider", "Error reading sidebar state", { error })
+      log.warn(LOG_SOURCE, "read_state.error", { error })
     } finally {
       setHydrated(true)
     }
@@ -28,7 +30,7 @@ export function PersistentSidebarProvider({ children }: { children: React.ReactN
       try {
         localStorage.setItem('sidebar_state', String(newOpen))
       } catch (error) {
-        log.warn("SidebarProvider", "Error saving sidebar state", { error })
+        log.warn(LOG_SOURCE, "save_state.error", { error })
       }
     }
   }

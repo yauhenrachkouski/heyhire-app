@@ -167,17 +167,16 @@ export function InlineFilters({
       {/* Showing count - always visible when we have data */}
       {(showingCount !== undefined || totalCount !== undefined) && (
         <div className="text-sm text-muted-foreground flex items-center gap-1">
-          <span>Showing</span>
           {isLoadingResults ? (
             <span className="inline-flex items-center gap-1">
               <span className="h-4 w-6 bg-muted animate-pulse rounded" />
-              <span>of</span>
+              <span>/</span>
               <span className="h-4 w-8 bg-muted animate-pulse rounded" />
             </span>
           ) : (
             <>
               <span className="font-medium text-foreground tabular-nums">{showingCount ?? 0}</span>
-              <span>of</span>
+              <span>/</span>
               <span className="font-medium text-foreground tabular-nums">{totalCount ?? 0}</span>
             </>
           )}
@@ -191,18 +190,18 @@ export function InlineFilters({
           Score
         </span>
         <TooltipProvider>
-          <ToggleGroup 
+          <ToggleGroup
             id="score-toggle-group"
-            type="single" 
-            value={getSelectValue()} 
+            type="single"
+            value={getSelectValue()}
             onValueChange={handlePresetChange}
             variant="outline"
             className="justify-start"
           >
             {presets.map((preset) => (
-              <Tooltip key={preset.value} delayDuration={300}>
-                <TooltipTrigger asChild>
-                  <ToggleGroupItem value={preset.value} className={toggleItemClass}>
+              <ToggleGroupItem key={preset.value} value={preset.value} className={toggleItemClass}>
+                <Tooltip delayDuration={300}>
+                  <TooltipTrigger asChild>
                     <div className="flex items-center gap-2">
                       <span>{preset.label}</span>
                       {/* Show skeleton badge while loading counts, actual badge otherwise */}
@@ -219,12 +218,12 @@ export function InlineFilters({
                         ) : null
                       )}
                     </div>
-                  </ToggleGroupItem>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">
-                  {preset.tooltip}
-                </TooltipContent>
-              </Tooltip>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    {preset.tooltip}
+                  </TooltipContent>
+                </Tooltip>
+              </ToggleGroupItem>
             ))}
           </ToggleGroup>
         </TooltipProvider>

@@ -1,6 +1,9 @@
 "use client";
 
 import { log } from "@/lib/axiom/client-log";
+
+const LOG_SOURCE = "app/search";
+
 import { useState } from "react";
 import posthog from 'posthog-js';
 import { toast } from "sonner";
@@ -67,7 +70,7 @@ export function SearchClient({}: SearchClientProps) {
       }
 
       const searchId = saveResult.data.id;
-      log.info("SearchClient", "Search saved", { searchId });
+      log.info(LOG_SOURCE, "Search saved", { searchId });
 
       // Ensure sidebar recent searches list updates immediately
       const optimisticName = sourcingCriteria?.search_name?.trim() || "Untitled Search";
@@ -116,7 +119,7 @@ export function SearchClient({}: SearchClientProps) {
       }
 
       // Trigger the QStash workflow for reliable background processing
-      log.info("SearchClient", "Triggering sourcing workflow");
+      log.info(LOG_SOURCE, "Triggering sourcing workflow");
 
       const workflowResult = await triggerSourcingWorkflow(
         queryText,
@@ -128,7 +131,7 @@ export function SearchClient({}: SearchClientProps) {
         throw new Error(workflowResult.error || "Failed to start search workflow");
       }
 
-      log.info("SearchClient", "Workflow triggered", {
+      log.info(LOG_SOURCE, "Workflow triggered", {
         workflowRunId: workflowResult.workflowRunId,
       });
 
@@ -144,12 +147,12 @@ export function SearchClient({}: SearchClientProps) {
 
       // Navigate to results page immediately
       // Don't refresh before push to avoid race conditions
-      log.info("SearchClient", "Redirecting to search results", {
+      log.info(LOG_SOURCE, "Redirecting to search results", {
         path: `/${activeOrg.id}/search/${searchId}`,
       });
       router.push(`/${activeOrg.id}/search/${searchId}`);
     } catch (error) {
-      log.error("SearchClient", "Search error", { error });
+      log.error(LOG_SOURCE, "Search error", { error });
       const errorMessage =
         error instanceof Error ? error.message : "An unexpected error occurred";
 

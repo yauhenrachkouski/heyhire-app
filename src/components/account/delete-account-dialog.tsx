@@ -2,6 +2,8 @@
 
 import { log } from "@/lib/axiom/client-log";
 
+const LOG_SOURCE = "components/account/delete-account-dialog";
+
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -50,7 +52,7 @@ export function DeleteAccountDialog({ userEmail }: DeleteAccountDialogProps) {
         toast.error(result.error || 'Failed to delete account')
       }
     } catch (err) {
-      log.error("DeleteAccountDialog", "Delete account error", { error: err })
+      log.error(LOG_SOURCE, "Delete account error", { error: err })
       toast.error('Failed to delete account')
     } finally {
       setIsDeleting(false)

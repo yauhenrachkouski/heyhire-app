@@ -2,6 +2,8 @@
 
 import { log, logWithContext } from "@/lib/axiom/server-log";
 
+const LOG_SOURCE = "actions/account";
+
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/lib/auth'
@@ -41,7 +43,7 @@ export async function updateUserProfile(data: {
 
     return { success: true }
   } catch (err) {
-    log.error("Account", "Failed to update user profile", { userId, error: err })
+    log.error(LOG_SOURCE, "update_profile.error", { userId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to update profile'
@@ -88,9 +90,14 @@ export async function uploadAvatar(formData: FormData) {
       .set({ image: imageUrl })
       .where(eq(user.id, session.user.id))
 
+    // Revalidate layout to update sidebar avatar
+    if (session.session.activeOrganizationId) {
+      revalidatePath(`/${session.session.activeOrganizationId}`, 'layout')
+    }
+
     return { success: true, imageUrl }
   } catch (err) {
-    log.error("Account", "Failed to upload avatar", { userId, error: err })
+    log.error(LOG_SOURCE, "upload_avatar.error", { userId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to upload avatar'
@@ -116,9 +123,14 @@ export async function removeAvatar() {
       .set({ image: null })
       .where(eq(user.id, session.user.id))
 
+    // Revalidate layout to update sidebar avatar
+    if (session.session.activeOrganizationId) {
+      revalidatePath(`/${session.session.activeOrganizationId}`, 'layout')
+    }
+
     return { success: true }
   } catch (err) {
-    log.error("Account", "Failed to remove avatar", { userId, error: err })
+    log.error(LOG_SOURCE, "remove_avatar.error", { userId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to remove avatar'
@@ -159,7 +171,7 @@ export async function getOrganizationMembership(organizationId: string) {
       }
     }
   } catch (err) {
-    log.error("Account", "Failed to get organization membership", { userId, organizationId, error: err })
+    log.error(LOG_SOURCE, "get_membership.error", { userId, organizationId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to get membership'
@@ -225,7 +237,7 @@ export async function updateOrganization(data: {
 
     return { success: true }
   } catch (err) {
-    log.error("Account", "Failed to update organization", { userId, organizationId: data.organizationId, error: err })
+    log.error(LOG_SOURCE, "update_org.error", { userId, organizationId: data.organizationId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to update organization'
@@ -259,7 +271,7 @@ export async function getUserAccounts() {
       }))
     }
   } catch (err) {
-    log.error("Account", "Failed to get user accounts", { userId, error: err })
+    log.error(LOG_SOURCE, "get_accounts.error", { userId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to get accounts',
@@ -290,7 +302,7 @@ export async function unlinkAccount(accountId: string) {
 
     return { success: true }
   } catch (err) {
-    log.error("Account", "Failed to unlink account", { userId, accountId, error: err })
+    log.error(LOG_SOURCE, "unlink.error", { userId, accountId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to unlink account'
@@ -322,7 +334,7 @@ export async function softDeleteAccount() {
         react: emailContent,
       })
     } catch (e) {
-      log.warn("Account", "Failed to send account deleted email", { userId, error: e })
+      log.warn(LOG_SOURCE, "deleted_email.failed", { userId, error: e })
     }
 
     // Soft delete by setting a deletedAt timestamp
@@ -342,7 +354,7 @@ export async function softDeleteAccount() {
 
     return { success: true }
   } catch (err) {
-    log.error("Account", "Failed to delete account", { userId, error: err })
+    log.error(LOG_SOURCE, "delete.error", { userId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to delete account'
@@ -367,12 +379,12 @@ export async function createOrganizationWithSetup(data: {
     })
 
     if (!session?.user) {
-      log.error("CreateOrganizationWithSetup", "No authenticated user")
+      log.error(LOG_SOURCE, "create_org.no_auth")
       return { success: false, error: 'Not authenticated' }
     }
 
     userId = session.user.id;
-    const ctxLog = logWithContext("CreateOrganizationWithSetup", { userId });
+    const ctxLog = logWithContext(LOG_SOURCE, { userId });
 
     ctxLog.info("Starting organization creation", {
       name: data.name,
@@ -447,7 +459,7 @@ export async function createOrganizationWithSetup(data: {
       }
     }
   } catch (err) {
-    log.error("CreateOrganizationWithSetup", "Error", { userId, error: err })
+    log.error(LOG_SOURCE, "create_org.error", { userId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to create organization'
@@ -518,7 +530,7 @@ export async function createDefaultOrganization() {
 
     return { success: true, organizationId }
   } catch (err) {
-    log.error("Account", "Failed to create default organization", { userId, error: err })
+    log.error(LOG_SOURCE, "create_default_org.error", { userId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to create default organization'

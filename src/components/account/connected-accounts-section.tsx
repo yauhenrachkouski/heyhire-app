@@ -2,6 +2,8 @@
 
 import { log } from "@/lib/axiom/client-log";
 
+const LOG_SOURCE = "components/account/connected-accounts-section";
+
 import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -42,7 +44,7 @@ export function ConnectedAccountsSection({ accounts: initialAccounts }: Connecte
         toast.error(result.error || 'Failed to disconnect account')
       }
     } catch (err) {
-      log.error("ConnectedAccountsSection", "Unlink account error", { error: err })
+      log.error(LOG_SOURCE, "Unlink account error", { error: err })
       toast.error('Failed to disconnect account')
     } finally {
       setUnlinkingId(null)
@@ -57,7 +59,7 @@ export function ConnectedAccountsSection({ accounts: initialAccounts }: Connecte
         callbackURL: '/account',
       })
     } catch (err) {
-      log.error("ConnectedAccountsSection", "Google connect error", { error: err })
+      log.error(LOG_SOURCE, "Google connect error", { error: err })
       toast.error('Failed to connect Google account')
       setIsConnecting(false)
     }

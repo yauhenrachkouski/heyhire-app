@@ -2,6 +2,8 @@
 
 import { log } from "@/lib/axiom/client-log";
 
+const LOG_SOURCE = "components/account/organization-form";
+
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -78,7 +80,7 @@ export function OrganizationForm({ organization }: OrganizationFormProps) {
         toast.error(result.error || 'Failed to update organization')
       }
     } catch (err) {
-      log.error("OrganizationForm", "Organization update error", { error: err })
+      log.error(LOG_SOURCE, "Organization update error", { error: err })
       toast.error('Failed to update organization')
     } finally {
       setIsLoading(false)

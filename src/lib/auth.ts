@@ -12,16 +12,14 @@ import { eq, and } from "drizzle-orm";
 import { trackServerEvent } from "@/lib/posthog/track";
 import { getPostHogServer } from "@/lib/posthog/posthog-server";
 import { handleStripeEvent } from "@/lib/stripe/webhooks";
-import { logger } from "@/lib/axiom/server";
+import { log } from "@/lib/axiom/server-log";
 import { InvitationAcceptedEmail, InvitationEmail, MagicLinkEmail, WelcomeEmail } from "@/emails";
 import { generateId } from "@/lib/id";
 import { ADMIN_ROLES } from "@/lib/roles";
 import { CREDIT_TYPES, getPlanCreditAllocation, getTrialCreditAllocation } from "@/lib/credits";
 import { PLAN_LIMITS } from "@/types/plans";
 
-
-
-const log = logger.with({ source: "auth" });
+const LOG_SOURCE = "auth";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -244,7 +242,7 @@ export const auth = betterAuth({
          },
          organizationHooks: {
             afterCreateOrganization: async ({ organization, user }) => {
-               log.info("Organization created", {
+               log.info(LOG_SOURCE, "Organization created", {
                   organizationId: organization.id,
                   organizationName: organization.name,
                   userEmail: user.email,
@@ -279,7 +277,7 @@ export const auth = betterAuth({
                });
             },
             afterCreateInvitation: async ({ invitation, inviter, organization }) => {
-               log.info("Invitation created", {
+               log.info(LOG_SOURCE, "Invitation created", {
                   invitationId: invitation.id,
                   invitedEmail: invitation.email,
                   organizationId: organization.id,
@@ -292,7 +290,7 @@ export const auth = betterAuth({
                });
             },
             afterAcceptInvitation: async ({ invitation, member, user, organization }) => {
-               log.info("Invitation accepted", {
+               log.info(LOG_SOURCE, "Invitation accepted", {
                   invitationId: invitation.id,
                   memberId: member.id,
                   organizationId: organization.id,
@@ -337,7 +335,7 @@ export const auth = betterAuth({
                }
             },
             afterRejectInvitation: async ({ invitation, user, organization }) => {
-               log.info("Invitation rejected", {
+               log.info(LOG_SOURCE, "Invitation rejected", {
                   invitationId: invitation.id,
                   organizationId: organization.id,
                   userEmail: user.email,
@@ -347,7 +345,7 @@ export const auth = betterAuth({
                });
             },
             afterCancelInvitation: async ({ invitation, cancelledBy, organization }) => {
-               log.info("Invitation canceled", {
+               log.info(LOG_SOURCE, "Invitation canceled", {
                   invitationId: invitation.id,
                   invitedEmail: invitation.email,
                   cancelledByEmail: cancelledBy.email,
@@ -542,7 +540,7 @@ export const auth = betterAuth({
                return memberRecord?.role ? ADMIN_ROLES.has(memberRecord.role) : false;
             },
             onSubscriptionComplete: async ({ subscription, plan }) => {
-               log.info("Stripe subscription activated", {
+               log.info(LOG_SOURCE, "Stripe subscription activated", {
                   stripeSubscriptionId: subscription.id,
                   planName: plan.name,
                });
@@ -631,7 +629,7 @@ export const auth = betterAuth({
             },
             onSubscriptionCancel: async ({ subscription }) => {
                const referenceId = subscription.referenceId;
-               log.info("Stripe subscription canceled", {
+               log.info(LOG_SOURCE, "Stripe subscription canceled", {
                   stripeSubscriptionId: subscription.id,
                   referenceId,
                });
@@ -701,7 +699,7 @@ export const auth = betterAuth({
                });
 
                if (userMember) {
-                  log.info("Auto-setting active org", {
+                  log.info(LOG_SOURCE, "Auto-setting active org", {
                      userId: session.userId,
                      organizationId: userMember.organizationId,
                   });

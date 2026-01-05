@@ -2,6 +2,8 @@
 
 import { log, logWithContext } from "@/lib/axiom/server-log";
 
+const LOG_SOURCE = "actions/candidates";
+
 import { db } from "@/db/drizzle";
 import { candidates, searchCandidates, search, searchCandidateStrategies, sourcingStrategies, creditTransactions } from "@/db/schema";
 import { eq, and, gte, lte, lt, gt, or, isNull, inArray, count, desc, asc, sql } from "drizzle-orm";
@@ -426,7 +428,7 @@ export async function getSearchCandidateById(searchCandidateId: string) {
       }
     };
   } catch (error) {
-    log.error("Candidates", "Error fetching search candidate", { error });
+    log.error(LOG_SOURCE, "get_search_candidate.error", { error });
     return { success: false, error: "Failed to fetch candidate" };
   }
 }
@@ -448,7 +450,7 @@ export async function getCandidatesForSearch(
     includeTotalCount?: boolean;
   }
 ) {
-  log.info("Candidates", "Fetching candidates for search", { searchId, options });
+  log.info(LOG_SOURCE, "fetch.started", { searchId, options });
 
   await requireSearchReadAccess(searchId);
 
@@ -738,7 +740,7 @@ export async function getCandidatesForSearch(
     isRevealed: revealedCandidateIds.has(result.candidateId)
   }));
 
-  log.info("Candidates", "Found candidates", { count: enrichedResults.length, total });
+  log.info(LOG_SOURCE, "fetch.found", { count: enrichedResults.length, total });
   
   return {
     data: enrichedResults,
@@ -759,7 +761,7 @@ export async function addCandidateToSearch(
   candidateId: string,
   sourceProvider: string
 ) {
-  log.info("Candidates", "Adding candidate to search", { searchId, candidateId, sourceProvider });
+  log.info(LOG_SOURCE, "add.started", { searchId, candidateId, sourceProvider });
 
   const searchCandidateId = generateId();
   
@@ -771,7 +773,7 @@ export async function addCandidateToSearch(
     status: "new",
   });
 
-  log.info("Candidates", "Created search candidate", { searchCandidateId });
+  log.info(LOG_SOURCE, "add.created", { searchCandidateId });
   return { searchCandidateId };
 }
 
@@ -783,7 +785,7 @@ export async function updateMatchScore(
   score: number,
   notes?: string
 ) {
-  log.info("Candidates", "Updating match score", { searchCandidateId, score });
+  log.info(LOG_SOURCE, "update_score", { searchCandidateId, score });
 
   const sc = await db.query.searchCandidates.findFirst({
     where: eq(searchCandidates.id, searchCandidateId),
@@ -814,7 +816,7 @@ export async function updateCandidateStatus(
   status: "new" | "reviewing" | "contacted" | "rejected" | "hired",
   notes?: string
 ) {
-  log.info("Candidates", "Updating candidate status", { searchCandidateId, status });
+  log.info(LOG_SOURCE, "update_status", { searchCandidateId, status });
 
   const sc = await db.query.searchCandidates.findFirst({
     where: eq(searchCandidates.id, searchCandidateId),

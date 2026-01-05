@@ -7,6 +7,8 @@ import { getMembers } from '@/actions/members'
 import { listShareLinks } from '@/actions/share-links'
 import { log } from "@/lib/axiom/server-log";
 
+const LOG_SOURCE = "app/organization";
+
 export default async function OrganizationSettingsPage() {
   // Fetch session data on the server
   const session = await auth.api.getSession({
@@ -43,7 +45,7 @@ export default async function OrganizationSettingsPage() {
           : currentOrganization.metadata
         size = metadata.size || ''
       } catch (e) {
-        log.error("OrganizationSettingsPage", "Failed to parse organization metadata", { error: e })
+        log.error(LOG_SOURCE, "Failed to parse organization metadata", { error: e })
       }
     }
 

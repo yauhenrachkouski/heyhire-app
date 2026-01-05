@@ -278,7 +278,7 @@ export async function addCredits(
       transaction: result,
     };
   } catch (error) {
-    log.error("Credits", "Error adding credits", { error });
+    log.error(LOG_SOURCE, "add_credits.error", { error });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to add credits",
@@ -367,7 +367,7 @@ export async function setCreditsBalance(params: {
       transaction: result ?? undefined,
     };
   } catch (error) {
-    log.error("Credits", "Error setting credit balance", { error });
+    log.error(LOG_SOURCE, "set_balance.error", { error });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to set credit balance",
@@ -490,7 +490,7 @@ export async function deductCredits(
       transaction: result,
     };
   } catch (error) {
-    log.error("Credits", "Error deducting credits", { error });
+    log.error(LOG_SOURCE, "deduct_credits.error", { error });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to deduct credits",

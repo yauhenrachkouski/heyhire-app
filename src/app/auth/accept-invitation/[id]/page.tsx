@@ -11,6 +11,8 @@ import * as schema from "@/db/schema";
 import { eq, and, gt } from "drizzle-orm";
 import { log } from "@/lib/axiom/server-log";
 
+const LOG_SOURCE = "app/auth/accept-invitation";
+
 interface AcceptInvitationPageProps {
   params: Promise<{
     id: string;
@@ -150,7 +152,7 @@ export default async function AcceptInvitationPage({
     // Redirect to organization page on success
     redirect(activeOrganization ? `/${activeOrganization.id}/organization?invitation=accepted` : "/");
   } catch (error: any) {
-    log.error("AcceptInvitationPage", "Error accepting invitation", { error });
+    log.error(LOG_SOURCE, "Error accepting invitation", { error });
 
     // Check if the error is specifically about wrong recipient
     const errorMessage = error?.message || error?.body?.message || '';

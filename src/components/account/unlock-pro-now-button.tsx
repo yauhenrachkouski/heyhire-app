@@ -2,6 +2,8 @@
 
 import { log } from "@/lib/axiom/client-log";
 
+const LOG_SOURCE = "components/account/unlock-pro-now-button";
+
 import { useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
 import { startProBillingNow } from "@/actions/stripe"
@@ -56,7 +58,7 @@ export function UnlockProNowButton({
           toast.error(result.error || "Failed to upgrade trial")
         }
       } catch (error) {
-        log.error("UnlockProNowButton", "Error upgrading trial", { error })
+        log.error(LOG_SOURCE, "Error upgrading trial", { error })
         toast.error("Failed to upgrade trial. Please try again.")
       }
     })

@@ -2,6 +2,8 @@
 
 import { log } from "@/lib/axiom/server-log";
 
+const LOG_SOURCE = "actions/subscription";
+
 import { getSessionWithOrg } from "@/lib/auth-helpers"
 import { db } from "@/db/drizzle"
 import { subscription } from "@/db/schema"
@@ -68,7 +70,7 @@ export async function isInTrialPeriod() {
       error: null as string | null,
     }
   } catch (error) {
-    log.error("Subscription", "Error checking trial period", { error })
+    log.error(LOG_SOURCE, "check_trial.error", { error })
     return {
       inTrial: false,
       error: error instanceof Error ? error.message : "Failed to check trial period",

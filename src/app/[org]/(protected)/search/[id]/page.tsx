@@ -4,6 +4,8 @@ import { SearchResultsClient } from "./search-results-client";
 import { getCandidatesForSearch, getSearchCandidateById, getSearchProgress } from "@/actions/candidates";
 import { log } from "@/lib/axiom/server-log";
 
+const LOG_SOURCE = "app/search/[id]";
+
 interface SearchPageProps {
   params: Promise<{ id: string }>;
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -15,12 +17,12 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
   const candidateParam = resolvedSearchParams.candidateId;
   const candidateId = Array.isArray(candidateParam) ? candidateParam[0] : candidateParam;
   
-  log.info("SearchPage", "Loading search", { searchId: id });
+  log.info(LOG_SOURCE, "Loading search", { searchId: id });
   
   const searchResult = await getSearchById(id);
   
   if (!searchResult.success || !searchResult.data) {
-    log.error("SearchPage", "Search not found", { searchId: id });
+    log.error(LOG_SOURCE, "Search not found", { searchId: id });
     notFound();
   }
   
@@ -36,7 +38,7 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
   let initialData;
   let initialCandidateDetail;
   try {
-      log.info("SearchPage", "Prefetching candidates");
+      log.info(LOG_SOURCE, "Prefetching candidates");
       const { data: candidatesData, pagination } = await getCandidatesForSearch(search.id, {
         scoreMin: scoreMin !== 0 ? scoreMin : undefined,
         scoreMax: scoreMax !== 100 ? scoreMax : undefined,
@@ -76,19 +78,19 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
         },
       }));
   } catch (error) {
-      log.error("SearchPage", "Error prefetching candidates", { error });
+      log.error(LOG_SOURCE, "Error prefetching candidates", { error });
   }
 
   if (candidateId) {
     try {
-      log.info("SearchPage", "Prefetching candidate details", { candidateId });
+      log.info(LOG_SOURCE, "Prefetching candidate details", { candidateId });
       const result = await getSearchCandidateById(candidateId);
       initialCandidateDetail = JSON.parse(JSON.stringify({
         candidateId,
         result,
       }));
     } catch (error) {
-      log.error("SearchPage", "Error prefetching candidate details", { error });
+      log.error(LOG_SOURCE, "Error prefetching candidate details", { error });
     }
   }
   

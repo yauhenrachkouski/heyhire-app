@@ -1,6 +1,9 @@
 "use client";
 
 import { log } from "@/lib/axiom/client-log";
+
+const LOG_SOURCE = "app/[org]/(protected)/members/invite-member-dialog";
+
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -64,7 +67,7 @@ export function InviteMemberDialog({
         });
       }
     } catch (error) {
-      log.error("InviteMemberDialog", "Error sending invitation", { error });
+      log.error(LOG_SOURCE, "Error sending invitation", { error });
       toast.error("Error", {
         description: "An unexpected error occurred",
       });

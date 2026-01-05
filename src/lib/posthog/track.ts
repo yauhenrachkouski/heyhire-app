@@ -1,6 +1,8 @@
 import { getPostHogServer } from "./posthog-server";
 import { log } from "@/lib/axiom/server-log";
 
+const LOG_SOURCE = "lib/posthog";
+
 /**
  * Server-side PostHog event tracking.
  * Always requires explicit userId and organizationId - no fallbacks.
@@ -28,7 +30,7 @@ export function trackServerEvent(
             },
         });
     } catch (e) {
-        log.error("PostHog", "Failed to capture event", { event, error: e });
+        log.error(LOG_SOURCE, "capture.error", { event, error: e });
     }
 }
 

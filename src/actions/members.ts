@@ -2,6 +2,8 @@
 
 import { log } from "@/lib/axiom/server-log";
 
+const LOG_SOURCE = "actions/members";
+
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { getErrorMessage } from "@/lib/handle-error";
@@ -103,7 +105,7 @@ export async function getMembers(input?: {
       total: combinedData.length,
     };
   } catch (error) {
-    log.error("Members", "Error fetching members", { error });
+    log.error(LOG_SOURCE, "fetch_members.error", { error });
     throw new Error(getErrorMessage(error));
   }
 }
@@ -168,7 +170,7 @@ export async function removeMember(memberIdOrEmail: string) {
         });
       }
     } catch (e) {
-      log.warn("Members", "Failed to send member removed email", { error: e });
+      log.warn(LOG_SOURCE, "removed_email.failed", { error: e });
     }
 
     return {
@@ -176,7 +178,7 @@ export async function removeMember(memberIdOrEmail: string) {
       message: "Member removed successfully",
     };
   } catch (error) {
-    log.error("Members", "Error removing member", { error });
+    log.error(LOG_SOURCE, "remove_member.error", { error });
     return {
       success: false,
       error: getErrorMessage(error),
@@ -202,7 +204,7 @@ export async function updateMemberRole(memberId: string, role: string) {
       message: "Member role updated successfully",
     };
   } catch (error) {
-    log.error("Members", "Error updating member role", { error });
+    log.error(LOG_SOURCE, "update_role.error", { error });
     return {
       success: false,
       error: getErrorMessage(error),
@@ -239,7 +241,7 @@ export async function updateMembers(input: { ids: string[]; role: string }) {
 
     const failures = results.filter((r) => r.status === "rejected");
     if (failures.length > 0) {
-      log.error("Members", "Some member updates failed", { failures });
+      log.error(LOG_SOURCE, "batch_update.partial_failure", { failures });
       return {
         success: false,
         error: `Failed to update ${failures.length} of ${input.ids.length} members`,
@@ -251,7 +253,7 @@ export async function updateMembers(input: { ids: string[]; role: string }) {
       message: `Successfully updated ${input.ids.length} members`,
     };
   } catch (error) {
-    log.error("Members", "Error updating members", { error });
+    log.error(LOG_SOURCE, "batch_update.error", { error });
     return {
       success: false,
       error: getErrorMessage(error),
@@ -326,7 +328,7 @@ export async function deleteMembers(input: { ids: string[] }) {
               });
             }
           } catch (e) {
-            log.warn("Members", "Failed to send member removed email", { error: e });
+            log.warn(LOG_SOURCE, "removed_email.failed", { error: e });
           }
         } catch {
           // If removeMember fails, try to cancel as invitation
@@ -342,7 +344,7 @@ export async function deleteMembers(input: { ids: string[] }) {
 
     const failures = results.filter((r) => r.status === "rejected");
     if (failures.length > 0) {
-      log.error("Members", "Some member deletions failed", { failures });
+      log.error(LOG_SOURCE, "batch_delete.partial_failure", { failures });
       return {
         success: false,
         error: `Failed to remove ${failures.length} of ${input.ids.length} members`,
@@ -354,7 +356,7 @@ export async function deleteMembers(input: { ids: string[] }) {
       message: `Successfully removed ${input.ids.length} members`,
     };
   } catch (error) {
-    log.error("Members", "Error deleting members", { error });
+    log.error(LOG_SOURCE, "batch_delete.error", { error });
     return {
       success: false,
       error: getErrorMessage(error),

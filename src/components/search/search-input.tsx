@@ -1,6 +1,7 @@
 "use client";
 
 import { log } from "@/lib/axiom/client-log";
+const LOG_SOURCE = "components/search/search-input";
 import { useState, useRef, useEffect, useCallback } from "react";
 import posthog from "posthog-js";
 import {
@@ -386,7 +387,7 @@ export function SearchInput({
       
       // If this is a stale result, ignore it
       if (searchQuery !== lastSentQueryRef.current) {
-        log.info("SearchInput", "Discarding stale parse result", { searchQuery });
+        log.info(LOG_SOURCE, "Discarding stale parse result", { searchQuery });
         return;
       }
 
@@ -426,7 +427,7 @@ export function SearchInput({
 
         setLastParsedQuery(searchQuery);
         
-        log.info("SearchInput", "Criteria parsed", { criteria: result.criteria });
+        log.info(LOG_SOURCE, "Criteria parsed", { criteria: result.criteria });
       } else {
         // ... rest of the error handling ...
         setParsedCriteria(null);
@@ -438,7 +439,7 @@ export function SearchInput({
         onCriteriaChange(null);
 
         const rawError = result.error || "Failed to parse query";
-        log.error("SearchInput", "Parse failed", { error: rawError });
+        log.error(LOG_SOURCE, "Parse failed", { error: rawError });
 
         let userMessage = rawError;
         if (/invalid json/i.test(rawError) || /output parsing/i.test(rawError)) {
@@ -459,7 +460,7 @@ export function SearchInput({
         toast.error(`Failed to parse: ${userMessage}`);
       }
     } catch (error) {
-      log.error("SearchInput", "Search error", { error });
+      log.error(LOG_SOURCE, "Search error", { error });
       setParsedCriteria(null);
       setActivePanel(null);
       setActiveGroup(null);
@@ -540,7 +541,7 @@ export function SearchInput({
         mediaRecorderRef.current = mediaRecorder;
         setIsRecording(true);
       } catch (error) {
-        log.error("SearchInput", "Microphone error", { error });
+        log.error(LOG_SOURCE, "Microphone error", { error });
         toast.error("Error", {
           description: "Failed to access microphone",
         });
@@ -592,7 +593,7 @@ export function SearchInput({
       setIsTooLong(false);
       await handleParse(transcribedText);
     } catch (error) {
-      log.error("SearchInput", "Transcription error", { error });
+      log.error(LOG_SOURCE, "Transcription error", { error });
       toast.error("Error", {
         description: "Failed to transcribe audio",
       });

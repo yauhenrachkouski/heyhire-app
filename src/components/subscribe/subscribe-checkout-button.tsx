@@ -1,6 +1,7 @@
 'use client'
 
 import { log } from "@/lib/axiom/client-log";
+const LOG_SOURCE = "components/subscribe/subscribe-checkout-button";
 
 import { useTransition } from "react"
 import { useRouter } from "next/navigation"
@@ -82,7 +83,7 @@ export function SubscribeCheckoutButton({
               resultAny?.data?.error
 
             if (errorMessage) {
-              log.error("SubscribeCheckoutButton", "subscription.upgrade error", { result: resultAny })
+              log.error(LOG_SOURCE, "subscription.upgrade error", { result: resultAny })
               toast.error(String(errorMessage))
               return
             }
@@ -90,7 +91,7 @@ export function SubscribeCheckoutButton({
             const session: any = resultAny?.data ?? resultAny
 
             if (!session?.url) {
-              log.error("SubscribeCheckoutButton", "subscription.upgrade missing url", { result: resultAny })
+              log.error(LOG_SOURCE, "subscription.upgrade missing url", { result: resultAny })
               toast.error("Failed to start checkout. Please try again.")
               return
             }
@@ -99,7 +100,7 @@ export function SubscribeCheckoutButton({
           } catch (e) {
             const message = e instanceof Error ? e.message : "Failed to start checkout"
 
-            log.error("SubscribeCheckoutButton", "subscription.upgrade threw", { error: e })
+            log.error(LOG_SOURCE, "subscription.upgrade threw", { error: e })
 
             if (message.includes("Not authenticated")) {
               router.push("/auth/signin")

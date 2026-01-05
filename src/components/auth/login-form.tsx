@@ -2,6 +2,8 @@
 
 import { log } from "@/lib/axiom/client-log";
 
+const LOG_SOURCE = "components/auth/login-form";
+
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -32,7 +34,7 @@ async function signInWithGoogle(callbackURL: string) {
       callbackURL,
     })
   } catch (err) {
-    log.error("LoginForm", "Google sign in error", { error: err })
+    log.error(LOG_SOURCE, "google_signin.error", { error: err })
   }
 }
 
