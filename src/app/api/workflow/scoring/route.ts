@@ -12,6 +12,8 @@ const qstash = new Client({
   token: process.env.QSTASH_TOKEN!,
 });
 
+const LOG_SOURCE = "api/workflow/scoring";
+
 // Default parallelism - how many candidates to score at once
 const DEFAULT_PARALLELISM = 5;
 
@@ -25,15 +27,16 @@ interface ScoringPayload {
  * This is triggered by the sourcing workflow after candidates are saved
  */
 export const POST = withAxiom(async (request: Request) => {
+  let searchId: string | undefined;
+
   try {
     const payload: ScoringPayload = await request.json();
-    const { searchId, parallelism = DEFAULT_PARALLELISM } = payload;
+    searchId = payload.searchId;
+    const { parallelism = DEFAULT_PARALLELISM } = payload;
 
     if (!searchId) {
       return NextResponse.json({ error: "Missing searchId" }, { status: 400 });
     }
-
-    log.info("Scoring", "Starting scoring for search", { searchId, parallelism });
 
     // Get search details
     const searchRecord = await db.query.search.findFirst({
@@ -41,7 +44,7 @@ export const POST = withAxiom(async (request: Request) => {
     });
 
     if (!searchRecord) {
-      log.error("Scoring", "Search not found", { searchId });
+      log.error(LOG_SOURCE, "scoring.search_not_found", { searchId });
       return NextResponse.json({ error: "Search not found" }, { status: 404 });
     }
 
@@ -64,11 +67,16 @@ export const POST = withAxiom(async (request: Request) => {
       },
     });
 
-    log.info("Scoring", "Found unscored candidates", { count: unscoredCandidates.length });
-
     if (unscoredCandidates.length === 0) {
       return NextResponse.json({ success: true, queued: 0 });
     }
+
+    // Log only when starting a scoring batch (meaningful event)
+    log.info(LOG_SOURCE, "scoring.batch_started", {
+      searchId,
+      candidateCount: unscoredCandidates.length,
+      parallelism,
+    });
 
     const channel = `search:${searchId}`;
 
@@ -83,8 +91,6 @@ export const POST = withAxiom(async (request: Request) => {
       "http://localhost:3000";
     const scoreEndpointUrl = `${baseUrl}/api/scoring/candidate`;
     const total = unscoredCandidates.filter(sc => sc.candidate).length;
-
-    log.info("Scoring", "Publishing to scoring endpoint", { url: scoreEndpointUrl });
 
     // Publish individual messages to QStash with delays for parallelism control
     let queued = 0;
@@ -116,15 +122,16 @@ export const POST = withAxiom(async (request: Request) => {
     // Wait for all publish operations to complete
     await Promise.all(publishPromises);
 
-    log.info("Scoring", "Total queued candidates", { queued });
-
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       queued,
       searchId,
     });
   } catch (error) {
-    log.error("Scoring", "Error starting scoring", { error });
+    log.error(LOG_SOURCE, "scoring.batch_error", {
+      searchId,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }

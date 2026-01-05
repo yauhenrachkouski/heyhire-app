@@ -27,6 +27,9 @@ import { useIsReadOnly } from "@/hooks/use-is-read-only";
 import { SearchRightSidebar } from "@/components/search/search-right-sidebar";
 import { searchCandidatesKeys } from "@/lib/query-keys/search";
 
+// Logging source constant for consistent filtering
+const LOG_SOURCE = "SearchResults";
+
 // Statuses that mean the SOURCING is still actively running (not scoring)
 const SOURCING_ACTIVE_STATUSES = ["created", "processing", "pending", "generating", "generated", "executing", "polling"];
 
@@ -100,13 +103,6 @@ interface SearchProgress {
 }
 
 export function SearchResultsClient({ search, initialData, initialCandidateDetail }: SearchResultsClientProps) {
-  log.info("SearchResultsClient", "Rendering search results", {
-    searchId: search.id,
-    hasInitialData: !!initialData,
-    candidateCount: initialData?.candidates?.length ?? 0,
-    ssrFilters: initialData?.ssrFilters,
-  });
-  
   const queryClient = useQueryClient();
 
   const { data: activeOrg } = useActiveOrganization();
@@ -134,8 +130,20 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
     ]);
   }, [setScoreMin, setScoreMax, setLimit, setSortBy]);
 
+  // Log search view once on mount (not on every re-render)
+  const hasLoggedViewRef = useRef(false);
   useEffect(() => {
-    log.info("SearchResultsClient", "Search changed", { searchId: search.id });
+    if (!hasLoggedViewRef.current) {
+      hasLoggedViewRef.current = true;
+      log.info(LOG_SOURCE, "search.viewed", {
+        searchId: search.id,
+        status: search.status,
+        candidateCount: initialData?.candidates?.length ?? 0,
+      });
+    }
+  }, [search.id, search.status, initialData?.candidates?.length]);
+
+  useEffect(() => {
     setSearchName(search.name);
   }, [search.id, search.name]);
 
@@ -155,14 +163,6 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
       sortBy === ssrFilters.sortBy
     : false;
   
-  // Debug: log filter matching on initial render
-  if (process.env.NODE_ENV === 'development' && ssrFilters) {
-    log.info("SearchResultsClient", "SSR filter match", {
-      filtersMatchSSR,
-      client: { scoreMin, scoreMax, limit, sortBy },
-      ssr: ssrFilters,
-    });
-  }
 
   // ========== TANSTACK QUERY: Progress (Global counts, independent of filters) ==========
   const progressQuery = useQuery<SearchProgress>({
@@ -190,11 +190,7 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   // This will only be used when filters match SSR state
   const [ssrInitialDataStructure] = useState(() => {
     if (!initialData) return undefined;
-    
-    log.info("SearchResultsClient", "Preparing SSR initial data structure", {
-      candidateCount: initialData.candidates.length,
-    });
-    
+
     return {
       pages: [{
         candidates: initialData.candidates,
@@ -212,21 +208,24 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   const candidatesQuery = useInfiniteQuery({
     queryKey: candidatesQueryKey,
     queryFn: async ({ pageParam = null }) => {
-      log.info("SearchResultsClient", "Fetching candidates", {
-        cursor: pageParam,
-        filters: { scoreMin, scoreMax, limit, sortBy },
-      });
       const url = new URL(`/api/search/${search.id}/candidates`, window.location.origin);
-      
+
       // Only send non-default filters to match SSR behavior
       if (scoreMin !== 0) url.searchParams.set('scoreMin', scoreMin.toString());
       if (scoreMax !== 100) url.searchParams.set('scoreMax', scoreMax.toString());
       url.searchParams.set('limit', limit.toString());
       url.searchParams.set('sortBy', sortBy);
       url.searchParams.set("cursor", pageParam ? String(pageParam) : "");
-      
+
       const response = await fetch(url.toString());
-      if (!response.ok) throw new Error('Failed to fetch candidates');
+      if (!response.ok) {
+        log.error(LOG_SOURCE, "candidates.fetch_failed", {
+          searchId: search.id,
+          status: response.status,
+          cursor: pageParam,
+        });
+        throw new Error('Failed to fetch candidates');
+      }
       return response.json();
     },
     initialPageParam: null,
@@ -240,7 +239,10 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
 
   // ========== Realtime handlers ==========
   const handleSearchCompleted = useCallback(async (candidatesCount: number) => {
-    log.info("SearchResultsClient", "Search completed", { candidatesCount });
+    log.info(LOG_SOURCE, "sourcing.completed", {
+      searchId: search.id,
+      candidatesCount,
+    });
 
     // Refresh progress for final counts (non-blocking)
     queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.progress(search.id) });
@@ -254,11 +256,14 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   }, [queryClient, search.id]);
 
   const handleSearchFailed = useCallback((errorMsg: string) => {
-    log.error("SearchResultsClient", "Search failed", { error: errorMsg });
-  }, []);
+    log.error(LOG_SOURCE, "sourcing.failed", {
+      searchId: search.id,
+      error: errorMsg,
+    });
+  }, [search.id]);
 
   const handleCandidatesAdded = useCallback((data: { count: number; total: number }) => {
-    log.info("SearchResultsClient", "Candidates added", { count: data.count, total: data.total });
+    // Debug level - high frequency event, not needed in production logs
 
     // Optimistically update progress counts without blocking refetch
     queryClient.setQueryData(searchCandidatesKeys.progress(search.id), (old: SearchProgress | undefined) => {
@@ -309,11 +314,8 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   }, [queryClient, search.id]);
 
   const handleScoringProgress = useCallback((data: { candidateId: string; searchCandidateId: string; score: number; scored: number; total: number; scoringResult?: any }) => {
-    log.info("SearchResultsClient", "Score update", {
-      searchCandidateId: data.searchCandidateId,
-      score: data.score,
-    });
-    
+    // No logging here - too noisy (fires for each candidate)
+    // Aggregate stats are logged in handleScoringCompleted
     updateCandidateScoreInCache(data);
 
     // Update progress in cache
@@ -325,14 +327,18 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   }, [queryClient, search.id, updateCandidateScoreInCache]);
 
   const handleScoringStarted = useCallback((data: { total: number }) => {
-    log.info("SearchResultsClient", "Scoring started", { total: data.total });
+    log.info(LOG_SOURCE, "scoring.started", {
+      searchId: search.id,
+      total: data.total,
+    });
     toast.loading(`Evaluating ${data.total} candidates...`, {
       id: "scoring-progress",
     });
-  }, []);
+  }, [search.id]);
 
   const handleScoringCompleted = useCallback((data: { scored: number; errors: number }) => {
-    log.info("SearchResultsClient", "Scoring completed", {
+    log.info(LOG_SOURCE, "scoring.completed", {
+      searchId: search.id,
       scored: data.scored,
       errors: data.errors,
     });
@@ -407,9 +413,6 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   const totalCount = progress?.total ?? 0;
 
   // Scoring state
-  const scoredCount = scoringState.isScoring ? scoringState.scored : (progress?.scored || 0);
-  const totalCandidates = scoringState.isScoring ? scoringState.total : (progress?.total || candidates.length);
-  const _isScoringComplete = progress?.isScoringComplete ?? (totalCandidates > 0 && scoredCount === totalCandidates);
   const isScoring = scoringState.isScoring;
 
   // Loading states

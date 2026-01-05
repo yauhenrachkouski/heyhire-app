@@ -5,6 +5,8 @@ import { useState, useCallback, useRef } from "react";
 import { useRealtime } from "@upstash/realtime/client";
 import type { RealtimeEvents } from "@/lib/realtime";
 
+const LOG_SOURCE = "SearchRealtime";
+
 interface SearchRealtimeState {
   status: string;
   progress: number;
@@ -82,16 +84,19 @@ export function useSearchRealtime({
     channels: shouldConnect ? [`search:${searchId}`] : [],
     events: ["status.updated", "progress.updated", "search.completed", "search.failed", "candidates.added", "scoring.started", "scoring.progress", "scoring.completed", "scoring.failed"],
     onData: useCallback((payload: RealtimePayload) => {
-      log.info("useSearchRealtime", "Event received", { event: payload.event });
-      
+      // Only log unexpected/important events, not every event
       // Search events
       if (payload.event === "status.updated") {
         const data = payload.data as { status: string; message: string; progress?: number };
-        
+
         // CRITICAL: Once we reach a terminal status, don't allow reverting to active
         // This prevents flickering back to loading state after completion
         if (hasReachedTerminalRef.current && SOURCING_ACTIVE_STATUSES.includes(data.status)) {
-          log.info("useSearchRealtime", "Ignoring stale active status after terminal", { status: data.status });
+          log.warn(LOG_SOURCE, "stale_status_ignored", {
+            searchId,
+            attemptedStatus: data.status,
+            reason: "terminal_already_reached",
+          });
           return;
         }
         
@@ -108,10 +113,10 @@ export function useSearchRealtime({
         }));
       } else if (payload.event === "progress.updated") {
         const data = payload.data as { progress: number; message: string };
-        
+
         // Don't update progress if we're in terminal state (prevents loader flicker)
         if (hasReachedTerminalRef.current) {
-          log.info("useSearchRealtime", "Ignoring progress update after terminal state");
+          // No logging - this is expected behavior, not an issue
           return;
         }
         

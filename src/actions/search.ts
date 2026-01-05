@@ -4,6 +4,8 @@ import { log, logWithContext } from "@/lib/axiom/server-log";
 
 import "server-only";
 
+const LOG_SOURCE = "actions/search";
+
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { getErrorMessage } from "@/lib/handle-error";
 import { type SourcingCriteria } from "@/types/search";
@@ -46,7 +48,7 @@ export async function updateSearchName(
     return { success: true };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    log.error("Search", "Error updating search name", { searchId, error: errorMessage });
+    log.error(LOG_SOURCE, "update_name.error", { searchId, error: errorMessage });
     return { success: false, error: errorMessage };
   }
 }
@@ -60,7 +62,7 @@ export async function saveSearch(
   userId: string,
   organizationId: string
 ): Promise<{ success: boolean; data?: { id: string }; error?: string }> {
-  const ctxLog = logWithContext("Search", { userId, organizationId });
+  const ctxLog = logWithContext(LOG_SOURCE, { userId, organizationId });
 
   try {
     const signedIn = await getSignedInUser();
@@ -129,7 +131,7 @@ export async function getRecentSearches(
   }>;
   error?: string;
 }> {
-  const ctxLog = logWithContext("Search", { organizationId });
+  const ctxLog = logWithContext(LOG_SOURCE, { organizationId });
 
   try {
     await requireOrganizationReadAccess(organizationId);
@@ -194,7 +196,7 @@ export async function searchSearchesByTitle(
   }>;
   error?: string;
 }> {
-  const ctxLog = logWithContext("Search", { organizationId });
+  const ctxLog = logWithContext(LOG_SOURCE, { organizationId });
 
   try {
     await requireOrganizationReadAccess(organizationId);
@@ -319,7 +321,7 @@ export async function getSearchById(
     };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    log.error("Search", "Error fetching search by ID", { searchId: id, error: errorMessage });
+    log.error(LOG_SOURCE, "get_by_id.error", { searchId: id, error: errorMessage });
     return {
       success: false,
       error: errorMessage,

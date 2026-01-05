@@ -5,14 +5,17 @@ import { NextRequest } from "next/server";
 
 export const dynamic = 'force-dynamic';
 
+const LOG_SOURCE = "api/search/candidates";
+
 export const GET = withAxiom(async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) => {
+  const { id: searchId } = await params;
+
   try {
-    const { id: searchId } = await params;
     const { searchParams } = new URL(req.url);
-    
+
     // Get filter parameters from query string
     const scoreMinParam = searchParams.get('scoreMin');
     const scoreMaxParam = searchParams.get('scoreMax');
@@ -20,9 +23,9 @@ export const GET = withAxiom(async (
     const limitParam = searchParams.get('limit');
     const sortByParam = searchParams.get('sortBy');
     const cursorParam = searchParams.get("cursor");
-    
+
     const options: { scoreMin?: number; scoreMax?: number; page?: number; limit?: number; sortBy?: string; cursorMode?: boolean; cursor?: string | null; includeTotalCount?: boolean } = {};
-    
+
     // Determine if we should fetch progress stats (only on first page load)
     const isFirstPage = cursorParam === null || cursorParam.length === 0;
 
@@ -50,16 +53,12 @@ export const GET = withAxiom(async (
     if (isFirstPage) {
         options.includeTotalCount = true;
     }
-    
-    log.info("API", "Fetching candidates for search", { searchId, options });
 
     // Fetch candidates with filters and pagination
     const { data: candidatesData, pagination } = await getCandidatesForSearch(searchId, options);
-    
+
     // Get scoring progress stats
     const scoringProgress = isFirstPage ? await getSearchProgress(searchId) : null;
-    
-    log.info("API", "Returning candidates", { count: candidatesData.length });
 
     return Response.json({
       candidates: candidatesData,
@@ -79,7 +78,6 @@ export const GET = withAxiom(async (
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    log.error("API", "Error fetching candidates", { error: errorMessage });
 
     const status =
       errorMessage === "Not authenticated"
@@ -89,6 +87,14 @@ export const GET = withAxiom(async (
           : errorMessage === "Search not found"
             ? 404
             : 500;
+
+    // Only log actual errors (5xx), not auth/permission issues
+    if (status >= 500) {
+      log.error(LOG_SOURCE, "candidates.fetch_error", {
+        searchId,
+        error: errorMessage,
+      });
+    }
 
     return Response.json({ error: errorMessage }, { status });
   }

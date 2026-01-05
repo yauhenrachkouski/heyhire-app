@@ -9,6 +9,8 @@ import { generateId } from "@/lib/id";
 import { log } from "@/lib/axiom/server-log";
 import { withAxiom } from "@/lib/axiom/server";
 
+const LOG_SOURCE = "api/scoring/candidate";
+
 const API_BASE_URL = "http://57.131.25.45";
 const MAX_SCORING_ATTEMPTS = 3;
 const SCORING_RETRY_BASE_DELAY_MS = 400;
@@ -44,21 +46,20 @@ export const POST = withAxiom(async (request: Request) => {
       });
       
       if (!isValid) {
-        log.error("Scoring", "Invalid QStash signature");
+        log.error(LOG_SOURCE, "scoring.invalid_signature", {});
         return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
       }
     }
-    
+
     // Parse the body
     const payload: CandidateScoringPayload = JSON.parse(body);
     const { searchId, searchCandidateId, candidateId, candidateData, total } = payload;
 
     if (!candidateId || !searchId) {
-      log.error("Scoring", "Missing required fields", { candidateId, searchId });
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    log.info("Scoring", "Scoring candidate", { candidateId, searchId });
+    // No per-candidate info logging - too noisy (fires 1000x per search)
 
     const requestId = `score_${generateId()}`;
 
@@ -67,7 +68,7 @@ export const POST = withAxiom(async (request: Request) => {
     });
 
     if (!searchRecord) {
-      log.error("Scoring", "Search not found", { searchId });
+      log.error(LOG_SOURCE, "scoring.search_not_found", { searchId, candidateId });
       return NextResponse.json({ success: false, error: "Search not found" }, { status: 404 });
     }
 
@@ -92,7 +93,8 @@ export const POST = withAxiom(async (request: Request) => {
     const maybeEmitScoringCompleted = async () => {
       const { scored, errors } = await getScoringCounts();
       if (total > 0 && scored + errors >= total) {
-        log.info("Scoring", "All candidates scored", { searchId, errors });
+        // Log completion (this is a meaningful aggregate event)
+        log.info(LOG_SOURCE, "scoring.all_completed", { searchId, scored, errors });
         await realtime.channel(channel).emit("scoring.completed", {
           scored,
           errors,
@@ -132,7 +134,7 @@ export const POST = withAxiom(async (request: Request) => {
     let parseData: ReturnType<typeof jobParsingResponseV3Schema.parse> | null = null;
     let scoringModel: any = null;
 
-    log.info("Scoring", "Using v3 scoring flow");
+    // v3 scoring flow (no logging - this is per-candidate)
 
     const cachedParse = parseStoredJson(searchRecord.parseResponse);
     if (cachedParse) {
@@ -242,11 +244,15 @@ export const POST = withAxiom(async (request: Request) => {
         break;
       } catch (error) {
         lastError = error instanceof Error ? error.message : "Scoring failed";
-        log.error("Scoring", "Attempt failed", {
-          attempt,
-          candidateId,
-          error: lastError,
-        });
+        // Only log on final attempt failure (not every retry)
+        if (attempt === MAX_SCORING_ATTEMPTS) {
+          log.error(LOG_SOURCE, "scoring.candidate_failed", {
+            searchId,
+            candidateId,
+            attempts: attempt,
+            error: lastError,
+          });
+        }
 
         if (attempt < MAX_SCORING_ATTEMPTS) {
           const delay = SCORING_RETRY_BASE_DELAY_MS * attempt;
@@ -280,12 +286,7 @@ export const POST = withAxiom(async (request: Request) => {
 
     const { scored, errors } = await getScoringCounts();
 
-    log.info("Scoring", "Scored candidate", {
-      candidateId,
-      matchScore,
-      scored,
-      total,
-    });
+    // No per-candidate success logging - aggregate completion is logged in maybeEmitScoringCompleted
 
     // Emit progress event
     await realtime.channel(channel).emit("scoring.progress", {
@@ -299,7 +300,7 @@ export const POST = withAxiom(async (request: Request) => {
 
     // Check if all candidates are scored or errored
     if (total > 0 && scored + errors >= total) {
-      log.info("Scoring", "All candidates scored", { searchId, errors });
+      // This is logged in maybeEmitScoringCompleted, but emit realtime event here too
       await realtime.channel(channel).emit("scoring.completed", {
         scored,
         errors,
@@ -308,7 +309,10 @@ export const POST = withAxiom(async (request: Request) => {
 
     return NextResponse.json({ success: true, score: matchScore, scored, total });
   } catch (error) {
-    log.error("Scoring", "Error scoring candidate", { error });
+    // Generic catch-all error (unexpected errors only)
+    log.error(LOG_SOURCE, "scoring.unexpected_error", {
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }

@@ -582,13 +582,6 @@ function EducationItem({ edu }: { edu: any }) {
           <p className="text-xs text-muted-foreground">{period || dateRange}</p>
         )}
 
-        {edu.grade && (
-          <p className="text-xs text-muted-foreground">Grade: {edu.grade}</p>
-        )}
-
-        {edu.insights && (
-          <p className="text-xs text-muted-foreground">{edu.insights}</p>
-        )}
 
         {edu.description && (
           <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">

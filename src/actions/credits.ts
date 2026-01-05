@@ -2,6 +2,8 @@
 
 import { log } from "@/lib/axiom/server-log";
 
+const LOG_SOURCE = "actions/credits";
+
 import { db } from "@/db/drizzle";
 import { organization, creditTransactions, member, user } from "@/db/schema";
 import { eq, and, desc, gte, lte, sql } from "drizzle-orm";
@@ -88,7 +90,7 @@ export async function getCreditsUsageForPeriod(params: {
 
     return { used: Number(result[0]?.used ?? 0), error: null };
   } catch (error) {
-    log.error("Credits", "Error calculating period usage", { error });
+    log.error(LOG_SOURCE, "period_usage.error", { error });
     return {
       used: 0,
       error: error instanceof Error ? error.message : "Failed to calculate usage",
@@ -256,7 +258,7 @@ export async function addCredits(
         }
       }
     } catch (e) {
-      log.warn("Credits", "Failed to send low credits email", { error: e });
+      log.warn(LOG_SOURCE, "low_credits_email.failed", { error: e });
     }
     
     // Track credit addition events

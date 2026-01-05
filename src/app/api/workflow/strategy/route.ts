@@ -5,6 +5,9 @@ import { search, sourcingStrategies } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { log } from "@/lib/axiom/server-log";
 import { withAxiom } from "@/lib/axiom/server";
+
+const LOG_SOURCE = "api/workflow/strategy";
+
 import {
   strategyExecutionResponseSchema,
   strategyResultsResponseSchema,
@@ -31,7 +34,7 @@ const { POST: workflowPost } = serve<StrategyWorkflowPayload>(
     // where requestPayload is temporarily missing. Avoid throwing before first step.
     const payload = context.requestPayload as StrategyWorkflowPayload | undefined;
     if (!payload?.strategyId || !payload.searchId || !payload.strategy || !payload.rawText) {
-      log.error("StrategyWorkflow", "Missing/invalid request payload");
+      log.error(LOG_SOURCE, "payload.invalid");
       return { error: "Invalid request payload", aborted: true };
     }
 
@@ -44,7 +47,7 @@ const { POST: workflowPost } = serve<StrategyWorkflowPayload>(
       },
     };
 
-    log.info("StrategyWorkflow", "Starting for strategy", { strategyId });
+    log.info(LOG_SOURCE, "strategy.started", { strategyId });
 
     // Step 1: Update strategy status to executing
     await context.run("update-status-executing", async () => {
@@ -83,7 +86,7 @@ const { POST: workflowPost } = serve<StrategyWorkflowPayload>(
     const executeData = strategyExecutionResponseSchema.parse(executeResponse.body);
     const taskId = executeData.task_id;
 
-    log.info("StrategyWorkflow", "Task ID", { taskId });
+    log.info(LOG_SOURCE, "task.received", { taskId });
 
     // Step 3: Update strategy with taskId
     await context.run("save-task-id", async () => {
@@ -116,7 +119,7 @@ const { POST: workflowPost } = serve<StrategyWorkflowPayload>(
       });
 
       if (pollResponse.status !== 200) {
-        log.info("StrategyWorkflow", "Poll failed", { pollCount });
+        log.info(LOG_SOURCE, "poll.failed", { pollCount });
         continue;
       }
 
@@ -124,7 +127,7 @@ const { POST: workflowPost } = serve<StrategyWorkflowPayload>(
 
       if (pollData.status === "completed") {
         candidatesData = pollData.candidates || pollData.results || [];
-        log.info("StrategyWorkflow", "Completed", { candidates: candidatesData.length });
+        log.info(LOG_SOURCE, "strategy.completed", { candidates: candidatesData.length });
         break;
       }
 
@@ -190,7 +193,7 @@ const { POST: workflowPost } = serve<StrategyWorkflowPayload>(
       failStack: string;
     }) => {
       const { strategyId } = failureData.context.requestPayload;
-      log.error("StrategyWorkflow", "Failed for strategy", {
+      log.error(LOG_SOURCE, "strategy.failed", {
         strategyId,
         error: failureData.failResponse,
       });
@@ -201,7 +204,7 @@ const { POST: workflowPost } = serve<StrategyWorkflowPayload>(
           .set({ status: "error", error: `Workflow failed: ${failureData.failStatus}` })
           .where(eq(sourcingStrategies.id, strategyId));
       } catch (e) {
-        log.error("StrategyWorkflow", "Failed to update error status", { error: e });
+        log.error(LOG_SOURCE, "status_update.failed", { error: e });
       }
       
       return `Strategy workflow failed with status ${failureData.failStatus}`;

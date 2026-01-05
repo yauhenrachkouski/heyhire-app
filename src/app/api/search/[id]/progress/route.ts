@@ -5,21 +5,19 @@ import { NextRequest } from "next/server";
 
 export const dynamic = 'force-dynamic';
 
+const LOG_SOURCE = "api/search/progress";
+
 export const GET = withAxiom(async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) => {
-  try {
-    const { id: searchId } = await params;
-    
-    log.info("API", "Fetching progress for search", { searchId });
+  const { id: searchId } = await params;
 
+  try {
     const progress = await getSearchProgress(searchId);
-    
     return Response.json(progress);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    log.error("API", "Error fetching progress", { error: errorMessage });
 
     const status =
       errorMessage === "Not authenticated"
@@ -29,6 +27,14 @@ export const GET = withAxiom(async (
           : errorMessage === "Search not found"
             ? 404
             : 500;
+
+    // Only log actual errors (5xx), not auth/permission issues
+    if (status >= 500) {
+      log.error(LOG_SOURCE, "progress.fetch_error", {
+        searchId,
+        error: errorMessage,
+      });
+    }
 
     return Response.json({ error: errorMessage }, { status });
   }
