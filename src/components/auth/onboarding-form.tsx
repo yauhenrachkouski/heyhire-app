@@ -23,6 +23,7 @@ import { useSession } from '@/lib/auth-client'
 import { toast } from 'sonner'
 import { createOrganizationWithSetup } from '@/actions/account'
 import { addDemoWorkspaceForCurrentUser } from '@/actions/demo'
+import posthog from 'posthog-js'
 
 const ORGANIZATION_SIZES = [
   { value: 'just-me', label: 'Just me' },
@@ -95,6 +96,13 @@ export function OnboardingForm({
         }
       }
 
+      posthog.capture('onboarding_completed', {
+        organization_name: orgName,
+        organization_size: organizationSize || null,
+        included_demo_workspace: includeDemoWorkspace,
+        method: 'submit',
+      })
+
       toast.success('Onboarding completed successfully!')
       log.info("OnboardingForm", "Redirecting to /subscribe")
       await new Promise(resolve => setTimeout(resolve, 500))
@@ -132,6 +140,13 @@ export function OnboardingForm({
           log.warn("OnboardingForm", "Failed to add demo workspace", { error: demoError })
         }
       }
+
+      posthog.capture('onboarding_completed', {
+        organization_name: initialOrganizationName,
+        organization_size: null,
+        included_demo_workspace: includeDemoWorkspace,
+        method: 'skip',
+      })
 
       toast.success('Organization created!')
       log.info("OnboardingForm", "Redirecting to /paywall")

@@ -5,6 +5,7 @@ import { headers } from 'next/headers'
 import { OnboardingForm } from '@/components/auth/onboarding-form'
 import heyhireLogo from '@/assets/heyhire_logo.svg'
 import { log } from "@/lib/axiom/server-log";
+import { trackServerEvent } from "@/lib/posthog/track";
 
 const fetchCompanySuggestions = async (domain: string): Promise<string | null> => {
   try {
@@ -53,6 +54,12 @@ export default async function OnboardingPage() {
   if (organizations && organizations.length > 0) {
     return redirect('/paywall')
   }
+
+  // Track onboarding started
+  trackServerEvent(session.user.id, "onboarding_started", undefined, {
+    has_name: !!session.user.name,
+    email_domain: session.user.email?.split('@')[1]?.toLowerCase(),
+  });
 
   // Fetch initial organization name suggestion
   let initialOrganizationName = ''

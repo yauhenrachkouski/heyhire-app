@@ -405,8 +405,17 @@ async function handleInvoicePaymentFailed(ctx: WebhookContext) {
     if (subscriptionRecord) {
         log.info("Subscription marked past_due", { ...eventContext, internalId: subscriptionRecord.id });
 
+        const ownerId = await getOrgOwnerId(subscriptionRecord.referenceId);
+        if (ownerId) {
+            trackServerEvent(ownerId, "invoice_payment_failed", subscriptionRecord.referenceId, {
+                internal_subscription_id: subscriptionRecord.id,
+                stripe_invoice_id: invoice.id,
+                stripe_subscription_id: invoiceSubscriptionId,
+                plan: subscriptionRecord.plan,
+            });
+        }
+
         try {
-            const ownerId = await getOrgOwnerId(subscriptionRecord.referenceId);
             if (ownerId) {
                 const ownerUser = await db.query.user.findFirst({
                     where: eq(user.id, ownerId),

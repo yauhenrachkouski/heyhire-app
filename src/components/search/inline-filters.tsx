@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { IconSparkles, IconSortAscending, IconSortDescending } from "@tabler/icons-react";
+import posthog from "posthog-js";
 
 
 interface InlineFiltersProps {
@@ -85,6 +86,12 @@ export function InlineFilters({
   // Debounce the API call to avoid too many requests while dragging
   const debouncedScoreChange = useDebouncedCallback((min: number) => {
     onScoreRangeChange?.(min, 100); // Always max at 100
+
+    posthog.capture("search_score_filter_changed", {
+      filter_type: "custom_slider",
+      score_min: min,
+      score_max: 100,
+    });
   }, 500);
 
   const handleScoreChange = (values: number[]) => {
@@ -98,21 +105,32 @@ export function InlineFilters({
 
   const handlePresetChange = (value: string) => {
     if (!value) return;
-    
+
     if (value === "custom") {
       setIsCustom(true);
       return;
     }
-    
+
     const score = parseInt(value, 10);
     setLocalMinScore(score);
     setIsCustom(false);
     // Preset selection doesn't need debounce, apply immediately
     onScoreRangeChange?.(score, 100);
+
+    posthog.capture("search_score_filter_changed", {
+      filter_type: "preset",
+      preset_value: value,
+      score_min: score,
+      score_max: 100,
+    });
   };
 
   const handleSortChange = (value: string) => {
     onSortChange?.(value);
+
+    posthog.capture("search_sort_changed", {
+      sort_by: value,
+    });
   };
 
   // Determine the current select value

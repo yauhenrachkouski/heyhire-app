@@ -550,6 +550,28 @@ export const auth = betterAuth({
                   }
                }
 
+               // Detect plan changes (upgrades/downgrades)
+               const previousItemPriceId = (previousAttributes?.items as { data?: Array<{ price?: { id?: string } }> })?.data?.[0]?.price?.id;
+               const currentItemPriceId = stripeSubscription?.items?.data?.[0]?.price?.id;
+
+               if (previousItemPriceId && currentItemPriceId && previousItemPriceId !== currentItemPriceId) {
+                  const owner = await db.query.member.findFirst({
+                     where: and(
+                        eq(schema.member.organizationId, referenceId),
+                        eq(schema.member.role, "owner")
+                     ),
+                  });
+                  if (owner?.userId) {
+                     trackServerEvent(owner.userId, "subscription_plan_changed", referenceId, {
+                        internal_subscription_id: subscription.id,
+                        from_price_id: previousItemPriceId,
+                        to_price_id: currentItemPriceId,
+                        to_plan: subscription.plan,
+                        stripe_subscription_id: subscription.stripeSubscriptionId,
+                     });
+                  }
+               }
+
                if (status !== "unpaid" && status !== "incomplete_expired") return;
 
                await revokeOrgCreditsToZero({
@@ -562,9 +584,27 @@ export const auth = betterAuth({
                });
             },
             onSubscriptionCancel: async ({ subscription }) => {
+               const referenceId = subscription.referenceId;
                log.info("Stripe subscription canceled", {
                   stripeSubscriptionId: subscription.id,
+                  referenceId,
                });
+
+               if (referenceId) {
+                  const owner = await db.query.member.findFirst({
+                     where: and(
+                        eq(schema.member.organizationId, referenceId),
+                        eq(schema.member.role, "owner")
+                     ),
+                  });
+                  if (owner?.userId) {
+                     trackServerEvent(owner.userId, "subscription_canceled", referenceId, {
+                        internal_subscription_id: subscription.id,
+                        stripe_subscription_id: subscription.stripeSubscriptionId,
+                        plan: subscription.plan,
+                     });
+                  }
+               }
             },
             onSubscriptionDeleted: async ({ subscription }) => {
                const referenceId = subscription.referenceId;
@@ -598,8 +638,10 @@ export const auth = betterAuth({
                }
                return { data: user };
             },
-            after: async () => {
-               return;
+            after: async (user) => {
+               trackServerEvent(user.id, "user_signed_up", undefined, {
+                  email_domain: user.email.split("@")[1]?.toLowerCase(),
+               });
             },
          },
       },
@@ -626,6 +668,16 @@ export const auth = betterAuth({
                }
 
                return { data: session };
+            },
+            after: async (session) => {
+               const userRecord = await db.query.user.findFirst({
+                  where: eq(schema.user.id, session.userId),
+                  columns: { lastLoginMethod: true },
+               });
+
+               trackServerEvent(session.userId, "user_signed_in", undefined, {
+                  auth_method: userRecord?.lastLoginMethod || "unknown",
+               });
             },
          },
       },

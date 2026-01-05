@@ -8,6 +8,7 @@ import { useActiveOrganization } from "@/lib/auth-client";
 import { creditsKeys } from "@/lib/credits";
 import { usePlansModal } from "@/providers/plans-modal-provider";
 import { searchCandidatesKeys } from "@/lib/query-keys/search";
+import posthog from "posthog-js";
 
 type OpenLinkedInParams = {
   candidateId: string;
@@ -33,6 +34,10 @@ export function useOpenLinkedInWithCredits() {
         });
 
         if (!result.success) {
+          posthog.capture("linkedin_reveal_failed", {
+            candidate_id: params.candidateId,
+            error: result.error,
+          });
           toast.error("Not enough credits", {
             description: result.error || "Please upgrade your plan",
             action: {
@@ -42,6 +47,13 @@ export function useOpenLinkedInWithCredits() {
           });
           return result;
         }
+
+        // Track LinkedIn reveal - distinguish paid vs free (already revealed)
+        posthog.capture("linkedin_revealed", {
+          candidate_id: params.candidateId,
+          is_free: result.alreadyCharged === true,
+          cost_credits: result.alreadyCharged ? 0 : 1,
+        });
 
         if (activeOrg?.id) {
           await queryClient.invalidateQueries({

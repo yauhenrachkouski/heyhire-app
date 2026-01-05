@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import type { Table } from "@tanstack/react-table";
 import { Separator } from "@/components/ui/separator";
 import { Icon } from "@/components/icon";
+import posthog from "posthog-js";
 
 interface SelectedCandidate {
   id: string;
@@ -69,10 +70,27 @@ export function CandidateCardActionBar({
     link.click();
     document.body.removeChild(link);
 
+    posthog.capture("candidates_exported", {
+      candidate_count: selectedIds.length,
+      export_format: "csv",
+    });
+
     toast("Success", {
       description: `Exported ${selectedIds.length} candidates`,
     });
   }, [selectedIds, selectedCandidates]);
+
+  const handleSelectAllClick = React.useCallback(() => {
+    posthog.capture("candidates_select_all");
+    onSelectAll?.();
+  }, [onSelectAll]);
+
+  const handleClearSelectionClick = React.useCallback(() => {
+    posthog.capture("candidates_deselect_all", {
+      deselected_count: selectedIds.length,
+    });
+    onClearSelection();
+  }, [onClearSelection, selectedIds.length]);
 
   const mockTable = {
     getFilteredSelectedRowModel: () => ({
@@ -98,7 +116,7 @@ export function CandidateCardActionBar({
 
       <DataTableActionBarAction
         tooltip={isAllSelected ? "All selected" : "Select all"}
-        onClick={onSelectAll}
+        onClick={handleSelectAllClick}
         size="icon"
         disabled={isAllSelected || !onSelectAll}
       >
@@ -107,7 +125,7 @@ export function CandidateCardActionBar({
 
       <DataTableActionBarAction
         tooltip="Clear selection (Esc)"
-        onClick={onClearSelection}
+        onClick={handleClearSelectionClick}
         size="icon"
       >
         <Icon name="x" size={14} />

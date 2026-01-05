@@ -9,6 +9,7 @@ import { generateId } from "@/lib/id";
 import { Resend } from "resend";
 import { CreditsRunningLowEmail } from "@/emails";
 import { getSessionWithOrg } from "@/lib/auth-helpers";
+import { trackServerEvent } from "@/lib/posthog/track";
 import type {
   AddCreditsParams,
   DeductCreditsParams,
@@ -258,6 +259,18 @@ export async function addCredits(
       log.warn("Credits", "Failed to send low credits email", { error: e });
     }
     
+    // Track credit addition events
+    if (result && (type === "purchase" || type === "manual_grant")) {
+      const eventName = type === "purchase" ? "credits_purchased" : "credits_granted";
+      trackServerEvent(userId, eventName, organizationId, {
+        credit_type: creditType,
+        credit_amount: amount,
+        credits_before: result.balanceBefore,
+        credits_after: result.balanceAfter,
+        credit_transaction_id: result.id,
+      });
+    }
+
     return {
       success: true,
       transaction: result,
@@ -440,6 +453,36 @@ export async function deductCredits(
       return transaction;
     });
     
+    // Track credits_exhausted when balance reaches zero
+    if (result && result.balanceAfter === 0) {
+      trackServerEvent(userId, "credits_exhausted", organizationId, {
+        credit_type: creditType,
+        credits_before: result.balanceBefore,
+        credit_transaction_id: result.id,
+      });
+    }
+
+    // Track credits_low when balance drops below threshold
+    if (result) {
+      const thresholdRaw = process.env.CREDITS_LOW_THRESHOLD;
+      const threshold = thresholdRaw ? Number(thresholdRaw) : NaN;
+
+      if (
+        Number.isFinite(threshold) &&
+        threshold >= 0 &&
+        result.balanceBefore > threshold &&
+        result.balanceAfter <= threshold &&
+        result.balanceAfter > 0
+      ) {
+        trackServerEvent(userId, "credits_low", organizationId, {
+          credit_type: creditType,
+          credits_remaining: result.balanceAfter,
+          threshold,
+          credit_transaction_id: result.id,
+        });
+      }
+    }
+
     return {
       success: true,
       transaction: result,

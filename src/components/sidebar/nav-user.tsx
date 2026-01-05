@@ -25,6 +25,7 @@ import { Icon } from "@/components/icon"
 import { signOut } from "@/lib/auth-client"
 import Link from "next/link"
 import { useState } from "react"
+import posthog from "posthog-js"
 
 // User type based on better-auth session
 interface User {
@@ -65,6 +66,7 @@ export function NavUser({ user: serverUser }: NavUserProps) {
   const handleSignOut = async () => {
     setIsSigningOut(true)
     try {
+      posthog.capture("user_signed_out")
       await signOut({
         fetchOptions: {
           onSuccess: () => {
