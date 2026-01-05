@@ -1,23 +1,25 @@
 import { getSearchProgress } from "@/actions/candidates";
+import { log } from "@/lib/axiom/server-log";
+import { withAxiom } from "@/lib/axiom/server";
 import { NextRequest } from "next/server";
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(
+export const GET = withAxiom(async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   try {
     const { id: searchId } = await params;
     
-    console.log("[API] Fetching progress for search:", searchId);
+    log.info("API", "Fetching progress for search", { searchId });
 
     const progress = await getSearchProgress(searchId);
     
     return Response.json(progress);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("[API] Error fetching progress:", errorMessage);
+    log.error("API", "Error fetching progress", { error: errorMessage });
 
     const status =
       errorMessage === "Not authenticated"
@@ -30,5 +32,4 @@ export async function GET(
 
     return Response.json({ error: errorMessage }, { status });
   }
-}
-
+});

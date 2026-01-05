@@ -1,5 +1,6 @@
 "use client";
 
+import { log } from "@/lib/axiom/client-log";
 import { useState } from "react";
 import posthog from 'posthog-js';
 import { toast } from "sonner";
@@ -66,7 +67,7 @@ export function SearchClient({}: SearchClientProps) {
       }
 
       const searchId = saveResult.data.id;
-      console.log("[Search Client] Search saved with ID:", searchId);
+      log.info("SearchClient", "Search saved", { searchId });
 
       // Ensure sidebar recent searches list updates immediately
       const optimisticName = sourcingCriteria?.search_name?.trim() || "Untitled Search";
@@ -115,7 +116,7 @@ export function SearchClient({}: SearchClientProps) {
       }
 
       // Trigger the QStash workflow for reliable background processing
-      console.log("[Search Client] Triggering sourcing workflow...");
+      log.info("SearchClient", "Triggering sourcing workflow");
 
       const workflowResult = await triggerSourcingWorkflow(
         queryText,
@@ -127,7 +128,9 @@ export function SearchClient({}: SearchClientProps) {
         throw new Error(workflowResult.error || "Failed to start search workflow");
       }
 
-      console.log("[Search Client] Workflow triggered with run ID:", workflowResult.workflowRunId);
+      log.info("SearchClient", "Workflow triggered", {
+        workflowRunId: workflowResult.workflowRunId,
+      });
 
       posthog.capture('search_created', {
         search_id: searchId,
@@ -141,10 +144,12 @@ export function SearchClient({}: SearchClientProps) {
 
       // Navigate to results page immediately
       // Don't refresh before push to avoid race conditions
-      console.log("[Search Client] Redirecting to:", `/${activeOrg.id}/search/${searchId}`);
+      log.info("SearchClient", "Redirecting to search results", {
+        path: `/${activeOrg.id}/search/${searchId}`,
+      });
       router.push(`/${activeOrg.id}/search/${searchId}`);
     } catch (error) {
-      console.error("[Search Client] Error:", error);
+      log.error("SearchClient", "Search error", { error });
       const errorMessage =
         error instanceof Error ? error.message : "An unexpected error occurred";
 

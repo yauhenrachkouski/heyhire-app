@@ -58,6 +58,6 @@ export const config = {
 		 * - favicon.ico, favicon.png (favicon files)
 		 * - public assets (svg, png, etc.)
 		 */
-		"/((?!api/auth|_next/static|_next/image|favicon.ico|favicon.png|.*\\.svg$|.*\\.png$).*)",
+		"/((?!api/auth|api/axiom|_next/static|_next/image|favicon.ico|favicon.png|.*\\.svg$|.*\\.png$).*)",
 	],
 };

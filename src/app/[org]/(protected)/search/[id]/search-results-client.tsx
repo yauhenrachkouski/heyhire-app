@@ -1,5 +1,6 @@
 "use client";
 
+import { log } from "@/lib/axiom/client-log";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQueryClient, useInfiniteQuery, useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useQueryState, parseAsInteger, parseAsString } from "nuqs";
@@ -101,10 +102,12 @@ interface SearchProgress {
 }
 
 export function SearchResultsClient({ search, initialData, initialCandidateDetail }: SearchResultsClientProps) {
-  console.log("[SearchResultsClient] Rendering for search:", search.id, 
-    "hasInitialData:", !!initialData, 
-    "candidates:", initialData?.candidates?.length ?? 0,
-    "ssrFilters:", initialData?.ssrFilters);
+  log.info("SearchResultsClient", "Rendering search results", {
+    searchId: search.id,
+    hasInitialData: !!initialData,
+    candidateCount: initialData?.candidates?.length ?? 0,
+    ssrFilters: initialData?.ssrFilters,
+  });
   
   const queryClient = useQueryClient();
 
@@ -134,7 +137,7 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   }, [setScoreMin, setScoreMax, setLimit, setSortBy]);
 
   useEffect(() => {
-    console.log("[SearchResultsClient] Search changed to:", search.id);
+    log.info("SearchResultsClient", "Search changed", { searchId: search.id });
     setSearchName(search.name);
   }, [search.id, search.name]);
 
@@ -156,9 +159,11 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   
   // Debug: log filter matching on initial render
   if (process.env.NODE_ENV === 'development' && ssrFilters) {
-    console.log("[SearchResultsClient] SSR filter match:", filtersMatchSSR, 
-      "client:", { scoreMin, scoreMax, limit, sortBy },
-      "ssr:", ssrFilters);
+    log.info("SearchResultsClient", "SSR filter match", {
+      filtersMatchSSR,
+      client: { scoreMin, scoreMax, limit, sortBy },
+      ssr: ssrFilters,
+    });
   }
 
   // ========== TANSTACK QUERY: Progress (Global counts, independent of filters) ==========
@@ -188,7 +193,9 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   const [ssrInitialDataStructure] = useState(() => {
     if (!initialData) return undefined;
     
-    console.log("[SearchResultsClient] Preparing SSR initial data structure:", initialData.candidates.length, "candidates");
+    log.info("SearchResultsClient", "Preparing SSR initial data structure", {
+      candidateCount: initialData.candidates.length,
+    });
     
     return {
       pages: [{
@@ -207,7 +214,10 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   const candidatesQuery = useInfiniteQuery({
     queryKey: candidatesQueryKey,
     queryFn: async ({ pageParam = null }) => {
-      console.log("[SearchResultsClient] Fetching candidates cursor:", pageParam, "filters:", { scoreMin, scoreMax, limit, sortBy });
+      log.info("SearchResultsClient", "Fetching candidates", {
+        cursor: pageParam,
+        filters: { scoreMin, scoreMax, limit, sortBy },
+      });
       const url = new URL(`/api/search/${search.id}/candidates`, window.location.origin);
       
       // Only send non-default filters to match SSR behavior
@@ -232,7 +242,7 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
 
   // ========== Realtime handlers ==========
   const handleSearchCompleted = useCallback(async (candidatesCount: number) => {
-    console.log("[SearchResultsClient] Search completed with", candidatesCount, "candidates");
+    log.info("SearchResultsClient", "Search completed", { candidatesCount });
     // Invalidate both progress and candidates queries
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.progress(search.id) }),
@@ -241,11 +251,11 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   }, [queryClient, search.id]);
 
   const handleSearchFailed = useCallback((errorMsg: string) => {
-    console.error("[SearchResultsClient] Search failed:", errorMsg);
+    log.error("SearchResultsClient", "Search failed", { error: errorMsg });
   }, []);
 
   const handleCandidatesAdded = useCallback((data: { count: number; total: number }) => {
-    console.log("[SearchResultsClient] Candidates added:", data.count, "total:", data.total);
+    log.info("SearchResultsClient", "Candidates added", { count: data.count, total: data.total });
     // Invalidate candidates query to fetch the new ones
     queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.details(search.id) });
     queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.progress(search.id) });
@@ -286,7 +296,10 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   }, [queryClient, search.id]);
 
   const handleScoringProgress = useCallback((data: { candidateId: string; searchCandidateId: string; score: number; scored: number; total: number; scoringResult?: any }) => {
-    console.log("[SearchResultsClient] Score update:", data.searchCandidateId, "=", data.score);
+    log.info("SearchResultsClient", "Score update", {
+      searchCandidateId: data.searchCandidateId,
+      score: data.score,
+    });
     
     updateCandidateScoreInCache(data);
 
@@ -299,14 +312,17 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   }, [queryClient, search.id, updateCandidateScoreInCache]);
 
   const handleScoringStarted = useCallback((data: { total: number }) => {
-    console.log("[SearchResultsClient] Scoring started for", data.total, "candidates");
+    log.info("SearchResultsClient", "Scoring started", { total: data.total });
     toast.loading(`Evaluating ${data.total} candidates...`, {
       id: "scoring-progress",
     });
   }, []);
 
   const handleScoringCompleted = useCallback((data: { scored: number; errors: number }) => {
-    console.log("[SearchResultsClient] Scoring completed. Scored:", data.scored, "Errors:", data.errors);
+    log.info("SearchResultsClient", "Scoring completed", {
+      scored: data.scored,
+      errors: data.errors,
+    });
     // Dismiss the scoring toast
     toast.dismiss("scoring-progress");
     toast.success(`Evaluated ${data.scored} candidates`);

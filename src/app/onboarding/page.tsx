@@ -4,6 +4,7 @@ import Image from 'next/image'
 import { headers } from 'next/headers'
 import { OnboardingForm } from '@/components/auth/onboarding-form'
 import heyhireLogo from '@/assets/heyhire_logo.svg'
+import { log } from "@/lib/axiom/server-log";
 
 const fetchCompanySuggestions = async (domain: string): Promise<string | null> => {
   try {
@@ -21,7 +22,7 @@ const fetchCompanySuggestions = async (domain: string): Promise<string | null> =
     
     return sorted[0]?.name || null
   } catch (e) {
-    console.error('Failed to fetch company suggestions:', e)
+    log.error("OnboardingPage", "Failed to fetch company suggestions", { error: e })
     return null
   }
 }
@@ -31,7 +32,7 @@ const validateFavicon = async (url: string): Promise<boolean> => {
     const response = await fetch(url, { method: 'HEAD' })
     return response.ok
   } catch (e) {
-    console.error('Failed to validate favicon:', e)
+    log.error("OnboardingPage", "Failed to validate favicon", { error: e })
     return false
   }
 }

@@ -1,5 +1,7 @@
 "use server";
 
+import { log } from "@/lib/axiom/server-log";
+
 import { db } from "@/db/drizzle";
 import { organization, creditTransactions, member, user } from "@/db/schema";
 import { eq, and, desc, gte, lte, sql } from "drizzle-orm";
@@ -85,7 +87,7 @@ export async function getCreditsUsageForPeriod(params: {
 
     return { used: Number(result[0]?.used ?? 0), error: null };
   } catch (error) {
-    console.error("[Credits] Error calculating period usage:", error);
+    log.error("Credits", "Error calculating period usage", { error });
     return {
       used: 0,
       error: error instanceof Error ? error.message : "Failed to calculate usage",
@@ -253,7 +255,7 @@ export async function addCredits(
         }
       }
     } catch (e) {
-      console.warn("[Credits] Failed to send low credits email", e);
+      log.warn("Credits", "Failed to send low credits email", { error: e });
     }
     
     return {
@@ -261,7 +263,7 @@ export async function addCredits(
       transaction: result,
     };
   } catch (error) {
-    console.error("[Credits] Error adding credits:", error);
+    log.error("Credits", "Error adding credits", { error });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to add credits",
@@ -350,7 +352,7 @@ export async function setCreditsBalance(params: {
       transaction: result ?? undefined,
     };
   } catch (error) {
-    console.error("[Credits] Error setting credit balance:", error);
+    log.error("Credits", "Error setting credit balance", { error });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to set credit balance",
@@ -443,7 +445,7 @@ export async function deductCredits(
       transaction: result,
     };
   } catch (error) {
-    console.error("[Credits] Error deducting credits:", error);
+    log.error("Credits", "Error deducting credits", { error });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to deduct credits",
@@ -560,11 +562,4 @@ export async function getCreditLedger(params: {
 
   return { balance, transactions };
 }
-
-
-
-
-
-
-
 

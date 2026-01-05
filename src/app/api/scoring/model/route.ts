@@ -1,3 +1,4 @@
+import { withAxiom } from "@/lib/axiom/server";
 import { NextResponse } from "next/server";
 import { db } from "@/db/drizzle";
 import { search } from "@/db/schema";
@@ -11,7 +12,7 @@ interface Payload {
   searchId: string;
 }
 
-export async function POST(request: Request) {
+export const POST = withAxiom(async (request: Request) => {
   try {
     const payload: Payload = await request.json();
     const { searchId } = payload;
@@ -103,6 +104,5 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-}
-
+});
 

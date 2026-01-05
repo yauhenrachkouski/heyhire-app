@@ -6,6 +6,8 @@ import { search, sourcingStrategies } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { realtime } from "@/lib/realtime";
 import { generateId } from "@/lib/id";
+import { log } from "@/lib/axiom/server-log";
+import { withAxiom } from "@/lib/axiom/server";
 import {
   strategyGenerationResponseSchema,
   strategyExecutionResponseSchema,
@@ -29,18 +31,18 @@ interface SourcingWorkflowPayload {
   strategyIdsToRun?: string[];
 }
 
-export const { POST } = serve<SourcingWorkflowPayload>(
+const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
   async (context: WorkflowContext<SourcingWorkflowPayload>) => {
     // Validate required payload inside context.run to avoid breaking Upstash auth
     // This must be the FIRST step to prevent invalid workflows from proceeding
     const payload = await context.run("validate-payload", async () => {
       if (!context.requestPayload) {
-        console.error("[Workflow] Missing request payload, workflow will abort");
+        log.error("Workflow", "Missing request payload, workflow will abort");
         return null;
       }
 
       const { searchId, rawText, criteria, strategyIdsToRun } = context.requestPayload;
-      console.log("[Workflow] Payload received", {
+      log.info("Workflow", "Payload received", {
         hasSearchId: Boolean(searchId),
         hasRawText: Boolean(rawText),
         hasCriteria: Boolean(criteria),
@@ -48,7 +50,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
         strategyIdsToRunCount: strategyIdsToRun?.length,
       });
       if (!searchId || !rawText || !criteria) {
-        console.error("[Workflow] Invalid payload received", {
+        log.error("Workflow", "Invalid payload received", {
           hasSearchId: Boolean(searchId),
           hasRawText: Boolean(rawText),
           hasCriteria: Boolean(criteria),
@@ -56,7 +58,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
         return null;
       }
 
-      console.log("[Workflow] Starting sourcing workflow for search:", searchId);
+      log.info("Workflow", "Starting sourcing workflow", { searchId });
       return { searchId, rawText, criteria, strategyIdsToRun };
     });
     
@@ -66,7 +68,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
     }
     
     const { searchId, rawText, criteria, strategyIdsToRun } = payload;
-    console.log("[Workflow] Using payload searchId:", searchId);
+    log.info("Workflow", "Using payload searchId", { searchId });
     const channel = `search:${searchId}`;
 
     // Step 1: Update search status to processing
@@ -81,7 +83,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
         message: "Analyzing requirements...",
         progress: 10
       });
-      console.log("[Workflow] Updated search status to processing");
+      log.info("Workflow", "Updated search status to processing");
     });
 
     // Step 2: Generate strategies OR use existing ones
@@ -89,7 +91,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
 
     if (strategyIdsToRun && strategyIdsToRun.length > 0) {
       // Branch A: Use existing strategies (Get 100 more)
-      console.log("[Workflow] Using existing strategies:", strategyIdsToRun);
+      log.info("Workflow", "Using existing strategies", { strategyIds: strategyIdsToRun });
       
       allGeneratedStrategies = await context.run("fetch-and-update-strategies-pagination", async () => {
          // Deduplicate IDs for fetching
@@ -154,7 +156,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       
       if (allGeneratedStrategies.length === 0) {
          // Fallback if IDs were invalid (shouldn't happen if logic is correct)
-         console.warn("[Workflow] No existing strategies found for IDs provided. Falling back to generation.");
+         log.warn("Workflow", "No existing strategies found; falling back to generation");
       } else {
          await realtime.channel(channel).emit( "status.updated", {
           status: "processing",
@@ -194,7 +196,9 @@ export const { POST } = serve<SourcingWorkflowPayload>(
           await realtime.channel(channel).emit( "search.failed", {
             error: `Strategy generation failed: ${generateResponse.status}`
           });
-          console.error(`[Workflow] Strategy generation failed: ${generateResponse.status}`);
+          log.error("Workflow", "Strategy generation failed", {
+            status: generateResponse.status,
+          });
         });
         
         // Don't retry on client errors (4xx)
@@ -222,7 +226,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
           await realtime.channel(channel).emit( "search.failed", {
             error: "Strategy generation response invalid"
           });
-          console.error("[Workflow] Strategy generation schema validation failed:", error);
+          log.error("Workflow", "Strategy generation schema validation failed", { error });
         });
         return { success: false, error: "Strategy generation response invalid" };
       }
@@ -263,8 +267,10 @@ export const { POST } = serve<SourcingWorkflowPayload>(
     const strategyIds = allGeneratedStrategies.map((s) => s.id);
     const executedStrategyIds = strategiesToExecute.map((s) => s.id);
 
-    console.log("[Workflow] Strategies to use:", allGeneratedStrategies.length);
-    console.log("[Workflow] Will auto-execute", strategiesToExecute.length, "strategies");
+    log.info("Workflow", "Strategies to use", { count: allGeneratedStrategies.length });
+    log.info("Workflow", "Will auto-execute strategies", {
+      count: strategiesToExecute.length,
+    });
 
     // Step 3: Save strategies to database (ONLY IF NEW)
     if (!isContinuing) {
@@ -293,7 +299,9 @@ export const { POST } = serve<SourcingWorkflowPayload>(
             progress: 20
           });
 
-          console.log("[Workflow] Saved", strategyIds.length, "strategies to database");
+          log.info("Workflow", "Saved strategies to database", {
+            count: strategyIds.length,
+          });
         });
     } else {
         // Just update status to pending for re-execution
@@ -342,7 +350,9 @@ export const { POST } = serve<SourcingWorkflowPayload>(
         await realtime.channel(channel).emit( "search.failed", {
           error: `Strategy execution failed: ${executeResponse.status}`
         });
-        console.error(`[Workflow] Strategy execution failed: ${executeResponse.status}`);
+        log.error("Workflow", "Strategy execution failed", {
+          status: executeResponse.status,
+        });
       });
       
       // Don't retry on client errors (4xx)
@@ -374,15 +384,17 @@ export const { POST } = serve<SourcingWorkflowPayload>(
         await realtime.channel(channel).emit( "search.failed", {
           error: "Strategy execution response invalid"
         });
-        console.error("[Workflow] Strategy execution schema validation failed:", error);
+        log.error("Workflow", "Strategy execution schema validation failed", { error });
       });
       return { success: false, error: "Strategy execution response invalid" };
     }
 
     const taskId = executeData.task_id;
 
-    console.log("[Workflow] Task ID:", taskId);
-    console.log("[Workflow] Strategies launched:", executeData.strategies_launched);
+    log.info("Workflow", "Task ID", { taskId });
+    log.info("Workflow", "Strategies launched", {
+      strategiesLaunched: executeData.strategies_launched,
+    });
 
     // Step 6: Update strategies with taskId and status
     await context.run("update-strategies-executing", async () => {
@@ -434,7 +446,10 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       });
 
       if (pollResponse.status !== 200) {
-        console.log(`[Workflow] Poll ${pollCount} failed with status ${pollResponse.status}`);
+        log.info("Workflow", "Poll failed", {
+          pollCount,
+          status: pollResponse.status,
+        });
         
         // Stop polling if we get a client error (e.g. 404 Not Found)
         if (pollResponse.status >= 400 && pollResponse.status < 500) {
@@ -453,11 +468,11 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       try {
         pollData = strategyResultsResponseSchema.parse(pollResponse.body);
       } catch (error) {
-         console.error(`[Workflow] Poll ${pollCount} schema validation failed:`, error);
+         log.error("Workflow", "Poll schema validation failed", { pollCount, error });
          continue;
       }
 
-      console.log(`[Workflow] Poll ${pollCount}: status=${pollData.status}`);
+      log.info("Workflow", "Poll status", { pollCount, status: pollData.status });
 
       // Get current candidates (partial or final)
       const currentCandidates = pollData.candidates || pollData.results || [];
@@ -465,7 +480,9 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       // Save new candidates incrementally if we have more than before
       if (currentCandidates.length > lastSavedCount) {
         const newCandidates = currentCandidates.slice(lastSavedCount);
-        console.log(`[Workflow] Saving ${newCandidates.length} new candidates incrementally`);
+        log.info("Workflow", "Saving new candidates incrementally", {
+          count: newCandidates.length,
+        });
         
         await context.run(`save-candidates-incremental-${pollCount}`, async () => {
           await saveCandidatesFromSearch(searchId, newCandidates as any, rawText);
@@ -503,7 +520,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
 
       if (pollData.status === "completed") {
         candidatesData = currentCandidates;
-        console.log("[Workflow] Search completed with", candidatesData.length, "candidates");
+        log.info("Workflow", "Search completed", { candidates: candidatesData.length });
         break;
       }
 
@@ -550,7 +567,9 @@ export const { POST } = serve<SourcingWorkflowPayload>(
     
     if (remainingCandidates > 0) {
       await context.run("save-candidates-final", async () => {
-        console.log("[Workflow] Saving final batch of", remainingCandidates, "candidates");
+        log.info("Workflow", "Saving final batch of candidates", {
+          count: remainingCandidates,
+        });
         const finalBatch = candidatesData.slice(lastSavedCount);
         // @ts-expect-error - finalBatch is typed correctly from API
         await saveCandidatesFromSearch(searchId, finalBatch, rawText);
@@ -562,11 +581,13 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       });
     }
     
-    console.log("[Workflow] All candidates saved, proceeding to finalize step. Total:", candidatesData.length);
+    log.info("Workflow", "All candidates saved, proceeding to finalize step", {
+      total: candidatesData.length,
+    });
 
     // Step 9: Update final status and emit completion event
     await context.run("finalize", async () => {
-      console.log("[Workflow] Finalize step starting for search:", searchId);
+      log.info("Workflow", "Finalize step starting", { searchId });
       
       try {
         // Update search status to completed
@@ -574,9 +595,9 @@ export const { POST } = serve<SourcingWorkflowPayload>(
           .update(search)
           .set({ status: "completed", progress: 100 })
           .where(eq(search.id, searchId));
-        console.log("[Workflow] Updated search status to completed");
+        log.info("Workflow", "Updated search status to completed");
       } catch (error) {
-        console.error("[Workflow] Error updating search status:", error);
+        log.error("Workflow", "Error updating search status", { error });
       }
       
       try {
@@ -588,31 +609,35 @@ export const { POST } = serve<SourcingWorkflowPayload>(
             candidatesFound: candidatesData.length 
           })
           .where(inArray(sourcingStrategies.id, executedStrategyIds));
-        console.log("[Workflow] Updated strategies status to completed");
+        log.info("Workflow", "Updated strategies status to completed");
       } catch (error) {
-        console.error("[Workflow] Error updating strategies status:", error);
+        log.error("Workflow", "Error updating strategies status", { error });
       }
       
       // Emit completion event to frontend - this is critical for UI update
       try {
-        console.log("[Workflow] Emitting search.completed event with", candidatesData.length, "candidates");
+        log.info("Workflow", "Emitting search.completed event", {
+          candidates: candidatesData.length,
+        });
         await realtime.channel(channel).emit("search.completed", {
           candidatesCount: candidatesData.length,
           status: "completed"
         });
-        console.log("[Workflow] Realtime event emitted successfully");
+        log.info("Workflow", "Realtime event emitted successfully");
       } catch (error) {
-        console.error("[Workflow] Error emitting realtime event:", error);
+        log.error("Workflow", "Error emitting realtime event", { error });
       }
 
-      console.log("[Workflow] Search completed successfully");
+      log.info("Workflow", "Search completed successfully");
     });
 
     // Step 10: Trigger scoring via QStash (separate async process)
     // This queues individual scoring jobs for each candidate
     if (candidatesData.length > 0) {
       await context.run("trigger-scoring", async () => {
-        console.log("[Workflow] Triggering scoring for", candidatesData.length, "candidates");
+        log.info("Workflow", "Triggering scoring", {
+          candidates: candidatesData.length,
+        });
         
         try {
           const baseUrl =
@@ -628,7 +653,10 @@ export const { POST } = serve<SourcingWorkflowPayload>(
           });
           if (!scoringModelRes.ok) {
             const text = await scoringModelRes.text();
-            console.error("[Workflow] Error building scoring model:", scoringModelRes.status, text);
+            log.error("Workflow", "Error building scoring model", {
+              status: scoringModelRes.status,
+              responseText: text,
+            });
             await realtime.channel(channel).emit("scoring.failed", {
               error: `Failed to build scoring model: ${scoringModelRes.status}`,
             });
@@ -645,9 +673,9 @@ export const { POST } = serve<SourcingWorkflowPayload>(
             },
           });
           
-          console.log("[Workflow] Scoring triggered successfully via QStash");
+          log.info("Workflow", "Scoring triggered successfully via QStash");
         } catch (error) {
-          console.error("[Workflow] Error triggering scoring:", error);
+          log.error("Workflow", "Error triggering scoring", { error });
           // Don't throw - sourcing is complete, scoring failure shouldn't affect that
           await realtime.channel(channel).emit("scoring.failed", {
             error: error instanceof Error ? error.message : "Unknown error",
@@ -656,7 +684,7 @@ export const { POST } = serve<SourcingWorkflowPayload>(
       });
     }
 
-    console.log("[Workflow] Workflow finished for search:", searchId);
+    log.info("Workflow", "Workflow finished", { searchId });
     
     return {
       success: true,
@@ -680,12 +708,15 @@ export const { POST } = serve<SourcingWorkflowPayload>(
     }) => {
       const searchId = failureData.context?.requestPayload?.searchId;
       if (!searchId) {
-        console.error("[Workflow] Failure payload missing searchId", {
+        log.error("Workflow", "Failure payload missing searchId", {
           hasPayload: Boolean(failureData.context?.requestPayload),
         });
       }
       const channel = `search:${searchId}`;
-      console.error(`[Workflow] Failed for search ${searchId ?? "unknown"}:`, failureData.failResponse);
+      log.error("Workflow", "Failed for search", {
+        searchId: searchId ?? "unknown",
+        error: failureData.failResponse,
+      });
       
       // Update search status to error
       try {
@@ -700,10 +731,12 @@ export const { POST } = serve<SourcingWorkflowPayload>(
           });
         }
       } catch (e) {
-        console.error("[Workflow] Failed to update error status:", e);
+        log.error("Workflow", "Failed to update error status", { error: e });
       }
       
       return `Workflow failed with status ${failureData.failStatus}`;
     },
   }
 );
+
+export const POST = withAxiom(workflowPost);

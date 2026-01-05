@@ -1,5 +1,7 @@
 "use server";
 
+import { log, logWithContext } from "@/lib/axiom/server-log";
+
 import "server-only";
 import { db } from "@/db/drizzle";
 import { searchCandidates, searchCandidateStrategies, sourcingStrategies, search } from "@/db/schema";
@@ -15,11 +17,13 @@ import { realtime } from "@/lib/realtime";
  * Used for "Get 100 more" functionality.
  */
 export async function analyzeAndContinueSearch(searchId: string) {
+  const ctxLog = logWithContext("Workflow", { searchId });
+
   try {
     const searchRow = await requireSearchReadAccess(searchId);
     await assertNotReadOnlyForOrganization(searchRow.organizationId);
 
-    console.log("[Workflow] Analyzing strategies for search:", searchId);
+    ctxLog.info("Analyzing strategies for search");
 
     // Immediately mark search as processing in DB so page refresh shows correct state
     await db.update(search)
@@ -58,10 +62,10 @@ export async function analyzeAndContinueSearch(searchId: string) {
       );
 
     if (scoredCandidates.length === 0) {
-        // Fallback: If no candidates are scored yet, we can't analyze. 
+        // Fallback: If no candidates are scored yet, we can't analyze.
         // We should just re-run all successful strategies or maybe just all?
         // Let's assume we want to re-run all strategies that didn't fail.
-        console.log("[Workflow] No scored candidates found. Re-running all successful strategies.");
+        ctxLog.info("No scored candidates found; re-running all successful strategies");
         return await reRunAllSuccessfulStrategies(searchId);
     }
 
@@ -100,7 +104,7 @@ export async function analyzeAndContinueSearch(searchId: string) {
     
     strategyMetrics.sort((a, b) => b.median - a.median);
 
-    console.log("[Workflow] Strategy Metrics:", strategyMetrics);
+    ctxLog.info("Strategy metrics", { strategyMetrics });
 
     // Select top strategies
     // Logic: 
@@ -142,11 +146,14 @@ export async function analyzeAndContinueSearch(searchId: string) {
 
     if (strategyIdsToRun.length === 0) {
         // Should not happen given logic above, but fallback
-        console.log("[Workflow] No valid strategies selected. Re-running all successful.");
+        ctxLog.info("No valid strategies selected; re-running all successful");
         return await reRunAllSuccessfulStrategies(searchId);
     }
 
-    console.log("[Workflow] Selected strategies to re-run (count " + strategyIdsToRun.length + "):", strategyIdsToRun);
+    ctxLog.info("Selected strategies to re-run", {
+      count: strategyIdsToRun.length,
+      strategyIds: strategyIdsToRun,
+    });
 
     // Trigger the workflow with specific strategies
     // We need to fetch the search details first to pass to triggerSourcingWorkflow
@@ -172,16 +179,16 @@ export async function analyzeAndContinueSearch(searchId: string) {
 
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    console.error("[Workflow] Error continuing search:", errorMessage);
-    
+    ctxLog.error("Error continuing search", { error: errorMessage });
+
     // Reset status to completed on error (don't leave it stuck in processing)
     await db.update(search)
-      .set({ 
-        status: "completed", 
-        progress: 100 
+      .set({
+        status: "completed",
+        progress: 100
       })
       .where(eq(search.id, searchId));
-    
+
     return { success: false, error: errorMessage };
   }
 }
@@ -225,4 +232,3 @@ async function reRunAllSuccessfulStrategies(searchId: string) {
         strategyIds
     );
 }
-

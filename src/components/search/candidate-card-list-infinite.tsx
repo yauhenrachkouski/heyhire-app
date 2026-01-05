@@ -1,5 +1,6 @@
 "use client";
 
+import { log } from "@/lib/axiom/client-log";
 import { useCallback, useState, useEffect, useRef, useMemo } from "react";
 import posthog from "posthog-js";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
@@ -80,7 +81,7 @@ export function CandidateCardListInfinite({
         const [entry] = entries;
         if (entry.isIntersecting && hasNextPage && !isFetchingNextPage && !hasTriggeredRef.current) {
           hasTriggeredRef.current = true;
-          console.log("[InfiniteScroll] Triggering fetchNextPage");
+          log.info("InfiniteScroll", "Triggering fetchNextPage");
           fetchNextPage();
         }
       },
@@ -113,11 +114,11 @@ export function CandidateCardListInfinite({
   }, [activeOrg?.id, searchId, searchParams, pathname, router]);
 
   const handleEmail = useCallback(() => {
-    console.log("[Candidates] Send email - not implemented yet");
+    log.info("Candidates", "Send email not implemented yet");
   }, []);
 
   const handlePhone = useCallback(() => {
-    console.log("[Candidates] Call - not implemented yet");
+    log.info("Candidates", "Call not implemented yet");
   }, []);
 
   // Handle candidate selection
@@ -257,4 +258,3 @@ export function CandidateCardListInfinite({
     </div>
   );
 }
-

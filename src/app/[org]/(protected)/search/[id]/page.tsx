@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getSearchById } from "@/actions/search";
 import { SearchResultsClient } from "./search-results-client";
 import { getCandidatesForSearch, getSearchCandidateById, getSearchProgress } from "@/actions/candidates";
+import { log } from "@/lib/axiom/server-log";
 
 interface SearchPageProps {
   params: Promise<{ id: string }>;
@@ -14,12 +15,12 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
   const candidateParam = resolvedSearchParams.candidateId;
   const candidateId = Array.isArray(candidateParam) ? candidateParam[0] : candidateParam;
   
-  console.log("[SearchPage] Loading search:", id);
+  log.info("SearchPage", "Loading search", { searchId: id });
   
   const searchResult = await getSearchById(id);
   
   if (!searchResult.success || !searchResult.data) {
-    console.error("[SearchPage] Search not found:", id);
+    log.error("SearchPage", "Search not found", { searchId: id });
     notFound();
   }
   
@@ -35,7 +36,7 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
   let initialData;
   let initialCandidateDetail;
   try {
-      console.log("[SearchPage] Prefetching candidates");
+      log.info("SearchPage", "Prefetching candidates");
       const { data: candidatesData, pagination } = await getCandidatesForSearch(search.id, {
         scoreMin: scoreMin !== 0 ? scoreMin : undefined,
         scoreMax: scoreMax !== 100 ? scoreMax : undefined,
@@ -75,19 +76,19 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
         },
       }));
   } catch (error) {
-      console.error("[SearchPage] Error prefetching candidates:", error);
+      log.error("SearchPage", "Error prefetching candidates", { error });
   }
 
   if (candidateId) {
     try {
-      console.log("[SearchPage] Prefetching candidate details:", candidateId);
+      log.info("SearchPage", "Prefetching candidate details", { candidateId });
       const result = await getSearchCandidateById(candidateId);
       initialCandidateDetail = JSON.parse(JSON.stringify({
         candidateId,
         result,
       }));
     } catch (error) {
-      console.error("[SearchPage] Error prefetching candidate details:", error);
+      log.error("SearchPage", "Error prefetching candidate details", { error });
     }
   }
   

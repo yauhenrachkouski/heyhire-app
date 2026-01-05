@@ -4,6 +4,7 @@ import { Sora } from 'next/font/google'
 import { NuqsAdapter } from 'nuqs/adapters/next/app'
 import { QueryProvider } from '@/providers/query-provider'
 import { WebVitals } from '@/lib/axiom/client'
+import { AxiomErrorReporter } from "@/components/axiom/axiom-error-reporter";
 import { PostHogIdentityProvider } from '@/providers/posthog-identity-provider'
 import { Toaster } from '@/components/ui/sonner'
 
@@ -31,6 +32,7 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={inter.variable}>
       <WebVitals />
+      <AxiomErrorReporter />
       <body className={`${sora.variable} antialiased min-h-screen bg-background font-sans`}>
         <NuqsAdapter>
           <QueryProvider>

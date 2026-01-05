@@ -1,12 +1,14 @@
 import { getCandidatesForSearch, getSearchProgress } from "@/actions/candidates";
+import { log } from "@/lib/axiom/server-log";
+import { withAxiom } from "@/lib/axiom/server";
 import { NextRequest } from "next/server";
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(
+export const GET = withAxiom(async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   try {
     const { id: searchId } = await params;
     const { searchParams } = new URL(req.url);
@@ -49,7 +51,7 @@ export async function GET(
         options.includeTotalCount = true;
     }
     
-    console.log("[API] Fetching candidates for search:", searchId);
+    log.info("API", "Fetching candidates for search", { searchId, options });
 
     // Fetch candidates with filters and pagination
     const { data: candidatesData, pagination } = await getCandidatesForSearch(searchId, options);
@@ -57,7 +59,7 @@ export async function GET(
     // Get scoring progress stats
     const scoringProgress = isFirstPage ? await getSearchProgress(searchId) : null;
     
-    console.log("[API] Returning", candidatesData.length, "candidates");
+    log.info("API", "Returning candidates", { count: candidatesData.length });
 
     return Response.json({
       candidates: candidatesData,
@@ -77,7 +79,7 @@ export async function GET(
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("[API] Error fetching candidates:", errorMessage);
+    log.error("API", "Error fetching candidates", { error: errorMessage });
 
     const status =
       errorMessage === "Not authenticated"
@@ -90,4 +92,4 @@ export async function GET(
 
     return Response.json({ error: errorMessage }, { status });
   }
-}
+});

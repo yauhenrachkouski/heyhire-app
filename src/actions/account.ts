@@ -1,5 +1,7 @@
 'use server'
 
+import { log, logWithContext } from "@/lib/axiom/server-log";
+
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/lib/auth'
@@ -16,6 +18,7 @@ export async function updateUserProfile(data: {
   name: string
   image?: string
 }) {
+  let userId: string | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -24,6 +27,8 @@ export async function updateUserProfile(data: {
     if (!session?.user) {
       return { success: false, error: 'Not authenticated' }
     }
+
+    userId = session.user.id;
 
     // Update user in database
     await db.update(user)
@@ -35,15 +40,16 @@ export async function updateUserProfile(data: {
 
     return { success: true }
   } catch (err) {
-    console.error('Failed to update user profile:', err)
-    return { 
-      success: false, 
-      error: err instanceof Error ? err.message : 'Failed to update profile' 
+    log.error("Account", "Failed to update user profile", { userId, error: err })
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to update profile'
     }
   }
 }
 
 export async function uploadAvatar(formData: FormData) {
+  let userId: string | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -52,6 +58,8 @@ export async function uploadAvatar(formData: FormData) {
     if (!session?.user) {
       return { success: false, error: 'Not authenticated' }
     }
+
+    userId = session.user.id;
 
     const file = formData.get('file') as File
     if (!file) {
@@ -81,15 +89,16 @@ export async function uploadAvatar(formData: FormData) {
 
     return { success: true, imageUrl }
   } catch (err) {
-    console.error('Failed to upload avatar:', err)
-    return { 
-      success: false, 
-      error: err instanceof Error ? err.message : 'Failed to upload avatar' 
+    log.error("Account", "Failed to upload avatar", { userId, error: err })
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to upload avatar'
     }
   }
 }
 
 export async function removeAvatar() {
+  let userId: string | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -98,6 +107,8 @@ export async function removeAvatar() {
     if (!session?.user) {
       return { success: false, error: 'Not authenticated' }
     }
+
+    userId = session.user.id;
 
     // Remove user image from database
     await db.update(user)
@@ -106,15 +117,16 @@ export async function removeAvatar() {
 
     return { success: true }
   } catch (err) {
-    console.error('Failed to remove avatar:', err)
-    return { 
-      success: false, 
-      error: err instanceof Error ? err.message : 'Failed to remove avatar' 
+    log.error("Account", "Failed to remove avatar", { userId, error: err })
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to remove avatar'
     }
   }
 }
 
 export async function getOrganizationMembership(organizationId: string) {
+  let userId: string | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -123,6 +135,8 @@ export async function getOrganizationMembership(organizationId: string) {
     if (!session?.user) {
       return { success: false, error: 'Not authenticated' }
     }
+
+    userId = session.user.id;
 
     // Get user's membership in the organization
     const membership = await db.query.member.findFirst({
@@ -136,18 +150,18 @@ export async function getOrganizationMembership(organizationId: string) {
       return { success: false, error: 'Membership not found' }
     }
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       data: {
         role: membership.role,
         createdAt: membership.createdAt
       }
     }
   } catch (err) {
-    console.error('Failed to get organization membership:', err)
-    return { 
-      success: false, 
-      error: err instanceof Error ? err.message : 'Failed to get membership' 
+    log.error("Account", "Failed to get organization membership", { userId, organizationId, error: err })
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to get membership'
     }
   }
 }
@@ -157,6 +171,7 @@ export async function updateOrganization(data: {
   name: string
   size?: string
 }) {
+  let userId: string | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -165,6 +180,8 @@ export async function updateOrganization(data: {
     if (!session?.user) {
       return { success: false, error: 'Not authenticated' }
     }
+
+    userId = session.user.id;
 
     // Parse existing metadata
     const org = await db.query.organization.findFirst({
@@ -194,15 +211,16 @@ export async function updateOrganization(data: {
 
     return { success: true }
   } catch (err) {
-    console.error('Failed to update organization:', err)
-    return { 
-      success: false, 
-      error: err instanceof Error ? err.message : 'Failed to update organization' 
+    log.error("Account", "Failed to update organization", { userId, organizationId: data.organizationId, error: err })
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to update organization'
     }
   }
 }
 
 export async function getUserAccounts() {
+  let userId: string | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -212,12 +230,14 @@ export async function getUserAccounts() {
       return { success: false, error: 'Not authenticated', data: [] }
     }
 
+    userId = session.user.id;
+
     const accounts = await db.query.account.findMany({
       where: eq(account.userId, session.user.id)
     })
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       data: accounts.map((acc: { id: string; providerId: string; createdAt: Date }) => ({
         id: acc.id,
         providerId: acc.providerId,
@@ -225,9 +245,9 @@ export async function getUserAccounts() {
       }))
     }
   } catch (err) {
-    console.error('Failed to get user accounts:', err)
-    return { 
-      success: false, 
+    log.error("Account", "Failed to get user accounts", { userId, error: err })
+    return {
+      success: false,
       error: err instanceof Error ? err.message : 'Failed to get accounts',
       data: []
     }
@@ -235,6 +255,7 @@ export async function getUserAccounts() {
 }
 
 export async function unlinkAccount(accountId: string) {
+  let userId: string | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -243,6 +264,8 @@ export async function unlinkAccount(accountId: string) {
     if (!session?.user) {
       return { success: false, error: 'Not authenticated' }
     }
+
+    userId = session.user.id;
 
     // Delete the account (magic link is always available as fallback authentication)
     await db.delete(account)
@@ -253,15 +276,16 @@ export async function unlinkAccount(accountId: string) {
 
     return { success: true }
   } catch (err) {
-    console.error('Failed to unlink account:', err)
-    return { 
-      success: false, 
-      error: err instanceof Error ? err.message : 'Failed to unlink account' 
+    log.error("Account", "Failed to unlink account", { userId, accountId, error: err })
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to unlink account'
     }
   }
 }
 
 export async function softDeleteAccount() {
+  let userId: string | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -270,6 +294,8 @@ export async function softDeleteAccount() {
     if (!session?.user) {
       return { success: false, error: 'Not authenticated' }
     }
+
+    userId = session.user.id;
 
     try {
       const emailContent = AccountDeletedEmail({
@@ -282,7 +308,7 @@ export async function softDeleteAccount() {
         react: emailContent,
       })
     } catch (e) {
-      console.warn('Failed to send account deleted email', e)
+      log.warn("Account", "Failed to send account deleted email", { userId, error: e })
     }
 
     // Soft delete by setting a deletedAt timestamp
@@ -302,10 +328,10 @@ export async function softDeleteAccount() {
 
     return { success: true }
   } catch (err) {
-    console.error('Failed to delete account:', err)
-    return { 
-      success: false, 
-      error: err instanceof Error ? err.message : 'Failed to delete account' 
+    log.error("Account", "Failed to delete account", { userId, error: err })
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to delete account'
     }
   }
 }
@@ -320,19 +346,24 @@ export async function createOrganizationWithSetup(data: {
   logo?: string
   googleLink?: string
 }) {
+  let userId: string | undefined;
   try {
-    console.log('[createOrganizationWithSetup] Starting organization creation:', { name: data.name, size: data.size, logo: data.logo, googleLink: data.googleLink })
-    
     const session = await auth.api.getSession({
       headers: await headers()
     })
 
     if (!session?.user) {
-      console.error('[createOrganizationWithSetup] No authenticated user')
+      log.error("CreateOrganizationWithSetup", "No authenticated user")
       return { success: false, error: 'Not authenticated' }
     }
 
-    console.log('[createOrganizationWithSetup] User authenticated:', session.user.id)
+    userId = session.user.id;
+    const ctxLog = logWithContext("CreateOrganizationWithSetup", { userId });
+
+    ctxLog.info("Starting organization creation", {
+      name: data.name,
+      size: data.size,
+    })
 
     // Check if user already has an organization
     const existingMembership = await db.query.member.findFirst({
@@ -340,7 +371,9 @@ export async function createOrganizationWithSetup(data: {
     })
 
     if (existingMembership) {
-      console.log('[createOrganizationWithSetup] User already has organization:', existingMembership.organizationId)
+      ctxLog.info("User already has organization", {
+        organizationId: existingMembership.organizationId,
+      })
       // User already has an organization, just set it as active and return
       await auth.api.setActiveOrganization({
         headers: await headers(),
@@ -356,7 +389,7 @@ export async function createOrganizationWithSetup(data: {
     const organizationName = data.name.trim() || 'Default Workspace'
     const slug = `${organizationName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${generateId().slice(0, 8)}`
 
-    console.log('[createOrganizationWithSetup] Creating organization with slug:', slug)
+    ctxLog.info("Creating organization with slug", { slug })
 
     // Use better-auth's server API to create organization
     const createResult = await auth.api.createOrganization({
@@ -371,14 +404,16 @@ export async function createOrganizationWithSetup(data: {
     })
 
     if (!createResult) {
-      console.error('[createOrganizationWithSetup] Failed to create organization - no result')
+      ctxLog.error("Failed to create organization - no result")
       throw new Error('Failed to create organization')
     }
 
-    console.log('[createOrganizationWithSetup] Organization created successfully:', createResult.id)
+    ctxLog.info("Organization created successfully", {
+      organizationId: createResult.id,
+    })
 
     // Set the newly created organization as active
-    const setActiveResult = await auth.api.setActiveOrganization({
+    await auth.api.setActiveOrganization({
       headers: await headers(),
       body: { organizationId: createResult.id }
     })
@@ -386,28 +421,10 @@ export async function createOrganizationWithSetup(data: {
     revalidatePath(`/${createResult.id}`, 'layout')
     revalidatePath('/paywall')
 
-    console.log('[createOrganizationWithSetup] Organization set as active:', setActiveResult)
+    ctxLog.info("Organization set as active", { organizationId: createResult.id })
 
-    // Verify the organization was created by querying it back
-    const verifyOrg = await db.query.organization.findFirst({
-      where: eq(orgTable.id, createResult.id)
-    })
-
-    const verifyMember = await db.query.member.findFirst({
-      where: and(
-        eq(member.organizationId, createResult.id),
-        eq(member.userId, session.user.id)
-      )
-    })
-
-    console.log('[createOrganizationWithSetup] Verification:', {
-      orgExists: !!verifyOrg,
-      memberExists: !!verifyMember,
-      memberRole: verifyMember?.role
-    })
-
-    return { 
-      success: true, 
+    return {
+      success: true,
       organizationId: createResult.id,
       organization: {
         id: createResult.id,
@@ -416,15 +433,16 @@ export async function createOrganizationWithSetup(data: {
       }
     }
   } catch (err) {
-    console.error('[createOrganizationWithSetup] Error:', err)
-    return { 
-      success: false, 
-      error: err instanceof Error ? err.message : 'Failed to create organization' 
+    log.error("CreateOrganizationWithSetup", "Error", { userId, error: err })
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to create organization'
     }
   }
 }
 
 export async function createDefaultOrganization() {
+  let userId: string | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -433,6 +451,8 @@ export async function createDefaultOrganization() {
     if (!session?.user) {
       return { success: false, error: 'Not authenticated' }
     }
+
+    userId = session.user.id;
 
     // Check if user already has an organization
     const existingMembership = await db.query.member.findFirst({
@@ -484,10 +504,10 @@ export async function createDefaultOrganization() {
 
     return { success: true, organizationId }
   } catch (err) {
-    console.error('Failed to create default organization:', err)
-    return { 
-      success: false, 
-      error: err instanceof Error ? err.message : 'Failed to create default organization' 
+    log.error("Account", "Failed to create default organization", { userId, error: err })
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to create default organization'
     }
   }
 }

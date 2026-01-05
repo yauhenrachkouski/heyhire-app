@@ -9,6 +9,7 @@ import heyhireLogo from '@/assets/heyhire_logo.svg'
 import { db } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, gt } from "drizzle-orm";
+import { log } from "@/lib/axiom/server-log";
 
 interface AcceptInvitationPageProps {
   params: Promise<{
@@ -149,7 +150,7 @@ export default async function AcceptInvitationPage({
     // Redirect to organization page on success
     redirect(activeOrganization ? `/${activeOrganization.id}/organization?invitation=accepted` : "/");
   } catch (error: any) {
-    console.error("Error accepting invitation:", error);
+    log.error("AcceptInvitationPage", "Error accepting invitation", { error });
 
     // Check if the error is specifically about wrong recipient
     const errorMessage = error?.message || error?.body?.message || '';

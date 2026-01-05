@@ -1,5 +1,6 @@
 "use client";
 
+import { log } from "@/lib/axiom/client-log";
 import { useState, useCallback, useRef } from "react";
 import { useRealtime } from "@upstash/realtime/client";
 import type { RealtimeEvents } from "@/lib/realtime";
@@ -81,7 +82,7 @@ export function useSearchRealtime({
     channels: shouldConnect ? [`search:${searchId}`] : [],
     events: ["status.updated", "progress.updated", "search.completed", "search.failed", "candidates.added", "scoring.started", "scoring.progress", "scoring.completed", "scoring.failed"],
     onData: useCallback((payload: RealtimePayload) => {
-      console.log("[useSearchRealtime] Event:", payload.event);
+      log.info("useSearchRealtime", "Event received", { event: payload.event });
       
       // Search events
       if (payload.event === "status.updated") {
@@ -90,7 +91,7 @@ export function useSearchRealtime({
         // CRITICAL: Once we reach a terminal status, don't allow reverting to active
         // This prevents flickering back to loading state after completion
         if (hasReachedTerminalRef.current && SOURCING_ACTIVE_STATUSES.includes(data.status)) {
-          console.log("[useSearchRealtime] Ignoring stale active status after terminal:", data.status);
+          log.info("useSearchRealtime", "Ignoring stale active status after terminal", { status: data.status });
           return;
         }
         
@@ -110,7 +111,7 @@ export function useSearchRealtime({
         
         // Don't update progress if we're in terminal state (prevents loader flicker)
         if (hasReachedTerminalRef.current) {
-          console.log("[useSearchRealtime] Ignoring progress update after terminal state");
+          log.info("useSearchRealtime", "Ignoring progress update after terminal state");
           return;
         }
         

@@ -1,5 +1,7 @@
 "use server";
 
+import { log } from "@/lib/axiom/server-log";
+
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { getErrorMessage } from "@/lib/handle-error";
@@ -57,7 +59,7 @@ export async function inviteMember(input: InviteMemberInput) {
       message: `Invitation sent to ${validatedInput.email}`,
     };
   } catch (error) {
-    console.error("Error inviting member:", error);
+    log.error("Invitations", "Error inviting member", { error });
     return {
       success: false,
       error: getErrorMessage(error),
@@ -80,7 +82,7 @@ export async function getInvitations(organizationId?: string) {
       data: invitations || [],
     };
   } catch (error) {
-    console.error("Error fetching invitations:", error);
+    log.error("Invitations", "Error fetching invitations", { error });
     return {
       success: false,
       error: getErrorMessage(error),
@@ -110,7 +112,7 @@ export async function cancelInvitation(invitationId: string) {
       message: "Invitation canceled successfully",
     };
   } catch (error) {
-    console.error("Error canceling invitation:", error);
+    log.error("Invitations", "Error canceling invitation", { error });
     return {
       success: false,
       error: getErrorMessage(error),

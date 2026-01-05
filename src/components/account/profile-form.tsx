@@ -1,5 +1,7 @@
 'use client'
 
+import { log } from "@/lib/axiom/client-log";
+
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import posthog from 'posthog-js'
@@ -60,7 +62,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
         toast.error(result.error || 'Failed to update profile')
       }
     } catch (err) {
-      console.error('Profile update error:', err)
+      log.error("ProfileForm", "Profile update error", { error: err })
       toast.error('Failed to update profile')
     } finally {
       setIsLoading(false)
@@ -108,7 +110,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
         toast.error(result.error || 'Failed to upload avatar')
       }
     } catch (err) {
-      console.error('Avatar upload error:', err)
+      log.error("ProfileForm", "Avatar upload error", { error: err })
       toast.error('Failed to upload avatar')
     } finally {
       setIsUploadingAvatar(false)
@@ -139,7 +141,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
         toast.error(result.error || 'Failed to remove avatar')
       }
     } catch (err) {
-      console.error('Avatar removal error:', err)
+      log.error("ProfileForm", "Avatar removal error", { error: err })
       toast.error('Failed to remove avatar')
     } finally {
       setIsUploadingAvatar(false)

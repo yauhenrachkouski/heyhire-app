@@ -1,5 +1,7 @@
 "use server";
 
+import { log } from "@/lib/axiom/server-log";
+
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/db/drizzle";
@@ -74,7 +76,7 @@ export async function getCustomerPortalPaymentMethodSession() {
       error: null,
     };
   } catch (error) {
-    console.error("Error creating payment method portal session:", error);
+    log.error("Stripe", "Error creating payment method portal session", { error });
     return {
       url: null,
       error:
@@ -120,7 +122,7 @@ export async function getCustomerInvoices(params?: { limit?: number }) {
       error: null,
     };
   } catch (error) {
-    console.error("Error listing invoices:", error);
+    log.error("Stripe", "Error listing invoices", { error });
     return {
       invoices: [],
       error:
@@ -170,7 +172,7 @@ export async function getCustomerPaymentMethods(params?: { limit?: number }) {
       error: null,
     };
   } catch (error) {
-    console.error("Error listing payment methods:", error);
+    log.error("Stripe", "Error listing payment methods", { error });
     return {
       paymentMethods: [],
       defaultPaymentMethodId: null,
@@ -195,9 +197,9 @@ export async function getUserSubscription() {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to fetch subscription";
     if (message.includes("Not authenticated") || message.includes("No active organization")) {
-      console.warn("Error fetching subscription:", error);
+      log.warn("Stripe", "Error fetching subscription", { error });
     } else {
-      console.error("Error fetching subscription:", error);
+      log.error("Stripe", "Error fetching subscription", { error });
     }
     return { subscription: null, error: error instanceof Error ? error.message : "Failed to fetch subscription" };
   }
@@ -224,7 +226,7 @@ export async function getOrganizationSubscription(organizationId: string) {
 
     return { subscription: orgSubscription[0] || null, error: null };
   } catch (error) {
-    console.error("Error fetching organization subscription:", error);
+    log.error("Stripe", "Error fetching organization subscription", { error });
     return { subscription: null, error: "Failed to fetch organization subscription" };
   }
 }
@@ -405,7 +407,7 @@ export async function getCustomerPortalSession() {
       error: null,
     };
   } catch (error) {
-    console.error("Error creating customer portal session:", error);
+    log.error("Stripe", "Error creating customer portal session", { error });
     return {
       url: null,
       error:
@@ -472,7 +474,7 @@ export async function startProBillingNow() {
       error: null,
     };
   } catch (error) {
-    console.error("Error unlocking trial:", error);
+    log.error("Stripe", "Error unlocking trial", { error });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to unlock trial",
@@ -539,7 +541,7 @@ export async function cancelSubscription() {
         });
       }
     } catch (e) {
-      console.warn("Failed to send cancel confirmation email", e);
+      log.warn("Stripe", "Failed to send cancel confirmation email", { error: e });
     }
 
     return {
@@ -548,7 +550,7 @@ export async function cancelSubscription() {
       error: null,
     };
   } catch (error) {
-    console.error("Error canceling subscription:", error);
+    log.error("Stripe", "Error canceling subscription", { error });
     return {
       success: false,
       error:
@@ -614,7 +616,7 @@ export async function resumeSubscription() {
         });
       }
     } catch (e) {
-      console.warn("Failed to send resume confirmation email", e);
+      log.warn("Stripe", "Failed to send resume confirmation email", { error: e });
     }
 
     return {
@@ -623,7 +625,7 @@ export async function resumeSubscription() {
       error: null,
     };
   } catch (error) {
-    console.error("Error resuming subscription:", error);
+    log.error("Stripe", "Error resuming subscription", { error });
     return {
       success: false,
       error:
@@ -669,7 +671,7 @@ export async function setDefaultPaymentMethod(paymentMethodId: string) {
       error: null,
     };
   } catch (error) {
-    console.error("Error setting default payment method:", error);
+    log.error("Stripe", "Error setting default payment method", { error });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to set default payment method",
@@ -718,7 +720,7 @@ export async function removePaymentMethod(paymentMethodId: string) {
       error: null,
     };
   } catch (error) {
-    console.error("Error removing payment method:", error);
+    log.error("Stripe", "Error removing payment method", { error });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to remove payment method",

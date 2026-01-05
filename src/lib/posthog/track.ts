@@ -1,4 +1,5 @@
 import { getPostHogServer } from "./posthog-server";
+import { log } from "@/lib/axiom/server-log";
 
 /**
  * Server-side PostHog event tracking helper.
@@ -27,7 +28,7 @@ export function trackServerEvent(
             },
         });
     } catch (e) {
-        console.error(`[PostHog] Failed to capture ${event}`, e);
+        log.error("PostHog", "Failed to capture event", { event, error: e });
     }
 }
 

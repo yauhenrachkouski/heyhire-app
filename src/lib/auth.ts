@@ -20,7 +20,7 @@ import { PLAN_LIMITS } from "@/types/plans";
 
 
 
-const log = logger.with({ service: "auth" });
+const log = logger.with({ source: "auth" });
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 

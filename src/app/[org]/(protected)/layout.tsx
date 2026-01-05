@@ -1,9 +1,7 @@
 import { AppSidebar } from "@/components/sidebar/app-sidebar"
 import { Separator } from "@/components/ui/separator"
-import {
-  SidebarInset,
-  SidebarTrigger,
-} from "@/components/ui/sidebar"
+import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
+import { log } from "@/lib/axiom/server-log";
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { PersistentSidebarProvider } from "@/providers/sidebar-provider"
 import { PlansModalProvider } from "@/providers/plans-modal-provider"
@@ -55,7 +53,7 @@ export default async function DashboardLayout({
   const recentSearches = recentSearchesResponse.success ? recentSearchesResponse.data : []
 
   // Debug: Log what we received from better-auth APIs
-  console.log('[DashboardLayout] Organizations data:', {
+  log.info("DashboardLayout", "Organizations data", {
     organizationsCount: organizations?.length ?? 0,
     organizationsList: organizations?.map(o => ({ id: o.id, name: o.name })) ?? [],
     activeOrgId: activeOrganization?.id,

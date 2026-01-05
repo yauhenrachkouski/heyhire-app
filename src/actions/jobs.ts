@@ -1,5 +1,7 @@
 "use server";
 
+import { log } from "@/lib/axiom/server-log";
+
 import "server-only";
 
 import {
@@ -38,8 +40,8 @@ export async function parseJob(
   message: string
 ): Promise<{ success: boolean; criteria?: SourcingCriteria; error?: string }> {
   try {
-    console.log("[Search] Parsing job with message:", message);
-    console.log("[Search] API base URL:", API_BASE_URL || "(empty)");
+    log.info("Search", "Parsing job", { message });
+    log.info("Search", "API base URL", { apiBaseUrl: API_BASE_URL || "(empty)" });
 
     const response = await fetch(`${API_BASE_URL}/api/v3/jobs/parse`, {
       method: "POST",
@@ -67,7 +69,10 @@ export async function parseJob(
       } catch {
         // Error parsing error details, will be handled below
       }
-      console.error("[Search] Parse API error:", response.status, rawBody);
+      log.error("Search", "Parse API error", {
+        status: response.status,
+        responseBody: rawBody,
+      });
       throw new Error(`Parse API error: ${response.status} ${detail ? `- ${detail}` : ""}`.trim());
     }
 
@@ -76,10 +81,10 @@ export async function parseJob(
     try {
       data = JSON.parse(responseText) as unknown;
     } catch (e) {
-      console.error("[Search] Parse response JSON error:", responseText);
+      log.error("Search", "Parse response JSON error", { responseText });
       throw new Error(`Parse API error: invalid JSON response`);
     }
-    console.log("[Search] Parse response:", JSON.stringify(data, null, 2));
+    log.info("Search", "Parse response", { response: data });
 
     const validated = jobParsingResponseV3Schema.parse(data);
 
@@ -89,7 +94,7 @@ export async function parseJob(
     };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    console.error("[Search] Error parsing job:", errorMessage);
+    log.error("Search", "Error parsing job", { error: errorMessage });
     return {
       success: false,
       error: errorMessage,
@@ -107,10 +112,12 @@ export async function generateStrategies(
   requestId: string
 ): Promise<{ success: boolean; data?: StrategyGenerationResponse; error?: string }> {
   try {
-    console.log("[Strategy] Step 1: Generating strategies...");
-    console.log("[Strategy] Raw text:", rawText.substring(0, 200) + "...");
-    console.log("[Strategy] Criteria:", JSON.stringify(criteria, null, 2));
-    console.log("[Strategy] Request ID:", requestId);
+    log.info("Strategy", "Step 1: Generating strategies");
+    log.info("Strategy", "Raw text preview", {
+      rawTextPreview: rawText.substring(0, 200) + "...",
+    });
+    log.info("Strategy", "Criteria", { criteria });
+    log.info("Strategy", "Request ID", { requestId });
 
     const response = await fetch(`${API_BASE_URL}/api/v3/strategies/generate`, {
       method: "POST",
@@ -126,15 +133,18 @@ export async function generateStrategies(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[Strategy] Generate API error:", response.status, errorText);
+      log.error("Strategy", "Generate API error", {
+        status: response.status,
+        errorText,
+      });
       throw new Error(`Strategy generate API error: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log("[Strategy] Generate response:", JSON.stringify(data, null, 2));
+    log.info("Strategy", "Generate response", { response: data });
 
     const validated = strategyGenerationResponseSchema.parse(data);
-    console.log("[Strategy] Generated", validated.strategies.length, "strategies");
+    log.info("Strategy", "Generated strategies", { count: validated.strategies.length });
 
     return {
       success: true,
@@ -142,7 +152,7 @@ export async function generateStrategies(
     };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    console.error("[Strategy] Error generating strategies:", errorMessage);
+    log.error("Strategy", "Error generating strategies", { error: errorMessage });
     return {
       success: false,
       error: errorMessage,
@@ -159,10 +169,10 @@ export async function executeStrategies(
   strategies: SourcingStrategyItem[]
 ): Promise<{ success: boolean; data?: StrategyExecutionResponse; error?: string }> {
   try {
-    console.log("[Strategy] Step 2: Executing strategies...");
-    console.log("[Strategy] Project ID:", projectId);
-    console.log("[Strategy] Strategies count:", strategies.length);
-    console.log("[Strategy] Strategy names:", strategies.map(s => s.name).join(", "));
+    log.info("Strategy", "Step 2: Executing strategies");
+    log.info("Strategy", "Project ID", { projectId });
+    log.info("Strategy", "Strategies count", { count: strategies.length });
+    log.info("Strategy", "Strategy names", { names: strategies.map(s => s.name) });
 
     const response = await fetch(`${API_BASE_URL}/api/v3/strategies/execute`, {
       method: "POST",
@@ -177,16 +187,21 @@ export async function executeStrategies(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[Strategy] Execute API error:", response.status, errorText);
+      log.error("Strategy", "Execute API error", {
+        status: response.status,
+        errorText,
+      });
       throw new Error(`Strategy execute API error: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log("[Strategy] Execute response:", JSON.stringify(data, null, 2));
+    log.info("Strategy", "Execute response", { response: data });
 
     const validated = strategyExecutionResponseSchema.parse(data);
-    console.log("[Strategy] Task ID:", validated.task_id);
-    console.log("[Strategy] Strategies launched:", validated.strategies_launched);
+    log.info("Strategy", "Task ID", { taskId: validated.task_id });
+    log.info("Strategy", "Strategies launched", {
+      strategiesLaunched: validated.strategies_launched,
+    });
 
     return {
       success: true,
@@ -194,7 +209,7 @@ export async function executeStrategies(
     };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    console.error("[Strategy] Error executing strategies:", errorMessage);
+    log.error("Strategy", "Error executing strategies", { error: errorMessage });
     return {
       success: false,
       error: errorMessage,
@@ -210,8 +225,8 @@ export async function getStrategyResults(
   taskId: string
 ): Promise<{ success: boolean; data?: StrategyResultsResponse; error?: string }> {
   try {
-    console.log("[Strategy] Step 3: Polling for results...");
-    console.log("[Strategy] Task ID:", taskId);
+    log.info("Strategy", "Step 3: Polling for results");
+    log.info("Strategy", "Task ID", { taskId });
 
     const response = await fetch(`${API_BASE_URL}/api/v3/strategies/results/${taskId}`, {
       method: "GET",
@@ -222,16 +237,21 @@ export async function getStrategyResults(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[Strategy] Results API error:", response.status, errorText);
+      log.error("Strategy", "Results API error", {
+        status: response.status,
+        errorText,
+      });
       throw new Error(`Strategy results API error: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log("[Strategy] Results response:", JSON.stringify(data, null, 2));
+    log.info("Strategy", "Results response", { response: data });
 
     const validated = strategyResultsResponseSchema.parse(data);
-    console.log("[Strategy] Status:", validated.status);
-    console.log("[Strategy] Candidates found:", validated.total_candidates || validated.candidates?.length || 0);
+    log.info("Strategy", "Status", { status: validated.status });
+    log.info("Strategy", "Candidates found", {
+      candidates: validated.total_candidates || validated.candidates?.length || 0,
+    });
 
     return {
       success: true,
@@ -239,7 +259,7 @@ export async function getStrategyResults(
     };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    console.error("[Strategy] Error getting results:", errorMessage);
+    log.error("Strategy", "Error getting results", { error: errorMessage });
     return {
       success: false,
       error: errorMessage,
@@ -263,7 +283,7 @@ export async function startBackgroundSearch(
   const requestId = `req_${generateId()}`;
   
   try {
-    console.log("[Search Job] Starting background search for:", searchId);
+    log.info("SearchJob", "Starting background search", { searchId });
     
     // Update status to generating
     await db.update(search)
@@ -274,7 +294,7 @@ export async function startBackgroundSearch(
       .where(eq(search.id, searchId));
 
     // Step 1: Generate strategies
-    console.log("[Search Job] Generating strategies...");
+    log.info("SearchJob", "Generating strategies");
     const generateResult = await generateStrategies(rawText, criteria, requestId);
     
     if (!generateResult.success || !generateResult.data) {
@@ -293,7 +313,7 @@ export async function startBackgroundSearch(
     }
 
     // Step 2: Execute strategies
-    console.log("[Search Job] Executing strategies...");
+    log.info("SearchJob", "Executing strategies");
     const executeResult = await executeStrategies(searchId, strategies);
     
     if (!executeResult.success || !executeResult.data) {
@@ -301,7 +321,7 @@ export async function startBackgroundSearch(
     }
     
     const taskId = executeResult.data.task_id;
-    console.log("[Search Job] Task ID obtained:", taskId);
+    log.info("SearchJob", "Task ID obtained", { taskId });
 
     // Step 3: Update DB with task ID
     await db.update(search)
@@ -327,7 +347,7 @@ export async function startBackgroundSearch(
     
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    console.error("[Search Job] Error starting search:", errorMessage);
+    log.error("SearchJob", "Error starting search", { error: errorMessage });
     
     // Update status to error
     await db.update(search)
@@ -358,9 +378,9 @@ export async function triggerSourcingWorkflow(
   strategyIdsToRun?: string[]
 ): Promise<{ success: boolean; workflowRunId?: string; error?: string }> {
   try {
-    console.log("[Workflow Trigger] Starting workflow for search:", searchId);
+    log.info("WorkflowTrigger", "Starting workflow for search", { searchId });
     if (strategyIdsToRun?.length) {
-      console.log("[Workflow Trigger] With specific strategies:", strategyIdsToRun);
+      log.info("WorkflowTrigger", "Using specific strategies", { strategyIds: strategyIdsToRun });
     }
 
     // Get the base URL for the workflow endpoint
@@ -370,7 +390,7 @@ export async function triggerSourcingWorkflow(
     
     const workflowUrl = `${baseUrl}/api/workflow/sourcing`;
     
-    console.log("[Workflow Trigger] Triggering workflow at:", workflowUrl);
+    log.info("WorkflowTrigger", "Triggering workflow", { workflowUrl });
 
     // Update search status to show we're starting
     await db.update(search)
@@ -388,7 +408,7 @@ export async function triggerSourcingWorkflow(
       message: strategyIdsToRun?.length ? "Starting continuation..." : "Starting search...",
       progress: 5,
     });
-    console.log("[Workflow Trigger] Emitted initial status update to channel:", channel);
+    log.info("WorkflowTrigger", "Emitted initial status update", { channel });
 
     // Check if running on localhost without a public-facing URL
     // We allow "localhost.heyhire.ai" as it is a public tunnel
@@ -396,7 +416,7 @@ export async function triggerSourcingWorkflow(
     const isPublicTunnel = workflowUrl.includes("heyhire.ai") || workflowUrl.includes("ngrok") || workflowUrl.includes("trycloudflare");
 
     if (isLocalhost && !isPublicTunnel) {
-      console.warn("[Workflow Trigger] Localhost detected without public tunnel. Cannot trigger QStash.");
+      log.warn("WorkflowTrigger", "Localhost detected without public tunnel; cannot trigger QStash");
       throw new Error("Cannot trigger background job on localhost without a public tunnel (e.g. ngrok, cloudflared). Please set NEXT_PUBLIC_APP_URL to your tunnel URL.");
     }
 
@@ -411,7 +431,7 @@ export async function triggerSourcingWorkflow(
     // If the workflowUrl contains "localhost", it's likely incorrect for QStash usage.
     // We should warn the user if NEXT_PUBLIC_APP_URL is not set to the tunnel URL.
     
-    console.log("[Workflow Trigger] Using workflow URL:", workflowUrl);
+    log.info("WorkflowTrigger", "Using workflow URL", { workflowUrl });
 
     // Trigger the workflow via QStash
     const result = await qstashClient.publishJSON({
@@ -425,7 +445,7 @@ export async function triggerSourcingWorkflow(
       retries: 3,
     });
 
-    console.log("[Workflow Trigger] Workflow triggered with messageId:", result.messageId);
+    log.info("WorkflowTrigger", "Workflow triggered", { messageId: result.messageId });
 
     return { 
       success: true, 
@@ -434,7 +454,7 @@ export async function triggerSourcingWorkflow(
     
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    console.error("[Workflow Trigger] Error:", errorMessage);
+    log.error("WorkflowTrigger", "Error triggering workflow", { error: errorMessage });
     
     // Update status to error
     await db.update(search)

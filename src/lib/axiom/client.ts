@@ -1,15 +1,23 @@
 'use client';
-import axiomClient from '@/lib/axiom/axiom';
-import { Logger, AxiomJSTransport, ConsoleTransport, type Transport } from '@axiomhq/logging';
+import { Logger, ProxyTransport, ConsoleTransport, type Transport } from '@axiomhq/logging';
 import { createUseLogger, createWebVitalsComponent } from '@axiomhq/react';
 import { nextJsFormatters } from '@axiomhq/nextjs/client';
 
+const clientTransports: [Transport, ...Transport[]] = [
+  new ProxyTransport({ url: '/api/axiom', autoFlush: true }),
+];
+
+if (process.env.NODE_ENV !== 'production') {
+  clientTransports.push(new ConsoleTransport({ prettyPrint: true }));
+}
+
 export const logger = new Logger({
-  transports: [
-    new AxiomJSTransport({ axiom: axiomClient, dataset: process.env.NEXT_PUBLIC_AXIOM_DATASET! }),
-    new ConsoleTransport({ prettyPrint: true }),
-  ],
+  transports: clientTransports,
   formatters: nextJsFormatters,
+  args: {
+    app: "heyhire-app",
+    env: process.env.NEXT_PUBLIC_VERCEL_ENV ?? process.env.NODE_ENV ?? "unknown",
+  },
 });
 
 const useLogger = createUseLogger(logger);

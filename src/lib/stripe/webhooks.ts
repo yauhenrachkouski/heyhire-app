@@ -13,7 +13,7 @@ import {
     TrialEndingSoonEmail,
 } from "@/emails";
 
-const log = logger.with({ service: "stripe-webhook" });
+const log = logger.with({ source: "stripe-webhook" });
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 

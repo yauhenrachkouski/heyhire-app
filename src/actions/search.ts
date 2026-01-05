@@ -1,5 +1,7 @@
 "use server";
 
+import { log, logWithContext } from "@/lib/axiom/server-log";
+
 import "server-only";
 
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
@@ -44,7 +46,7 @@ export async function updateSearchName(
     return { success: true };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    console.error("[Search] Error updating search name:", errorMessage);
+    log.error("Search", "Error updating search name", { searchId, error: errorMessage });
     return { success: false, error: errorMessage };
   }
 }
@@ -58,6 +60,8 @@ export async function saveSearch(
   userId: string,
   organizationId: string
 ): Promise<{ success: boolean; data?: { id: string }; error?: string }> {
+  const ctxLog = logWithContext("Search", { userId, organizationId });
+
   try {
     const signedIn = await getSignedInUser();
     if (!signedIn) {
@@ -70,13 +74,13 @@ export async function saveSearch(
     await requireOrganizationReadAccess(organizationId);
     await assertNotReadOnlyForOrganization(organizationId);
 
-    console.log("[Search] Saving search for user:", userId, "org:", organizationId);
-    
+    ctxLog.info("Saving search");
+
     const rawName = criteria.search_name?.trim();
     const name = rawName || "Untitled Search";
     const id = generateId();
-    console.log("[Search] Generated new search ID:", id);
-    
+    ctxLog.info("Generated new search ID", { searchId: id });
+
     await db.insert(search).values({
       id,
       name,
@@ -89,19 +93,19 @@ export async function saveSearch(
       userId,
       organizationId,
     });
-    
-    console.log("[Search] Search saved with ID:", id);
+
+    ctxLog.info("Search saved", { searchId: id });
 
     revalidateTag(recentSearchesTag(organizationId), 'max');
     revalidatePath(`/${organizationId}`);
-    
+
     return {
       success: true,
       data: { id },
     };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    console.error("[Search] Error saving search:", errorMessage);
+    ctxLog.error("Error saving search", { error: errorMessage });
     return {
       success: false,
       error: errorMessage,
@@ -125,10 +129,12 @@ export async function getRecentSearches(
   }>;
   error?: string;
 }> {
+  const ctxLog = logWithContext("Search", { organizationId });
+
   try {
     await requireOrganizationReadAccess(organizationId);
 
-    console.log("[Search] Fetching recent searches for org:", organizationId);
+    ctxLog.debug("Fetching recent searches", { limit });
 
     const fetchRecentSearches = unstable_cache(
       async () => {
@@ -147,23 +153,23 @@ export async function getRecentSearches(
         }));
       },
       ["recent-searches", organizationId, String(limit)],
-      { 
+      {
         tags: [recentSearchesTag(organizationId)],
         revalidate: 10 // Cache for 10 seconds, then refetch
       }
     );
 
     const parsedSearches = await fetchRecentSearches();
-    
-    console.log("[Search] Found", parsedSearches.length, "recent searches");
-    
+
+    ctxLog.debug("Found recent searches", { count: parsedSearches.length });
+
     return {
       success: true,
       data: parsedSearches,
     };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    console.error("[Search] Error fetching recent searches:", errorMessage);
+    ctxLog.error("Error fetching recent searches", { error: errorMessage });
     return {
       success: false,
       error: errorMessage,
@@ -188,6 +194,8 @@ export async function searchSearchesByTitle(
   }>;
   error?: string;
 }> {
+  const ctxLog = logWithContext("Search", { organizationId });
+
   try {
     await requireOrganizationReadAccess(organizationId);
 
@@ -195,7 +203,7 @@ export async function searchSearchesByTitle(
       return { success: true, data: [] };
     }
 
-    console.log("[Search] Searching searches by title:", query, "for org:", organizationId);
+    ctxLog.debug("Searching searches by title", { query });
 
     const searches = await db
       .select({
@@ -214,7 +222,7 @@ export async function searchSearchesByTitle(
       .orderBy(desc(search.createdAt))
       .limit(limit);
 
-    console.log("[Search] Found", searches.length, "matching searches");
+    ctxLog.debug("Found matching searches", { count: searches.length });
 
     return {
       success: true,
@@ -222,7 +230,7 @@ export async function searchSearchesByTitle(
     };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    console.error("[Search] Error searching searches by title:", errorMessage);
+    ctxLog.error("Error searching searches by title", { query, error: errorMessage });
     return {
       success: false,
       error: errorMessage,
@@ -254,10 +262,8 @@ export async function getSearchById(
   error?: string;
 }> {
   try {
-    console.log("[Search] Fetching search by ID:", id);
-
     await requireSearchReadAccess(id);
-    
+
     const result = await db
       .select({
         id: search.id,
@@ -272,16 +278,16 @@ export async function getSearchById(
       .from(search)
       .where(eq(search.id, id))
       .limit(1);
-    
+
     if (!result || result.length === 0) {
       return {
         success: false,
         error: "Search not found",
       };
     }
-    
+
     const s = result[0];
-    
+
     // Fetch user information
     const userRecord = await db.query.user.findFirst({
       where: eq(user.id, s.userId),
@@ -291,7 +297,7 @@ export async function getSearchById(
         email: true,
       },
     });
-    
+
     const parsedSearch = {
       id: s.id,
       name: s.name,
@@ -306,16 +312,14 @@ export async function getSearchById(
         email: userRecord.email,
       } : null,
     };
-    
-    console.log("[Search] Found search:", parsedSearch.name);
-    
+
     return {
       success: true,
       data: parsedSearch,
     };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    console.error("[Search] Error fetching search by ID:", errorMessage);
+    log.error("Search", "Error fetching search by ID", { searchId: id, error: errorMessage });
     return {
       success: false,
       error: errorMessage,

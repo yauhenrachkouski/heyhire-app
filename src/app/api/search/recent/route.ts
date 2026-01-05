@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getRecentSearches } from "@/actions/search";
+import { withAxiom } from "@/lib/axiom/server";
 
-export async function GET(request: Request) {
+export const GET = withAxiom(async (request: Request) => {
   try {
     const { searchParams } = new URL(request.url);
     const organizationId = searchParams.get("organizationId");
@@ -24,4 +25,4 @@ export async function GET(request: Request) {
     const message = error instanceof Error ? error.message : "Failed to load";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

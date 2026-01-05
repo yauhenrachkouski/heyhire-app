@@ -1,5 +1,7 @@
 "use server";
 
+import { log, logWithContext } from "@/lib/axiom/server-log";
+
 import { db } from "@/db/drizzle";
 import { candidates, searchCandidates, search, searchCandidateStrategies, sourcingStrategies, creditTransactions } from "@/db/schema";
 import { eq, and, gte, lte, lt, gt, or, isNull, inArray, count, desc, asc, sql } from "drizzle-orm";
@@ -128,19 +130,23 @@ export async function saveCandidatesFromSearch(
   candidateProfiles: CandidateProfile[],
   _rawText: string
 ): Promise<{ success: boolean; saved: number; linked: number }> {
-  console.log("[Candidates] Batch saving", candidateProfiles.length, "candidates for search:", searchId);
+  const ctxLog = logWithContext("Candidates", { searchId });
+
+  ctxLog.info("Batch saving candidates", {
+    count: candidateProfiles.length,
+  });
   
   // Filter profiles with valid LinkedIn URLs
   const validProfiles = candidateProfiles.filter(profile => {
     if (!profile.linkedinUrl) {
-      console.log("[Candidates] Skipping candidate without LinkedIn URL");
+      ctxLog.debug("Skipping candidate without LinkedIn URL");
       return false;
     }
     return true;
   });
 
   if (validProfiles.length === 0) {
-    console.log("[Candidates] No valid candidates to save");
+    ctxLog.info("No valid candidates to save");
     return { success: true, saved: 0, linked: 0 };
   }
 
@@ -149,9 +155,11 @@ export async function saveCandidatesFromSearch(
   const existingCandidates = await db.query.candidates.findMany({
     where: inArray(candidates.linkedinUrl, linkedinUrls),
   });
-  
+
   const existingByUrl = new Map(existingCandidates.map(c => [c.linkedinUrl, c]));
-  console.log("[Candidates] Found", existingCandidates.length, "existing candidates");
+  ctxLog.debug("Found existing candidates", {
+    count: existingCandidates.length,
+  });
 
   // Step 2: Prepare batch data
   const candidatesToInsert: Array<typeof candidates.$inferInsert> = [];
@@ -188,9 +196,11 @@ export async function saveCandidatesFromSearch(
   if (candidatesToInsert.length > 0) {
     try {
       await db.insert(candidates).values(candidatesToInsert);
-      console.log("[Candidates] Batch inserted", candidatesToInsert.length, "new candidates");
+      ctxLog.info("Batch inserted new candidates", {
+        count: candidatesToInsert.length,
+      });
     } catch (error) {
-      console.error("[Candidates] Error batch inserting candidates:", error);
+      ctxLog.error("Error batch inserting candidates", { error });
       throw error;
     }
   }
@@ -198,30 +208,29 @@ export async function saveCandidatesFromSearch(
   // Step 4: Update existing candidates sequentially
   // IMPORTANT: Neon serverless can't handle parallel connections well - must be sequential
   if (candidatesToUpdate.length > 0) {
-    console.log("[Candidates] Starting sequential update of", candidatesToUpdate.length, "existing candidates");
+    ctxLog.debug("Starting sequential update of existing candidates", {
+      count: candidatesToUpdate.length,
+    });
     let updated = 0;
-    
+
     for (const { id, data } of candidatesToUpdate) {
       try {
         await db.update(candidates).set(data).where(eq(candidates.id, id));
         updated++;
-        
-        // Log progress every 5 candidates
-        if (updated % 5 === 0) {
-          console.log(`[Candidates] Updated ${updated}/${candidatesToUpdate.length} candidates`);
-        }
       } catch (error) {
-        console.error(`[Candidates] Error updating candidate ${id}:`, error);
+        ctxLog.error("Error updating candidate", { candidateId: id, error });
         // Continue with remaining candidates instead of failing entirely
       }
     }
-    console.log("[Candidates] Sequential update complete:", updated, "of", candidatesToUpdate.length, "candidates");
+    ctxLog.debug("Sequential update complete", {
+      updated,
+      total: candidatesToUpdate.length,
+    });
   }
 
   // Step 5: Get existing search_candidate links in one query
-  console.log("[Candidates] Fetching existing links for", candidateIdMap.size, "candidates");
   const allCandidateIds = Array.from(candidateIdMap.values());
-  
+
   let existingLinks: Array<{ id: string; candidateId: string }> = [];
   try {
     existingLinks = await db.query.searchCandidates.findMany({
@@ -234,12 +243,11 @@ export async function saveCandidatesFromSearch(
         candidateId: true,
       },
     });
-    console.log("[Candidates] Found", existingLinks.length, "existing links");
   } catch (error) {
-    console.error("[Candidates] Error fetching existing links:", error);
+    ctxLog.error("Error fetching existing links", { error });
     // Continue with empty links - we'll insert all as new
   }
-  
+
   const existingLinkSet = new Set(existingLinks.map(l => l.candidateId));
   const searchCandidateIdByCandidate = new Map<string, string>(
     existingLinks.map((link) => [link.candidateId, link.id])
@@ -247,7 +255,7 @@ export async function saveCandidatesFromSearch(
 
   // Step 6: Batch insert new search_candidate links
   const linksToInsert: Array<typeof searchCandidates.$inferInsert> = [];
-  
+
   for (const candidateId of allCandidateIds) {
     if (!existingLinkSet.has(candidateId)) {
       const newLink = {
@@ -265,17 +273,19 @@ export async function saveCandidatesFromSearch(
   if (linksToInsert.length > 0) {
     try {
       await db.insert(searchCandidates).values(linksToInsert);
-      console.log("[Candidates] Batch linked", linksToInsert.length, "candidates to search");
+      ctxLog.info("Batch linked candidates to search", {
+        count: linksToInsert.length,
+      });
     } catch (error) {
-      console.error("[Candidates] Error batch linking candidates:", error);
+      ctxLog.error("Error batch linking candidates", { error });
       // Don't throw - we've already saved the candidates, links can be retried
     }
   }
 
   const saved = candidatesToInsert.length;
   const linked = linksToInsert.length;
-  
-  console.log("[Candidates] Batch save complete. New:", saved, "Linked:", linked);
+
+  ctxLog.info("Batch save complete", { saved, linked });
 
   // Step 7: Link search candidates to sourcing strategies
   // First, collect all unique strategy IDs from candidates
@@ -293,9 +303,8 @@ export async function saveCandidatesFromSearch(
         columns: { id: true },
       });
       validStrategyIds = new Set(existingStrategies.map(s => s.id));
-      console.log("[Candidates] Found", validStrategyIds.size, "valid strategies out of", allStrategyIds.size, "provided");
     } catch (error) {
-      console.error("[Candidates] Error fetching valid strategies:", error);
+      ctxLog.error("Error fetching valid strategies", { error });
       // Continue with empty set - won't link any strategies
     }
   }
@@ -327,14 +336,14 @@ export async function saveCandidatesFromSearch(
         .insert(searchCandidateStrategies)
         .values(strategyLinks)
         .onConflictDoNothing();
-      console.log("[Candidates] Linked", strategyLinks.length, "candidate-strategy pairs");
+      ctxLog.debug("Linked candidate-strategy pairs", {
+        count: strategyLinks.length,
+      });
     } catch (error) {
-      console.error("[Candidates] Error linking candidate strategies:", error);
+      ctxLog.error("Error linking candidate strategies", { error });
     }
-  } else if (allStrategyIds.size > 0) {
-    console.log("[Candidates] No valid strategy links to create (0 valid out of", allStrategyIds.size, "provided)");
   }
-  
+
   return { success: true, saved, linked };
 }
 
@@ -417,7 +426,7 @@ export async function getSearchCandidateById(searchCandidateId: string) {
       }
     };
   } catch (error) {
-    console.error("[Candidates] Error fetching search candidate:", error);
+    log.error("Candidates", "Error fetching search candidate", { error });
     return { success: false, error: "Failed to fetch candidate" };
   }
 }
@@ -439,7 +448,7 @@ export async function getCandidatesForSearch(
     includeTotalCount?: boolean;
   }
 ) {
-  console.log("[Candidates] Fetching candidates for search:", searchId, "with options:", options);
+  log.info("Candidates", "Fetching candidates for search", { searchId, options });
 
   await requireSearchReadAccess(searchId);
 
@@ -729,7 +738,7 @@ export async function getCandidatesForSearch(
     isRevealed: revealedCandidateIds.has(result.candidateId)
   }));
 
-  console.log("[Candidates] Found", enrichedResults.length, "candidates (Total:", total, ")");
+  log.info("Candidates", "Found candidates", { count: enrichedResults.length, total });
   
   return {
     data: enrichedResults,
@@ -750,7 +759,7 @@ export async function addCandidateToSearch(
   candidateId: string,
   sourceProvider: string
 ) {
-  console.log("[Candidates] Adding candidate to search:", { searchId, candidateId, sourceProvider });
+  log.info("Candidates", "Adding candidate to search", { searchId, candidateId, sourceProvider });
 
   const searchCandidateId = generateId();
   
@@ -762,7 +771,7 @@ export async function addCandidateToSearch(
     status: "new",
   });
 
-  console.log("[Candidates] Created search_candidate:", searchCandidateId);
+  log.info("Candidates", "Created search candidate", { searchCandidateId });
   return { searchCandidateId };
 }
 
@@ -774,7 +783,7 @@ export async function updateMatchScore(
   score: number,
   notes?: string
 ) {
-  console.log("[Candidates] Updating match score:", searchCandidateId, score);
+  log.info("Candidates", "Updating match score", { searchCandidateId, score });
 
   const sc = await db.query.searchCandidates.findFirst({
     where: eq(searchCandidates.id, searchCandidateId),
@@ -805,7 +814,7 @@ export async function updateCandidateStatus(
   status: "new" | "reviewing" | "contacted" | "rejected" | "hired",
   notes?: string
 ) {
-  console.log("[Candidates] Updating candidate status:", searchCandidateId, status);
+  log.info("Candidates", "Updating candidate status", { searchCandidateId, status });
 
   const sc = await db.query.searchCandidates.findFirst({
     where: eq(searchCandidates.id, searchCandidateId),

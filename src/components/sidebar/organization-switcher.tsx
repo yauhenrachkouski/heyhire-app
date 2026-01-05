@@ -1,5 +1,7 @@
 "use client"
 
+import { log } from "@/lib/axiom/client-log";
+
 import * as React from "react"
 import { organization, useActiveOrganization, useListOrganizations } from "@/lib/auth-client"
 import { Icon } from "@/components/icon"
@@ -96,7 +98,7 @@ export function OrganizationSwitcher({
 
   // Handle no organizations case - ONLY show if BOTH organizations and activeOrganization are missing
   if ((!organizations || organizations.length === 0) && !activeOrganization) {
-    console.log('[OrgSwitcher] No organizations available - showing error state')
+    log.info("OrganizationSwitcher", "No organizations available - showing error state")
     return (
           <SidebarMenu>
         <SidebarMenuItem>
@@ -145,7 +147,7 @@ export function OrganizationSwitcher({
       await removeDemoWorkspaceForCurrentUser()
       router.refresh()
     } catch (e) {
-      console.error("[OrgSwitcher] Failed to remove demo organization", e)
+      log.error("OrganizationSwitcher", "Failed to remove demo organization", { error: e })
     }
   }
   

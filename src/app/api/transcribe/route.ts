@@ -1,6 +1,8 @@
+import { log } from "@/lib/axiom/server-log";
+import { withAxiom } from "@/lib/axiom/server";
 import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(request: NextRequest) {
+export const POST = withAxiom(async (request: NextRequest) => {
   try {
     const formData = await request.formData();
     const audioFile = formData.get("file") as File;
@@ -24,14 +26,14 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const error = await response.text();
-      console.error("Whisper API error:", error);
+      log.error("TranscribeAPI", "Whisper API error", { error });
       return NextResponse.json({ error: "Transcription failed" }, { status: 500 });
     }
 
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    console.error("Transcription error:", error);
+    log.error("TranscribeAPI", "Transcription error", { error });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-}
+});

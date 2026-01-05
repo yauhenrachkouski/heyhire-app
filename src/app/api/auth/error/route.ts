@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { withAxiom } from "@/lib/axiom/server";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function GET(request: NextRequest) {
+export const GET = withAxiom(async (request: NextRequest) => {
   const searchParams = request.nextUrl.searchParams
   const error = searchParams.get('error')
   
@@ -19,5 +20,4 @@ export async function GET(request: NextRequest) {
   }
   
   return NextResponse.redirect(signInUrl)
-}
-
+});

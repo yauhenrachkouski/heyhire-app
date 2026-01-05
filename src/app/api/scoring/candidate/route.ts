@@ -6,6 +6,8 @@ import { NextResponse } from "next/server";
 import { Receiver } from "@upstash/qstash";
 import { jobParsingResponseV3Schema } from "@/types/search";
 import { generateId } from "@/lib/id";
+import { log } from "@/lib/axiom/server-log";
+import { withAxiom } from "@/lib/axiom/server";
 
 const API_BASE_URL = "http://57.131.25.45";
 const MAX_SCORING_ATTEMPTS = 3;
@@ -28,7 +30,7 @@ const receiver = new Receiver({
 /**
  * Score a single candidate - called by QStash for each candidate in parallel
  */
-export async function POST(request: Request) {
+export const POST = withAxiom(async (request: Request) => {
   try {
     // Get the raw body for signature verification
     const body = await request.text();
@@ -42,7 +44,7 @@ export async function POST(request: Request) {
       });
       
       if (!isValid) {
-        console.error("[Scoring] Invalid QStash signature");
+        log.error("Scoring", "Invalid QStash signature");
         return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
       }
     }
@@ -52,11 +54,11 @@ export async function POST(request: Request) {
     const { searchId, searchCandidateId, candidateId, candidateData, total } = payload;
 
     if (!candidateId || !searchId) {
-      console.error("[Scoring] Missing required fields:", { candidateId, searchId });
+      log.error("Scoring", "Missing required fields", { candidateId, searchId });
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    console.log(`[Scoring] Scoring candidate ${candidateId} for search ${searchId}`);
+    log.info("Scoring", "Scoring candidate", { candidateId, searchId });
 
     const requestId = `score_${generateId()}`;
 
@@ -65,7 +67,7 @@ export async function POST(request: Request) {
     });
 
     if (!searchRecord) {
-      console.error("[Scoring] Search not found:", searchId);
+      log.error("Scoring", "Search not found", { searchId });
       return NextResponse.json({ success: false, error: "Search not found" }, { status: 404 });
     }
 
@@ -90,7 +92,7 @@ export async function POST(request: Request) {
     const maybeEmitScoringCompleted = async () => {
       const { scored, errors } = await getScoringCounts();
       if (total > 0 && scored + errors >= total) {
-        console.log(`[Scoring] All candidates scored (with ${errors} errors) for search ${searchId}`);
+        log.info("Scoring", "All candidates scored", { searchId, errors });
         await realtime.channel(channel).emit("scoring.completed", {
           scored,
           errors,
@@ -130,7 +132,7 @@ export async function POST(request: Request) {
     let parseData: ReturnType<typeof jobParsingResponseV3Schema.parse> | null = null;
     let scoringModel: any = null;
 
-    console.log("[Scoring] Using v3 scoring flow");
+    log.info("Scoring", "Using v3 scoring flow");
 
     const cachedParse = parseStoredJson(searchRecord.parseResponse);
     if (cachedParse) {
@@ -240,7 +242,11 @@ export async function POST(request: Request) {
         break;
       } catch (error) {
         lastError = error instanceof Error ? error.message : "Scoring failed";
-        console.error(`[Scoring] Attempt ${attempt} failed for ${candidateId}:`, lastError);
+        log.error("Scoring", "Attempt failed", {
+          attempt,
+          candidateId,
+          error: lastError,
+        });
 
         if (attempt < MAX_SCORING_ATTEMPTS) {
           const delay = SCORING_RETRY_BASE_DELAY_MS * attempt;
@@ -274,7 +280,12 @@ export async function POST(request: Request) {
 
     const { scored, errors } = await getScoringCounts();
 
-    console.log(`[Scoring] Scored ${candidateId}: ${matchScore} (${scored}/${total})`);
+    log.info("Scoring", "Scored candidate", {
+      candidateId,
+      matchScore,
+      scored,
+      total,
+    });
 
     // Emit progress event
     await realtime.channel(channel).emit("scoring.progress", {
@@ -288,7 +299,7 @@ export async function POST(request: Request) {
 
     // Check if all candidates are scored or errored
     if (total > 0 && scored + errors >= total) {
-      console.log(`[Scoring] All candidates scored (with ${errors} errors) for search ${searchId}`);
+      log.info("Scoring", "All candidates scored", { searchId, errors });
       await realtime.channel(channel).emit("scoring.completed", {
         scored,
         errors,
@@ -297,10 +308,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, score: matchScore, scored, total });
   } catch (error) {
-    console.error("[Scoring] Error scoring candidate:", error);
+    log.error("Scoring", "Error scoring candidate", { error });
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }
     );
   }
-}
+});
