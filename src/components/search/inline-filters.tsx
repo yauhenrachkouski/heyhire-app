@@ -36,17 +36,23 @@ interface InlineFiltersProps {
   isScoring?: boolean;
   showingCount?: number;
   totalCount?: number;
+  /** Loading state for badge counts (e.g., progress query loading) */
+  isLoadingCounts?: boolean;
+  /** Loading state for filtered results (e.g., filter change in progress) */
+  isLoadingResults?: boolean;
 }
 
-export function InlineFilters({ 
-  scoreRange = [0, 100], 
-  sortBy = "date-desc", 
-  onScoreRangeChange, 
+export function InlineFilters({
+  scoreRange = [0, 100],
+  sortBy = "date-desc",
+  onScoreRangeChange,
   onSortChange,
   counts,
   isScoring = false,
   showingCount,
-  totalCount
+  totalCount,
+  isLoadingCounts = false,
+  isLoadingResults = false
 }: InlineFiltersProps) {
   // Use local state only for the slider while dragging to avoid jitter
   // But initialize from props
@@ -153,15 +159,29 @@ export function InlineFilters({
     { value: "80", label: "Excellent", count: counts?.excellent, tooltip: "Score 80+" },
     { value: "70", label: "Good", count: counts?.good, tooltip: "Score 70+" },
     { value: "50", label: "Fair", count: counts?.fair, tooltip: "Score 50+" },
-    { value: "custom", label: "Custom", tooltip: "Set custom score range" },
+    { value: "custom", label: "Custom", tooltip: "Setcustom score range" },
   ];
 
   return (
     <div className="flex flex-wrap items-center gap-4 w-full">
-      {/* Showing count */}
-      {showingCount !== undefined && totalCount !== undefined && totalCount > 0 && (
-        <div className="text-sm text-muted-foreground">
-          Showing <span className="font-medium text-foreground">{showingCount}</span> of <span className="font-medium text-foreground">{totalCount}</span> candidates
+      {/* Showing count - always visible when we have data */}
+      {(showingCount !== undefined || totalCount !== undefined) && (
+        <div className="text-sm text-muted-foreground flex items-center gap-1">
+          <span>Showing</span>
+          {isLoadingResults ? (
+            <span className="inline-flex items-center gap-1">
+              <span className="h-4 w-6 bg-muted animate-pulse rounded" />
+              <span>of</span>
+              <span className="h-4 w-8 bg-muted animate-pulse rounded" />
+            </span>
+          ) : (
+            <>
+              <span className="font-medium text-foreground tabular-nums">{showingCount ?? 0}</span>
+              <span>of</span>
+              <span className="font-medium text-foreground tabular-nums">{totalCount ?? 0}</span>
+            </>
+          )}
+          <span>candidates</span>
         </div>
       )}
       
@@ -180,19 +200,31 @@ export function InlineFilters({
             className="justify-start"
           >
             {presets.map((preset) => (
-              <ToggleGroupItem key={preset.value} value={preset.value} className={toggleItemClass} title={preset.tooltip}>
-                <div className="flex items-center gap-2">
-                  <span>{preset.label}</span>
-                  {preset.count !== undefined && preset.count > 0 && (
-                    <Badge 
-                      variant="secondary" 
-                      className={`px-1.5 py-0 h-5 text-[10px] font-medium min-w-5 justify-center bg-muted-foreground/15 text-muted-foreground transition-opacity ${isScoring ? 'animate-pulse' : ''}`}
-                    >
-                      {preset.count}
-                    </Badge>
-                  )}
-                </div>
-              </ToggleGroupItem>
+              <Tooltip key={preset.value} delayDuration={300}>
+                <TooltipTrigger asChild>
+                  <ToggleGroupItem value={preset.value} className={toggleItemClass}>
+                    <div className="flex items-center gap-2">
+                      <span>{preset.label}</span>
+                      {/* Show skeleton badge while loading counts, actual badge otherwise */}
+                      {preset.value !== "custom" && (
+                        isLoadingCounts ? (
+                          <span className="h-5 w-6 bg-muted animate-pulse rounded-full" />
+                        ) : preset.count !== undefined && preset.count > 0 ? (
+                          <Badge
+                            variant="secondary"
+                            className={`px-1.5 py-0 h-5 text-[10px] font-medium min-w-5 justify-center bg-muted-foreground/15 text-muted-foreground transition-all ${isScoring ? 'animate-pulse' : ''}`}
+                          >
+                            {preset.count}
+                          </Badge>
+                        ) : null
+                      )}
+                    </div>
+                  </ToggleGroupItem>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  {preset.tooltip}
+                </TooltipContent>
+              </Tooltip>
             ))}
           </ToggleGroup>
         </TooltipProvider>

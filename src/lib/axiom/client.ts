@@ -4,7 +4,7 @@ import { createUseLogger, createWebVitalsComponent } from '@axiomhq/react';
 import { nextJsFormatters } from '@axiomhq/nextjs/client';
 
 const clientTransports: [Transport, ...Transport[]] = [
-  new ProxyTransport({ url: '/api/axiom', autoFlush: true }),
+  new ProxyTransport({ url: `${process.env.NEXT_PUBLIC_APP_URL}/api/axiom`, autoFlush: true }),
 ];
 
 if (process.env.NODE_ENV !== 'production') {

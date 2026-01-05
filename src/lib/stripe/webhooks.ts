@@ -120,15 +120,7 @@ export async function handleStripeEvent(event: Stripe.Event, stripeClient: Strip
     const eventContext = { eventId: event.id, eventType: event.type };
     log.info("Webhook received", eventContext);
 
-    // Track webhook received
-    try {
-        trackServerEvent("stripe_webhook", "stripe_webhook_received", undefined, {
-            stripe_event_id: event.id,
-            stripe_event_type: event.type,
-        });
-    } catch (e) {
-        log.warn("Failed to track webhook", { ...eventContext, error: String(e) });
-    }
+    // Note: We don't track webhook_received here - we track specific events with proper user context
 
     const ctx: WebhookContext = { stripeClient, event };
 
@@ -189,13 +181,17 @@ async function handleTrialWillEnd(ctx: WebhookContext) {
     }
 
     const ownerId = await getOrgOwnerId(referenceId);
-    trackServerEvent(ownerId || "stripe_webhook", "trial_will_end", referenceId, {
+    if (!ownerId) {
+        log.warn("trial_will_end: could not resolve owner", { eventId: ctx.event.id, referenceId });
+        return;
+    }
+
+    trackServerEvent(ownerId, "trial_will_end", referenceId, {
         stripe_subscription_id: sub.id,
         trial_end: sub.trial_end,
     });
 
     try {
-        if (!ownerId) return;
         const ownerUser = await db.query.user.findFirst({
             where: eq(user.id, ownerId),
             columns: { email: true },
@@ -251,7 +247,13 @@ async function handleInvoiceUpcoming(ctx: WebhookContext) {
         return;
     }
 
-    trackServerEvent("stripe_webhook", "invoice_upcoming", referenceId, {
+    const ownerId = await getOrgOwnerId(referenceId);
+    if (!ownerId) {
+        log.warn("invoice_upcoming: could not resolve owner", { eventId: ctx.event.id, referenceId });
+        return;
+    }
+
+    trackServerEvent(ownerId, "invoice_upcoming", referenceId, {
         stripe_invoice_id: invoice.id,
         stripe_customer_id: invoice.customer as string,
         amount_due: (invoice as any).amount_due,
@@ -262,7 +264,28 @@ async function handleInvoiceUpcoming(ctx: WebhookContext) {
 async function handleCustomerUpdated(ctx: WebhookContext) {
     const customer = ctx.event.data.object as Stripe.Customer;
 
-    trackServerEvent("stripe_webhook", "customer_updated", undefined, {
+    // Find org/user from stripe customer ID
+    const subscriptionRecord = await db.query.subscription.findFirst({
+        where: eq(subscriptionTable.stripeCustomerId, customer.id),
+    });
+
+    if (!subscriptionRecord?.referenceId) {
+        log.warn("customer_updated: could not find subscription for customer", {
+            eventId: ctx.event.id,
+            stripeCustomerId: customer.id
+        });
+        return;
+    }
+
+    const referenceId = subscriptionRecord.referenceId;
+    const ownerId = await getOrgOwnerId(referenceId);
+
+    if (!ownerId) {
+        log.warn("customer_updated: could not resolve owner", { eventId: ctx.event.id, referenceId });
+        return;
+    }
+
+    trackServerEvent(ownerId, "customer_updated", referenceId, {
         stripe_customer_id: customer.id,
         email: customer.email,
     });
@@ -456,17 +479,45 @@ async function handleInvoicePaymentFailed(ctx: WebhookContext) {
 
 async function handlePaymentRiskEvent(ctx: WebhookContext) {
     const obj = ctx.event.data.object as unknown as Record<string, unknown>;
-    const eventContext = {
+    const stripeCustomerId = obj?.customer as string | undefined;
+
+    if (!stripeCustomerId) {
+        log.warn("payment_risk: missing customer ID", { eventId: ctx.event.id });
+        return;
+    }
+
+    // Find org/user from stripe customer ID
+    const subscriptionRecord = await db.query.subscription.findFirst({
+        where: eq(subscriptionTable.stripeCustomerId, stripeCustomerId),
+    });
+
+    if (!subscriptionRecord?.referenceId) {
+        log.warn("payment_risk: could not find subscription for customer", {
+            eventId: ctx.event.id,
+            stripeCustomerId
+        });
+        return;
+    }
+
+    const referenceId = subscriptionRecord.referenceId;
+    const ownerId = await getOrgOwnerId(referenceId);
+
+    if (!ownerId) {
+        log.warn("payment_risk: could not resolve owner", { eventId: ctx.event.id, referenceId });
+        return;
+    }
+
+    log.warn("Payment risk event received", {
         eventId: ctx.event.id,
         eventType: ctx.event.type,
         chargeId: obj?.charge || obj?.id,
-    };
+        organizationId: referenceId,
+        userId: ownerId,
+    });
 
-    log.warn("Payment risk event received", eventContext);
-
-    trackServerEvent("stripe_webhook", "stripe_payment_risk_event", undefined, {
+    trackServerEvent(ownerId, "stripe_payment_risk_event", referenceId, {
         stripe_charge_id: obj?.charge || obj?.id,
-        stripe_customer_id: obj?.customer,
+        stripe_customer_id: stripeCustomerId,
         amount: obj?.amount,
         reason: obj?.reason,
     });

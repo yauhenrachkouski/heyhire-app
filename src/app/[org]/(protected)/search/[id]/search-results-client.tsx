@@ -14,10 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger, PopoverHeader, PopoverTitle, PopoverDescription } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
-import { Skeleton } from "@/components/ui/skeleton";
 import { IconPencil, IconCalendar, IconUser, IconInfoCircle, IconCopy, IconLoader2 } from "@tabler/icons-react";
 import { formatDate } from "@/lib/format";
-import { cn } from "@/lib/utils";
 import SourcingLoader from "@/components/search/sourcing-custom-loader";
 import { updateSearchName } from "@/actions/search";
 import { analyzeAndContinueSearch } from "@/actions/workflow";
@@ -243,11 +241,16 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   // ========== Realtime handlers ==========
   const handleSearchCompleted = useCallback(async (candidatesCount: number) => {
     log.info("SearchResultsClient", "Search completed", { candidatesCount });
-    // Invalidate both progress and candidates queries
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.progress(search.id) }),
-      queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.details(search.id) }),
-    ]);
+
+    // Refresh progress for final counts (non-blocking)
+    queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.progress(search.id) });
+
+    // For candidates: do a soft background refetch to get final list
+    // Use 'active' to only refetch if the query is currently being observed
+    queryClient.invalidateQueries({
+      queryKey: searchCandidatesKeys.details(search.id),
+      refetchType: 'active'
+    });
   }, [queryClient, search.id]);
 
   const handleSearchFailed = useCallback((errorMsg: string) => {
@@ -256,9 +259,19 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
 
   const handleCandidatesAdded = useCallback((data: { count: number; total: number }) => {
     log.info("SearchResultsClient", "Candidates added", { count: data.count, total: data.total });
-    // Invalidate candidates query to fetch the new ones
-    queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.details(search.id) });
-    queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.progress(search.id) });
+
+    // Optimistically update progress counts without blocking refetch
+    queryClient.setQueryData(searchCandidatesKeys.progress(search.id), (old: SearchProgress | undefined) => {
+      if (!old) return old;
+      return { ...old, total: data.total, unscored: data.total - (old.scored ?? 0) };
+    });
+
+    // Mark candidates as stale for background refresh, but don't block UI
+    // The query will refetch in background due to staleTime, or on next user interaction
+    queryClient.invalidateQueries({
+      queryKey: searchCandidatesKeys.details(search.id),
+      refetchType: 'none' // Mark stale without immediate refetch
+    });
   }, [queryClient, search.id]);
 
   const updateCandidateScoreInCache = useCallback((data: { searchCandidateId: string; score: number; scoringResult?: any }) => {
@@ -326,10 +339,16 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
     // Dismiss the scoring toast
     toast.dismiss("scoring-progress");
     toast.success(`Evaluated ${data.scored} candidates`);
-    
-    // Invalidate to get fresh counts
+
+    // Only refresh progress for accurate final counts (excellent/good/fair breakdown)
+    // Candidates already have scores updated optimistically via handleScoringProgress
     queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.progress(search.id) });
-    queryClient.invalidateQueries({ queryKey: searchCandidatesKeys.details(search.id) });
+
+    // Mark candidates as stale but don't immediately refetch - scores are already in cache
+    queryClient.invalidateQueries({
+      queryKey: searchCandidatesKeys.details(search.id),
+      refetchType: 'none'
+    });
   }, [queryClient, search.id]);
 
   const {
@@ -390,7 +409,7 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   // Scoring state
   const scoredCount = scoringState.isScoring ? scoringState.scored : (progress?.scored || 0);
   const totalCandidates = scoringState.isScoring ? scoringState.total : (progress?.total || candidates.length);
-  const isScoringComplete = progress?.isScoringComplete ?? (totalCandidates > 0 && scoredCount === totalCandidates);
+  const _isScoringComplete = progress?.isScoringComplete ?? (totalCandidates > 0 && scoredCount === totalCandidates);
   const isScoring = scoringState.isScoring;
 
   // Loading states
@@ -675,44 +694,36 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
           <div className={shouldShowSourcingLoader ? "opacity-20 pointer-events-none transition-opacity" : "transition-opacity mt-4"}>
             <div className="space-y-4">
               <div className="space-y-3">
-                {/* Inline Filters - show skeletons while loading counts */}
-                {progressQuery.isLoading && !progressQuery.data ? (
-                  <div className="flex items-center gap-4">
-                    <Skeleton className="h-9 w-32" />
-                    <Skeleton className="h-9 w-24" />
-                    <Skeleton className="h-9 w-24" />
-                    <Skeleton className="h-9 w-24" />
-                    <Skeleton className="h-9 w-24 ml-auto" />
-                  </div>
-                ) : (
-                  <InlineFilters 
-                    scoreRange={[scoreMin, scoreMax]}
-                    sortBy={sortBy}
-                    counts={filterCounts}
-                    isScoring={isScoring}
-                    showingCount={candidates.length}
-                    totalCount={filteredTotal}
-                    onScoreRangeChange={(min, max) => {
-                      posthog.capture('search_filter_applied', {
-                        search_id: search.id,
-                        organization_id: activeOrg?.id,
-                        filter_type: 'score_range',
-                        score_min: min,
-                        score_max: max,
-                      });
-                      updateUrl({ scoreMin: min, scoreMax: max });
-                    }}
-                    onSortChange={(sort) => {
-                      posthog.capture('search_filter_applied', {
-                        search_id: search.id,
-                        organization_id: activeOrg?.id,
-                        filter_type: 'sort_by',
-                        sort_by: sort,
-                      });
-                      updateUrl({ sortBy: sort });
-                    }}
-                  />
-                )}
+                {/* Inline Filters - always rendered, handles loading states internally */}
+                <InlineFilters
+                  scoreRange={[scoreMin, scoreMax]}
+                  sortBy={sortBy}
+                  counts={filterCounts}
+                  isScoring={isScoring}
+                  showingCount={candidates.length}
+                  totalCount={filteredTotal}
+                  isLoadingCounts={progressQuery.isLoading && !progressQuery.data}
+                  isLoadingResults={isRefetching}
+                  onScoreRangeChange={(min, max) => {
+                    posthog.capture('search_filter_applied', {
+                      search_id: search.id,
+                      organization_id: activeOrg?.id,
+                      filter_type: 'score_range',
+                      score_min: min,
+                      score_max: max,
+                    });
+                    updateUrl({ scoreMin: min, scoreMax: max });
+                  }}
+                  onSortChange={(sort) => {
+                    posthog.capture('search_filter_applied', {
+                      search_id: search.id,
+                      organization_id: activeOrg?.id,
+                      filter_type: 'sort_by',
+                      sort_by: sort,
+                    });
+                    updateUrl({ sortBy: sort });
+                  }}
+                />
               </div>
         
               {/* Results */}
@@ -727,16 +738,8 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
                 {/* Results */}
                 {realtimeStatus !== "error" && realtimeStatus !== "failed" && (
                   <div className="relative min-h-[200px]">
-                    {/* Refetch overlay */}
-                    {isRefetching && (
-                      <div className="absolute inset-0 z-20 flex items-start justify-center pt-20 bg-background/50 backdrop-blur-[1px] transition-all duration-300 animate-in fade-in">
-                        <div className="bg-background/80 shadow-sm border rounded-full p-2 backdrop-blur-md">
-                          <IconLoader2 className="h-5 w-5 animate-spin text-primary" />
-                        </div>
-                      </div>
-                    )}
-
-                    <div className={cn("transition-all duration-300", isRefetching && "opacity-50 grayscale-[0.5]")}>
+                    {/* Results area - no blocking overlay, stays interactive during filter changes */}
+                    <div className="transition-all duration-300">
                       {/* Skeleton loading - matches candidate card structure */}
                       {shouldShowSkeletons ? (
                         <div className="space-y-3">

@@ -10,6 +10,7 @@ import Stripe from "stripe";
 import { DISALLOWED_DOMAINS } from "./constants";
 import { eq, and } from "drizzle-orm";
 import { trackServerEvent } from "@/lib/posthog/track";
+import { getPostHogServer } from "@/lib/posthog/posthog-server";
 import { handleStripeEvent } from "@/lib/stripe/webhooks";
 import { logger } from "@/lib/axiom/server";
 import { InvitationAcceptedEmail, InvitationEmail, MagicLinkEmail, WelcomeEmail } from "@/emails";
@@ -248,6 +249,19 @@ export const auth = betterAuth({
                   organizationName: organization.name,
                   userEmail: user.email,
                });
+
+               // Register organization as a group in PostHog
+               const posthog = getPostHogServer();
+               posthog.groupIdentify({
+                  groupType: "organization",
+                  groupKey: organization.id,
+                  properties: {
+                     name: organization.name,
+                     slug: organization.slug,
+                     created_at: new Date().toISOString(),
+                  },
+               });
+
                trackServerEvent(user.id, "organization_created", organization.id, {
                   organization_name: organization.name,
                });
@@ -285,6 +299,18 @@ export const auth = betterAuth({
                   userEmail: user.email,
                   role: member.role,
                });
+
+               // Ensure organization group exists in PostHog with current properties
+               const posthog = getPostHogServer();
+               posthog.groupIdentify({
+                  groupType: "organization",
+                  groupKey: organization.id,
+                  properties: {
+                     name: organization.name,
+                     slug: organization.slug,
+                  },
+               });
+
                trackServerEvent(user.id, "invitation_accepted", organization.id, {
                   invitation_id: invitation.id,
                   member_id: member.id,
@@ -429,8 +455,28 @@ export const auth = betterAuth({
                            });
                         });
 
+                        // Link Stripe customer to PostHog identity
+                        if (subscription.stripeCustomerId) {
+                           const posthog = getPostHogServer();
+                           posthog.identify({
+                              distinctId: ownerId,
+                              properties: {
+                                 stripe_customer_id: subscription.stripeCustomerId,
+                              },
+                           });
+                           posthog.groupIdentify({
+                              groupType: "organization",
+                              groupKey: referenceId,
+                              properties: {
+                                 stripe_customer_id: subscription.stripeCustomerId,
+                                 stripe_subscription_id: subscription.stripeSubscriptionId,
+                              },
+                           });
+                        }
+
                         trackServerEvent(ownerId, "trial_started", referenceId, {
                            internal_subscription_id: subscription.id,
+                           stripe_customer_id: subscription.stripeCustomerId,
                         });
 
                         await markBillingActionProcessed({
@@ -672,7 +718,17 @@ export const auth = betterAuth({
             after: async (session) => {
                const userRecord = await db.query.user.findFirst({
                   where: eq(schema.user.id, session.userId),
-                  columns: { lastLoginMethod: true },
+                  columns: { email: true, name: true, lastLoginMethod: true },
+               });
+
+               // Identify user in PostHog (once on login)
+               const posthog = getPostHogServer();
+               posthog.identify({
+                  distinctId: session.userId,
+                  properties: {
+                     email: userRecord?.email,
+                     name: userRecord?.name,
+                  },
                });
 
                trackServerEvent(session.userId, "user_signed_in", undefined, {

@@ -11,6 +11,7 @@ import { eq, and } from 'drizzle-orm'
 import { Resend } from 'resend'
 import { AccountDeletedEmail } from '@/emails'
 import { generateId } from '@/lib/id'
+import { getPostHogServer } from '@/lib/posthog/posthog-server'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -198,13 +199,26 @@ export async function updateOrganization(data: {
     }
 
     // Update organization
+    const newSlug = data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
     await db.update(orgTable)
       .set({
         name: data.name,
-        slug: data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        slug: newSlug,
         metadata: JSON.stringify(metadata)
       })
       .where(eq(orgTable.id, data.organizationId))
+
+    // Update organization group in PostHog
+    const posthog = getPostHogServer()
+    posthog.groupIdentify({
+      groupType: 'organization',
+      groupKey: data.organizationId,
+      properties: {
+        name: data.name,
+        slug: newSlug,
+        ...(data.size && { size: data.size }),
+      },
+    })
 
     // Revalidate org layout to ensure server components get fresh data
     revalidatePath(`/${data.organizationId}`, 'layout')

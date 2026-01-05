@@ -5,7 +5,7 @@ import { NuqsAdapter } from 'nuqs/adapters/next/app'
 import { QueryProvider } from '@/providers/query-provider'
 import { WebVitals } from '@/lib/axiom/client'
 import { AxiomErrorReporter } from "@/components/axiom/axiom-error-reporter";
-import { PostHogIdentityProvider } from '@/providers/posthog-identity-provider'
+import { UserContextProvider } from '@/providers/user-context-provider'
 import { Toaster } from '@/components/ui/sonner'
 
 const inter = Sora({subsets:['latin'],variable:'--font-sans'});
@@ -36,10 +36,10 @@ export default async function RootLayout({
       <body className={`${sora.variable} antialiased min-h-screen bg-background font-sans`}>
         <NuqsAdapter>
           <QueryProvider>
-            <PostHogIdentityProvider>
+            <UserContextProvider>
               {children}
               <Toaster position="top-center" />
-            </PostHogIdentityProvider>
+            </UserContextProvider>
           </QueryProvider>
         </NuqsAdapter>
       </body>

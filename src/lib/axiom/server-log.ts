@@ -1,8 +1,32 @@
 import { LogLevel } from "@axiomhq/logging";
 import { logger } from "@/lib/axiom/server";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 import type { LogFields, LogContext } from "@/lib/axiom/log-types";
 
 const isProduction = process.env.NODE_ENV === "production";
+
+// Flatten nested objects to prevent Axiom column explosion
+// Nested objects create new columns for each unique field path
+const flattenFields = (fields: LogFields): LogFields => {
+  const result: LogFields = {};
+
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === null || value === undefined) {
+      result[key] = value;
+    } else if (typeof value === 'object' && !Array.isArray(value) && !(value instanceof Error)) {
+      // Serialize nested objects to JSON string to avoid column proliferation
+      result[key] = JSON.stringify(value);
+    } else if (Array.isArray(value)) {
+      // Serialize arrays to JSON string
+      result[key] = JSON.stringify(value);
+    } else {
+      result[key] = value;
+    }
+  }
+
+  return result;
+};
 
 const logWithLevel = (
   level: LogLevel,
@@ -15,7 +39,7 @@ const logWithLevel = (
     return;
   }
 
-  const payload = fields ? { source, ...fields } : { source };
+  const payload = fields ? { source, ...flattenFields(fields) } : { source };
   logger.log(level, message, payload);
   // Note: Flush is handled by withAxiom route handler or after() for API routes.
   // For server actions, logs are batched and flushed automatically.
@@ -112,4 +136,29 @@ export async function measureDuration<T>(
   const result = await fn();
   const duration = Math.round(performance.now() - start);
   return { result, duration };
+}
+
+/**
+ * Creates a logger with auto-fetched session context (userId, organizationId).
+ * Call this at the start of server actions or API routes.
+ *
+ * @example
+ * const ctxLog = await getLogger("api/search");
+ * ctxLog.info("Search started", { query: "engineer" });
+ */
+export async function getLogger(source: string) {
+  try {
+    const [session, activeOrg] = await Promise.all([
+      auth.api.getSession({ headers: await headers() }),
+      auth.api.getFullOrganization({ headers: await headers() }),
+    ]);
+
+    return logWithContext(source, {
+      userId: session?.user?.id,
+      organizationId: activeOrg?.id,
+    });
+  } catch {
+    // Fallback to basic logger if session fetch fails
+    return logWithContext(source, {});
+  }
 }
