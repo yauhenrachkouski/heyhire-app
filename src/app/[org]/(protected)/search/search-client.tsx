@@ -16,14 +16,10 @@ import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { recentSearchesKeys } from "@/lib/query-keys/search";
 
-interface SearchClientProps {
-  viewMode?: "table" | "cards"; // Kept for compatibility but unused
-}
-
-export function SearchClient({}: SearchClientProps) {
+export function SearchClient() {
   const [queryText, setQueryText] = useState<string>("");
   const [isSearching, setIsSearching] = useState(false);
-  const [isParsing, setIsParsing] = useState(false);
+  const [, setIsParsing] = useState(false);
   const [sourcingCriteria, setSourcingCriteria] = useState<SourcingCriteria | null>(null);
 
   const { data: session } = useSession();

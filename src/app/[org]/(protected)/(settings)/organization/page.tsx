@@ -1,6 +1,7 @@
 import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
 import { OrganizationForm } from '@/components/account/organization-form'
+import { SettingsPageHeader } from '@/components/account/settings-page-header'
 import { redirect } from 'next/navigation'
 import { SimpleMembersTable } from './simple-members-table'
 import { getMembers } from '@/actions/members'
@@ -69,21 +70,22 @@ export default async function OrganizationSettingsPage() {
 
   return (
     <>
-      {/* Organization Name Section */}
+      <SettingsPageHeader
+        title="Organization"
+        description="Manage your organization settings and members"
+      />
+
       {organizationData && (
         <OrganizationForm organization={organizationData} />
       )}
 
-      {/* Members Section - Simplified */}
       {currentOrganization && (
-        <SimpleMembersTable 
-          members={membersData.data} 
+        <SimpleMembersTable
+          members={membersData.data}
           organizationId={currentOrganization.id}
           currentUserId={session.user.id}
         />
       )}
-
-      
     </>
   )
 }

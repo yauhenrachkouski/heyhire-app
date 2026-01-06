@@ -10,7 +10,7 @@ import { headers } from "next/headers";
 import { getErrorMessage } from "@/lib/handle-error";
 import { db } from "@/db/drizzle";
 import { member, organization, user } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Resend } from "resend";
 import { MemberRemovedEmail } from "@/emails";
 

@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { ProfileForm } from '@/components/account/profile-form'
 import { ConnectedAccountsSection } from '@/components/account/connected-accounts-section'
 import { DeleteAccountDialog } from '@/components/account/delete-account-dialog'
+import { SettingsPageHeader } from '@/components/account/settings-page-header'
 import { getUserAccounts } from '@/actions/account'
 import { redirect } from 'next/navigation'
 
@@ -38,13 +39,13 @@ export default async function AccountPage() {
 
   return (
     <>
-      {/* Profile Section */}
+      <SettingsPageHeader
+        title="Account"
+        description="Manage your personal account settings"
+      />
+
       <ProfileForm user={userData} />
-
-      {/* Security / OAuth Section */}
       <ConnectedAccountsSection accounts={accounts} />
-
-      {/* Danger Zone */}
       <DeleteAccountDialog userEmail={session.user.email} />
     </>
   )

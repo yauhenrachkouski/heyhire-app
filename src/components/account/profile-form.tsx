@@ -92,6 +92,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
     setIsUploadingAvatar(true)
     try {
       const fromHasAvatar = !!userImage
+
       const formData = new FormData()
       formData.append('file', file)
 

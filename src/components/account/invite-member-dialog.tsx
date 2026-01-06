@@ -2,7 +2,7 @@
 
 import { log } from "@/lib/axiom/client";
 
-const source = "app/[org]/(protected)/members/invite-member-dialog";
+const source = "components/account/invite-member-dialog";
 
 import * as React from "react";
 import { Button } from "@/components/ui/button";

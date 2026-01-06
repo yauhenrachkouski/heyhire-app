@@ -6,7 +6,7 @@ export default function SearchPage() {
     <>
       <div className="fixed inset-0 bg-sidebar -z-10" />
       <NuqsAdapter>
-        <SearchClient viewMode="cards" />
+        <SearchClient />
       </NuqsAdapter>
     </>
   );

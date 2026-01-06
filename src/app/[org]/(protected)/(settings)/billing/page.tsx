@@ -4,10 +4,9 @@ import { BillingSection } from '@/components/account/billing-section'
 import { PaymentMethodBlock } from '@/components/account/payment-method-block'
 import { InvoicesCard } from '@/components/account/invoices-card'
 import { CancellationSection } from '@/components/account/cancellation-section'
+import { SettingsPageHeader } from '@/components/account/settings-page-header'
 import { getUserSubscription, getCustomerPaymentMethods } from '@/actions/stripe'
 import { redirect } from 'next/navigation'
-import { Icon } from '@/components/icon'
-import { Button } from '@/components/ui/button'
 import { TrialBanner } from '@/components/account/trial-banner'
 import { getOrganizationMembership } from '@/actions/account'
 import { ADMIN_ROLES } from '@/lib/roles'
@@ -77,7 +76,11 @@ export default async function BillingPage() {
 
   return (
     <>
-      {/* Billing & Subscription */}
+      <SettingsPageHeader
+        title="Billing"
+        description="Manage your subscription and billing"
+      />
+
       {isTrialing && (
         <TrialBanner
           trialEndLabel={trialEndLabel}
@@ -86,8 +89,8 @@ export default async function BillingPage() {
         />
       )}
 
-      <BillingSection 
-        subscription={subscription} 
+      <BillingSection
+        subscription={subscription}
         initialPeriodUsed={initialPeriodUsed}
         currentBalance={organizationCredits}
       />

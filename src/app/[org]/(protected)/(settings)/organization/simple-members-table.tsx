@@ -15,7 +15,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/icon"
 import type { Member } from "@/actions/members"
-import { InviteMemberDialog } from "../../members/invite-member-dialog"
+import { InviteMemberDialog } from "@/components/account/invite-member-dialog"
 import { cancelInvitation } from "@/actions/invitations"
 import { removeMember } from "@/actions/members"
 import { toast } from "sonner"
@@ -237,7 +237,7 @@ export function SimpleMembersTable({ members, organizationId, currentUserId }: S
                             ) : (
                               <Icon name="trash" className="h-4 w-4" />
                             )}
-                            <span className="ml-1 hidden sm:inline">Remove</span>
+                            
                           </Button>
                         )}
                       </TableCell>

@@ -44,6 +44,7 @@ function decodeCursor(cursor: string): CandidatesCursor | null {
 
 function stripNullBytes(value: string | null | undefined) {
   if (!value) return value ?? null;
+  // eslint-disable-next-line no-control-regex -- intentionally matching null bytes for sanitization
   return value.replace(/\u0000/g, "");
 }
 

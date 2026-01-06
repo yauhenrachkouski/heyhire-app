@@ -1,6 +1,6 @@
 'use server'
 
-import { log, stringify } from "@/lib/axiom/server";
+import { log } from "@/lib/axiom/server";
 import { getSessionWithOrg } from "@/lib/auth-helpers";
 
 const source = "actions/account";
@@ -15,6 +15,7 @@ import { Resend } from 'resend'
 import { AccountDeletedEmail } from '@/emails'
 import { generateId } from '@/lib/id'
 import { getPostHogServer } from '@/lib/posthog/posthog-server'
+import sharp from 'sharp'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -23,8 +24,6 @@ export async function updateUserProfile(data: {
   image?: string
 }) {
   const { userId: sessionUserId, activeOrgId } = await getSessionWithOrg();
-  let userId: string | undefined;
-  let organizationId: string | null | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -33,9 +32,6 @@ export async function updateUserProfile(data: {
     if (!session?.user) {
       return { success: false, error: 'Not authenticated' }
     }
-
-    userId = session.user.id;
-    organizationId = session.session.activeOrganizationId;
 
     // Update user in database
     await db.update(user)
@@ -57,8 +53,6 @@ export async function updateUserProfile(data: {
 
 export async function uploadAvatar(formData: FormData) {
   const { userId: sessionUserId, activeOrgId } = await getSessionWithOrg();
-  let userId: string | undefined;
-  let organizationId: string | null | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -67,9 +61,6 @@ export async function uploadAvatar(formData: FormData) {
     if (!session?.user) {
       return { success: false, error: 'Not authenticated' }
     }
-
-    userId = session.user.id;
-    organizationId = session.session.activeOrganizationId;
 
     const file = formData.get('file') as File
     if (!file) {
@@ -86,11 +77,15 @@ export async function uploadAvatar(formData: FormData) {
       return { success: false, error: 'File size must be less than 5MB' }
     }
 
-    // Convert file to base64 data URL for storage
+    // Resize to 128x128 max and convert to webp
     const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
-    const base64 = buffer.toString('base64')
-    const imageUrl = `data:${file.type};base64,${base64}`
+    const processed = await sharp(Buffer.from(bytes))
+      .resize(128, 128, { fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 85 })
+      .toBuffer()
+
+    const base64 = processed.toString('base64')
+    const imageUrl = `data:image/webp;base64,${base64}`
 
     // Update user image in database
     await db.update(user)
@@ -114,8 +109,6 @@ export async function uploadAvatar(formData: FormData) {
 
 export async function removeAvatar() {
   const { userId: sessionUserId, activeOrgId } = await getSessionWithOrg();
-  let userId: string | undefined;
-  let organizationId: string | null | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -124,9 +117,6 @@ export async function removeAvatar() {
     if (!session?.user) {
       return { success: false, error: 'Not authenticated' }
     }
-
-    userId = session.user.id;
-    organizationId = session.session.activeOrganizationId;
 
     // Remove user image from database
     await db.update(user)
@@ -150,7 +140,6 @@ export async function removeAvatar() {
 
 export async function getOrganizationMembership(organizationId: string) {
   const { userId: sessionUserId, activeOrgId } = await getSessionWithOrg();
-  let userId: string | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -159,8 +148,6 @@ export async function getOrganizationMembership(organizationId: string) {
     if (!session?.user) {
       return { success: false, error: 'Not authenticated' }
     }
-
-    userId = session.user.id;
 
     // Get user's membership in the organization
     const membership = await db.query.member.findFirst({
@@ -196,7 +183,6 @@ export async function updateOrganization(data: {
   size?: string
 }) {
   const { userId: sessionUserId, activeOrgId } = await getSessionWithOrg();
-  let userId: string | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -205,8 +191,6 @@ export async function updateOrganization(data: {
     if (!session?.user) {
       return { success: false, error: 'Not authenticated' }
     }
-
-    userId = session.user.id;
 
     // Parse existing metadata
     const org = await db.query.organization.findFirst({
@@ -259,8 +243,6 @@ export async function updateOrganization(data: {
 
 export async function getUserAccounts() {
   const { userId: sessionUserId, activeOrgId } = await getSessionWithOrg();
-  let userId: string | undefined;
-  let organizationId: string | null | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -269,9 +251,6 @@ export async function getUserAccounts() {
     if (!session?.user) {
       return { success: false, error: 'Not authenticated', data: [] }
     }
-
-    userId = session.user.id;
-    organizationId = session.session.activeOrganizationId;
 
     const accounts = await db.query.account.findMany({
       where: eq(account.userId, session.user.id)
@@ -297,8 +276,6 @@ export async function getUserAccounts() {
 
 export async function unlinkAccount(accountId: string) {
   const { userId: sessionUserId, activeOrgId } = await getSessionWithOrg();
-  let userId: string | undefined;
-  let organizationId: string | null | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -307,9 +284,6 @@ export async function unlinkAccount(accountId: string) {
     if (!session?.user) {
       return { success: false, error: 'Not authenticated' }
     }
-
-    userId = session.user.id;
-    organizationId = session.session.activeOrganizationId;
 
     // Delete the account (magic link is always available as fallback authentication)
     await db.delete(account)
