@@ -43,6 +43,7 @@ import { useQuery } from "@tanstack/react-query"
 import { recentSearchesKeys } from "@/lib/query-keys/search"
 import { creditsKeys } from "@/lib/credits"
 import { getOrganizationCredits } from "@/actions/credits"
+import { getRecentSearches } from "@/actions/search"
 
 type SubscriptionType = typeof subscription.$inferSelect
 
@@ -186,15 +187,11 @@ export function AppSidebar({
     queryKey,
     queryFn: async () => {
       if (!activeOrganization?.id) return []
-      const url = new URL("/api/search/recent", window.location.origin)
-      url.searchParams.set("organizationId", activeOrganization.id)
-      url.searchParams.set("limit", String(recentSearchLimit))
-      const res = await fetch(url.toString())
-      if (!res.ok) {
-        throw new Error("Failed to load recent searches")
+      const result = await getRecentSearches(activeOrganization.id, recentSearchLimit)
+      if (!result.success) {
+        throw new Error(result.error || "Failed to load recent searches")
       }
-      const payload = (await res.json()) as { data?: RecentSearch[] }
-      return payload.data ?? []
+      return result.data ?? []
     },
     enabled: !!activeOrganization?.id,
     initialData: recentSearches.length > 0 ? recentSearches : undefined,

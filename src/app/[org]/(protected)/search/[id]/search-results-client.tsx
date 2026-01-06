@@ -19,6 +19,7 @@ import { formatDate } from "@/lib/format";
 import SourcingLoader from "@/components/search/sourcing-custom-loader";
 import { updateSearchName } from "@/actions/search";
 import { analyzeAndContinueSearch } from "@/actions/workflow";
+import { getCandidatesForSearch, getSearchProgress } from "@/actions/candidates";
 import { toast } from "sonner";
 import { useSearchRealtime } from "@/hooks/use-search-realtime";
 import posthog from 'posthog-js';
@@ -168,11 +169,7 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   // ========== TANSTACK QUERY: Progress (Global counts, independent of filters) ==========
   const progressQuery = useQuery<SearchProgress>({
     queryKey: searchCandidatesKeys.progress(search.id),
-    queryFn: async () => {
-      const response = await fetch(`/api/search/${search.id}/progress`);
-      if (!response.ok) throw new Error('Failed to fetch progress');
-      return response.json();
-    },
+    queryFn: () => getSearchProgress(search.id),
     // Use SSR data for initial state - no immediate refetch needed
     initialData: initialData?.progress,
     gcTime: 5 * 60 * 1000,
@@ -189,6 +186,7 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
 
   // Pre-compute SSR initial data structure ONCE on mount
   // This will only be used when filters match SSR state
+  // Note: progress is handled separately via progressQuery, not included here
   const [ssrInitialDataStructure] = useState(() => {
     if (!initialData) return undefined;
 
@@ -196,9 +194,8 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
       pages: [{
         candidates: initialData.candidates,
         pagination: initialData.pagination,
-        progress: initialData.progress,
       }],
-      pageParams: [null],
+      pageParams: [null as string | null],
     };
   });
 
@@ -208,29 +205,27 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
 
   const candidatesQuery = useInfiniteQuery({
     queryKey: candidatesQueryKey,
-    queryFn: async ({ pageParam = null }) => {
-      const url = new URL(`/api/search/${search.id}/candidates`, window.location.origin);
+    queryFn: async ({ pageParam }) => {
+      const isFirstPage = pageParam === null;
 
-      // Only send non-default filters to match SSR behavior
-      if (scoreMin !== 0) url.searchParams.set('scoreMin', scoreMin.toString());
-      if (scoreMax !== 100) url.searchParams.set('scoreMax', scoreMax.toString());
-      url.searchParams.set('limit', limit.toString());
-      url.searchParams.set('sortBy', sortBy);
-      url.searchParams.set("cursor", pageParam ? String(pageParam) : "");
+      const result = await getCandidatesForSearch(search.id, {
+        scoreMin: scoreMin !== 0 ? scoreMin : undefined,
+        scoreMax: scoreMax !== 100 ? scoreMax : undefined,
+        limit,
+        sortBy,
+        cursorMode: true,
+        cursor: pageParam,
+        includeTotalCount: isFirstPage,
+      });
 
-      const response = await fetch(url.toString());
-      if (!response.ok) {
-        log.error("candidates.fetch_failed", {
-          source,
-          searchId: search.id,
-          status: response.status,
-          cursor: pageParam,
-        });
-        throw new Error('Failed to fetch candidates');
-      }
-      return response.json();
+      // Transform server action response to match expected shape
+      // Note: progress is handled separately via progressQuery
+      return {
+        candidates: result.data,
+        pagination: result.pagination,
+      };
     },
-    initialPageParam: null,
+    initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage?.pagination?.nextCursor ?? undefined,
     enabled: !!search.id,
     placeholderData: keepPreviousData,
