@@ -52,6 +52,7 @@ interface SubscribeCardsServerProps {
   showSupportSections?: boolean;
   currentPlan?: PlanId | null;
   isTrialing?: boolean;
+  onSubscriptionSuccess?: () => void;
 }
 
 interface SubscribeHeaderProps {
@@ -81,6 +82,7 @@ export function SubscribeCardsServer({
   showSupportSections = true,
   currentPlan,
   isTrialing = false,
+  onSubscriptionSuccess,
 }: SubscribeCardsServerProps) {
   void isRequired;
   void isTrialEligible;
@@ -186,6 +188,7 @@ export function SubscribeCardsServer({
                       variant="default"
                       size="lg"
                       planId={plan.planId}
+                      onSuccess={onSubscriptionSuccess}
                     >
                       Unlock full Pro now
                     </UnlockProNowButton>

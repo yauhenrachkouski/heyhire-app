@@ -31,6 +31,10 @@ export function PlansModal({ children, currentPlan, isTrialEligible, open, onOpe
   const trialEligible = isTrialEligible ?? !currentPlan;
   const isTrialing = subscription?.status === "trialing";
 
+  const handleSubscriptionSuccess = () => {
+    setIsOpen(false);
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
@@ -50,6 +54,7 @@ export function PlansModal({ children, currentPlan, isTrialEligible, open, onOpe
           showSupportSections
           currentPlan={currentPlan}
           isTrialing={isTrialing}
+          onSubscriptionSuccess={handleSubscriptionSuccess}
         />
       </DialogContent>
     </Dialog>

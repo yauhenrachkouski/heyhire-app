@@ -19,7 +19,7 @@ interface SubscriptionState {
     refetch: () => void;
 }
 
-const subscriptionKeys = {
+export const subscriptionKeys = {
     all: ["subscription"] as const,
     organization: (orgId: string) => [...subscriptionKeys.all, "org", orgId] as const,
 };

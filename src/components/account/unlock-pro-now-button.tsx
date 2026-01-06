@@ -9,6 +9,10 @@ import { Button } from "@/components/ui/button"
 import { startProBillingNow } from "@/actions/stripe"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { useQueryClient } from "@tanstack/react-query"
+import { useActiveOrganization } from "@/lib/auth-client"
+import { creditsKeys } from "@/lib/credits"
+import { subscriptionKeys } from "@/hooks/use-subscription"
 import { PLAN_LIMITS } from "@/types/plans"
 import type { PlanId } from "@/types/plans"
 import {
@@ -30,6 +34,7 @@ interface UnlockProNowButtonProps {
   nextBillingAmountLabel?: string | null
   nextBillingLabel?: string | null
   planId?: PlanId
+  onSuccess?: () => void
 }
 
 export function UnlockProNowButton({
@@ -40,10 +45,13 @@ export function UnlockProNowButton({
   nextBillingAmountLabel,
   nextBillingLabel,
   planId = "pro",
+  onSuccess,
 }: UnlockProNowButtonProps) {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
+  const queryClient = useQueryClient()
+  const { data: activeOrg } = useActiveOrganization()
 
   const handleUnlockNow = () => {
     startTransition(async () => {
@@ -53,7 +61,22 @@ export function UnlockProNowButton({
         if (result.success) {
           toast.success("Successfully upgraded to Pro! Your billing cycle has started.")
           setIsConfirmOpen(false)
+
+          // Invalidate subscription and credits queries to refresh UI
+          if (activeOrg?.id) {
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: subscriptionKeys.organization(activeOrg.id) }),
+              queryClient.invalidateQueries({ queryKey: creditsKeys.organization(activeOrg.id) }),
+            ])
+          }
+          // Also invalidate at the root level
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: subscriptionKeys.all }),
+            queryClient.invalidateQueries({ queryKey: creditsKeys.all }),
+          ])
+
           router.refresh()
+          onSuccess?.()
         } else {
           toast.error(result.error || "Failed to upgrade trial")
         }
