@@ -529,8 +529,11 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
         // No per-batch logging - aggregate is logged at completion
         
         await context.run(`save-candidates-incremental-${pollCount}`, async () => {
-          await saveCandidatesFromSearch(searchId, newCandidates as any, rawText);
-          
+          await saveCandidatesFromSearch(searchId, newCandidates as any, rawText, {
+            userId: userId!,
+            organizationId: organizationId!,
+          });
+
           // Emit event so client refreshes the list
           await realtime.channel(channel).emit("candidates.added", {
             count: newCandidates.length,
@@ -613,7 +616,10 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
       await context.run("save-candidates-final", async () => {
         const finalBatch = candidatesData.slice(lastSavedCount);
         // @ts-expect-error - finalBatch is typed correctly from API
-        await saveCandidatesFromSearch(searchId, finalBatch, rawText);
+        await saveCandidatesFromSearch(searchId, finalBatch, rawText, {
+          userId: userId!,
+          organizationId: organizationId!,
+        });
 
         await realtime.channel(channel).emit("progress.updated", {
           progress: 95,

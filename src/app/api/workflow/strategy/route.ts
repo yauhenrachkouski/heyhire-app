@@ -167,7 +167,10 @@ const { POST: workflowPost } = serve<StrategyWorkflowPayload>(
 
       await context.run("save-candidates", async () => {
         // @ts-expect-error - candidatesData typed from API
-        await saveCandidatesFromSearch(searchId, candidatesData, rawText);
+        await saveCandidatesFromSearch(searchId, candidatesData, rawText, {
+          userId: userId!,
+          organizationId: organizationId!,
+        });
       });
     }
 

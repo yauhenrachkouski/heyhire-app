@@ -126,13 +126,19 @@ function transformCandidateToDb(candidate: CandidateProfile) {
  * Save candidates from search API to database using batch operations
  * Creates or updates candidates, links them to the search
  * NOTE: Scoring is triggered from the client side AFTER sourcing completes for better UX
+ *
+ * @param searchId - The search ID to link candidates to
+ * @param candidateProfiles - Array of candidate profiles from API
+ * @param _rawText - Raw text (unused, kept for compatibility)
+ * @param context - Auth context with userId and organizationId (for workflow calls without session)
  */
 export async function saveCandidatesFromSearch(
   searchId: string,
   candidateProfiles: CandidateProfile[],
-  _rawText: string
+  _rawText: string,
+  context: { userId: string; organizationId: string }
 ): Promise<{ success: boolean; saved: number; linked: number }> {
-  const { userId, activeOrgId } = await getSessionWithOrg();
+  const { userId, organizationId: activeOrgId } = context;
   log.info("batch_save.started", {
     userId,
     organizationId: activeOrgId,
@@ -479,7 +485,7 @@ export async function getCandidatesForSearch(
   }
 ) {
   const { userId, activeOrgId } = await getSessionWithOrg();
-  log.info("fetch.started", { userId, organizationId: activeOrgId, source, searchId, options: JSON.stringify(options) });
+  log.info("candidates_fetch.started", { userId, organizationId: activeOrgId, source, searchId, options: JSON.stringify(options) });
 
   await requireSearchReadAccess(searchId);
 
@@ -767,7 +773,7 @@ export async function getCandidatesForSearch(
     isRevealed: revealedCandidateIds.has(result.candidateId)
   }));
 
-  log.info("fetch.completed", { userId, organizationId: activeOrgId, source, searchId, count: enrichedResults.length, total });
+  log.info("candidates_fetch.completed", { userId, organizationId: activeOrgId, source, searchId, count: enrichedResults.length, total });
 
   return {
     data: enrichedResults,
