@@ -331,3 +331,43 @@ export async function getSearchById(
     };
   }
 }
+
+/**
+ * Transcribe audio using OpenAI Whisper API
+ */
+export async function transcribeAudio(
+  formData: FormData
+): Promise<{ success: boolean; text?: string; error?: string }> {
+  try {
+    const audioFile = formData.get("file") as File;
+
+    if (!audioFile) {
+      return { success: false, error: "No audio file provided" };
+    }
+
+    // Forward to OpenAI Whisper API with secure backend key
+    const whisperFormData = new FormData();
+    whisperFormData.append("file", audioFile);
+    whisperFormData.append("model", "whisper-1");
+
+    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: whisperFormData,
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      log.error("whisper.api_error", { source, error });
+      return { success: false, error: "Transcription failed" };
+    }
+
+    const data = await response.json();
+    return { success: true, text: data.text };
+  } catch (error) {
+    log.error("transcription.error", { source, error: error instanceof Error ? error.message : String(error) });
+    return { success: false, error: "Transcription failed" };
+  }
+}

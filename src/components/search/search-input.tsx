@@ -28,6 +28,7 @@ import {
   IconBan,
 } from "@tabler/icons-react";
 import { parseJob } from "@/actions/jobs";
+import { transcribeAudio } from "@/actions/search";
 import type { Criterion, SourcingCriteria } from "@/types/search";
 import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
 import { cn } from "@/lib/utils";
@@ -567,18 +568,14 @@ export function SearchInput({
       const formData = new FormData();
       formData.append("file", audioBlob, "audio.webm");
 
-      // Send to our secure backend API route (OpenAI key stays private)
-      const response = await fetch("/api/transcribe", {
-        method: "POST",
-        body: formData,
-      });
+      // Use server action for transcription (OpenAI key stays private)
+      const result = await transcribeAudio(formData);
 
-      if (!response.ok) {
-        throw new Error("Transcription failed");
+      if (!result.success || !result.text) {
+        throw new Error(result.error || "Transcription failed");
       }
 
-      const data = await response.json();
-      const transcribedText = data.text;
+      const transcribedText = result.text;
 
       setIsTranscribing(false);
 
