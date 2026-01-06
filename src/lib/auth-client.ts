@@ -1,5 +1,5 @@
 import { createAuthClient } from "better-auth/react"
-import { organizationClient, magicLinkClient, lastLoginMethodClient } from "better-auth/client/plugins"
+import { organizationClient, magicLinkClient, lastLoginMethodClient, anonymousClient } from "better-auth/client/plugins"
 import { stripeClient } from "@better-auth/stripe/client"
 
 export const authClient = createAuthClient({
@@ -9,7 +9,8 @@ export const authClient = createAuthClient({
         lastLoginMethodClient(),
         stripeClient({
             subscription: true,
-        })
+        }),
+        anonymousClient(),
     ]
 })
 

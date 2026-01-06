@@ -5,6 +5,7 @@ import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { PersistentSidebarProvider } from "@/providers/sidebar-provider"
 import { PlansModalProvider } from "@/providers/plans-modal-provider"
+import { DemoModeProvider } from "@/providers/demo-mode-provider"
 import { requireActiveSubscription, getUserSubscription } from "@/actions/stripe"
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
@@ -12,6 +13,7 @@ import { headers } from "next/headers"
 import { getRecentSearches } from "@/actions/search"
 import { getOrganizationCredits } from "@/actions/credits"
 import { getTrialWarning } from "@/lib/trial-warnings"
+import { getDemoOrgSlug } from "@/lib/demo"
 
 export default async function DashboardLayout({
   children,
@@ -64,38 +66,44 @@ export default async function DashboardLayout({
     trialWarning = await getTrialWarning(subscription, activeOrganization.id);
   }
 
+  // Check if this is the demo organization
+  const isDemoMode = activeOrganization?.slug === getDemoOrgSlug()
+  const memberRole = activeMember?.role ?? null
+
   return (
-    <TooltipProvider>
-      <PlansModalProvider>
-        <PersistentSidebarProvider>
-          <AppSidebar 
-            subscription={subscription}
-            organizations={organizations}
-            activeOrganization={activeOrgWithCredits}
-            user={activeMember?.user ?? null}
-            recentSearches={recentSearches ?? []}
-            trialWarning={trialWarning}
-          />
-          <SidebarInset>
-            <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear bg-background border-b group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-              <div className="flex h-full items-center gap-2 px-4 leading-none">
-                <SidebarTrigger className="-ml-1" />
-                <Separator
-                orientation="vertical"
-                className="mr-2 my-auto block shrink-0 data-[orientation=vertical]:h-4"
-              />
-                <div className="flex items-center min-w-0">
-                  {breadcrumbs}
+    <DemoModeProvider isDemoMode={isDemoMode} role={memberRole}>
+      <TooltipProvider>
+        <PlansModalProvider>
+          <PersistentSidebarProvider>
+            <AppSidebar
+              subscription={subscription}
+              organizations={organizations}
+              activeOrganization={activeOrgWithCredits}
+              user={activeMember?.user ?? null}
+              recentSearches={recentSearches ?? []}
+              trialWarning={trialWarning}
+            />
+            <SidebarInset>
+              <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear bg-background border-b group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+                <div className="flex h-full items-center gap-2 px-4 leading-none">
+                  <SidebarTrigger className="-ml-1" />
+                  <Separator
+                  orientation="vertical"
+                  className="mr-2 my-auto block shrink-0 data-[orientation=vertical]:h-4"
+                />
+                  <div className="flex items-center min-w-0">
+                    {breadcrumbs}
+                  </div>
                 </div>
+              </header>
+              <div className="flex flex-1 flex-col gap-4 p-4">
+                {children}
               </div>
-            </header>
-            <div className="flex flex-1 flex-col gap-4 p-4">
-              {children}
-            </div>
-          </SidebarInset>
-        </PersistentSidebarProvider>
-      </PlansModalProvider>
-    </TooltipProvider>
+            </SidebarInset>
+          </PersistentSidebarProvider>
+        </PlansModalProvider>
+      </TooltipProvider>
+    </DemoModeProvider>
   )
 }
  

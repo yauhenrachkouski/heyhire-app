@@ -10,7 +10,12 @@ import { db } from "@/db/drizzle"
 import * as schema from "@/db/schema"
 import { getDemoOrgSlug, ensureDemoOrganization } from "@/lib/demo"
 import { generateId } from "@/lib/id"
+import { ROLES } from "@/lib/roles"
 
+/**
+ * Add current user to demo organization with demo_viewer role.
+ * Used for anonymous demo access flow.
+ */
 export async function addDemoWorkspaceForCurrentUser() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session?.user) throw new Error("Not authenticated")
@@ -25,15 +30,30 @@ export async function addDemoWorkspaceForCurrentUser() {
     columns: { id: true },
   })
 
-  if (existingMember?.id) return { success: true }
+  if (existingMember?.id) {
+    return { success: true, organizationId: demoOrgId }
+  }
 
   await db.insert(schema.member).values({
     id: generateId(),
     organizationId: demoOrgId,
     userId: session.user.id,
-    role: "viewer",
+    role: ROLES.demo_viewer,
   })
 
+  return { success: true, organizationId: demoOrgId }
+}
+
+/**
+ * Set the active organization for the current session.
+ * Used after adding user to demo org.
+ */
+export async function setActiveOrganization(organizationId: string) {
+  const headersList = await headers()
+  await auth.api.setActiveOrganization({
+    headers: headersList,
+    body: { organizationId },
+  })
   return { success: true }
 }
 

@@ -24,6 +24,7 @@ export const user = pgTable("user", {
     .notNull(),
   stripeCustomerId: text("stripe_customer_id"),
   lastLoginMethod: text("last_login_method"),
+  isAnonymous: boolean("is_anonymous"),
 });
 
 export const session = pgTable("session", {

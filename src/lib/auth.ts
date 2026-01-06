@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { organization, magicLink, lastLoginMethod } from "better-auth/plugins";
+import { organization, magicLink, lastLoginMethod, anonymous } from "better-auth/plugins";
 import { stripe } from "@better-auth/stripe";
 import { APIError } from "better-auth/api";
 import { db } from "@/db/drizzle";
@@ -673,6 +673,11 @@ export const auth = betterAuth({
          onEvent: async (event) => {
             await handleStripeEvent(event, stripeClient);
          },
+      }),
+
+      // Anonymous plugin for demo mode
+      anonymous({
+         emailDomainName: "demo.heyhire.app",
       }),
    ],
    databaseHooks: {
