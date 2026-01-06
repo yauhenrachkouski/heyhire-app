@@ -427,7 +427,11 @@ export function SearchInput({
 
         setLastParsedQuery(searchQuery);
         
-        log.info("Criteria parsed", { source, criteria: result.criteria });
+        log.info("Criteria parsed", {
+          source,
+          jobTitle: result.criteria.job_title,
+          criteriaCount: result.criteria.criteria?.length ?? 0,
+        });
       } else {
         // ... rest of the error handling ...
         setParsedCriteria(null);
@@ -439,7 +443,7 @@ export function SearchInput({
         onCriteriaChange(null);
 
         const rawError = result.error || "Failed to parse query";
-        log.error("Parse failed", { source, error: rawError });
+        log.error("parse.failed", { source, error: rawError });
 
         let userMessage = rawError;
         if (/invalid json/i.test(rawError) || /output parsing/i.test(rawError)) {
@@ -460,7 +464,7 @@ export function SearchInput({
         toast.error(`Failed to parse: ${userMessage}`);
       }
     } catch (error) {
-      log.error("Search error", { source, error });
+      log.error("search.error", { source, error: error instanceof Error ? error.message : String(error) });
       setParsedCriteria(null);
       setActivePanel(null);
       setActiveGroup(null);
@@ -541,7 +545,7 @@ export function SearchInput({
         mediaRecorderRef.current = mediaRecorder;
         setIsRecording(true);
       } catch (error) {
-        log.error("Microphone error", { source, error });
+        log.error("microphone.error", { source, error: error instanceof Error ? error.message : String(error) });
         toast.error("Error", {
           description: "Failed to access microphone",
         });
@@ -593,7 +597,7 @@ export function SearchInput({
       setIsTooLong(false);
       await handleParse(transcribedText);
     } catch (error) {
-      log.error("Transcription error", { source, error });
+      log.error("transcription.error", { source, error: error instanceof Error ? error.message : String(error) });
       toast.error("Error", {
         description: "Failed to transcribe audio",
       });

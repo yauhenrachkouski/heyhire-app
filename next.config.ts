@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   experimental: {
     browserDebugInfoInTerminal: true,
   },
+  allowedDevOrigins: ["pepper.heyhire.ai"],
   images: {
     remotePatterns: [
       {

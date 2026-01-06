@@ -148,7 +148,7 @@ export function OrganizationSwitcher({
       await removeDemoWorkspaceForCurrentUser()
       router.refresh()
     } catch (e) {
-      log.error("Failed to remove demo organization", { source, error: e })
+      log.error("remove_demo_org.error", { source, error: e instanceof Error ? e.message : String(e) })
     }
   }
   

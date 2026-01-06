@@ -39,6 +39,15 @@ const { POST: workflowPost } = serve<StrategyWorkflowPayload>(
     }
 
     const { strategyId, searchId, rawText } = payload;
+    
+    // Get search context for logging
+    const searchRecord = await db.query.search.findFirst({
+      where: eq(search.id, searchId),
+      columns: { userId: true, organizationId: true },
+    });
+    const userId = searchRecord?.userId;
+    const organizationId = searchRecord?.organizationId;
+    
     const strategyToExecute: SourcingStrategyItem = {
       ...payload.strategy,
       apify_payload: {
@@ -47,7 +56,7 @@ const { POST: workflowPost } = serve<StrategyWorkflowPayload>(
       },
     };
 
-    log.info("strategy.started", { source, strategyId });
+    log.info("strategy.started", { userId, organizationId, source, strategyId });
 
     // Step 1: Update strategy status to executing
     await context.run("update-status-executing", async () => {
@@ -86,7 +95,7 @@ const { POST: workflowPost } = serve<StrategyWorkflowPayload>(
     const executeData = strategyExecutionResponseSchema.parse(executeResponse.body);
     const taskId = executeData.task_id;
 
-    log.info("task.received", { source, taskId });
+    log.info("task.received", { userId, organizationId, source, taskId });
 
     // Step 3: Update strategy with taskId
     await context.run("save-task-id", async () => {
@@ -119,7 +128,7 @@ const { POST: workflowPost } = serve<StrategyWorkflowPayload>(
       });
 
       if (pollResponse.status !== 200) {
-        log.info("poll.failed", { source, pollCount });
+        log.info("poll.failed", { userId, organizationId, source, pollCount });
         continue;
       }
 
@@ -127,7 +136,7 @@ const { POST: workflowPost } = serve<StrategyWorkflowPayload>(
 
       if (pollData.status === "completed") {
         candidatesData = pollData.candidates || pollData.results || [];
-        log.info("strategy.completed", { source, candidates: candidatesData.length });
+        log.info("strategy.completed", { userId, organizationId, source, candidates: candidatesData.length });
         break;
       }
 
@@ -192,8 +201,17 @@ const { POST: workflowPost } = serve<StrategyWorkflowPayload>(
       failHeaders: Record<string, string[]>;
       failStack: string;
     }) => {
-      const { strategyId } = failureData.context.requestPayload;
+      const { strategyId, searchId } = failureData.context.requestPayload;
+      const searchRecord = await db.query.search.findFirst({
+        where: eq(search.id, searchId),
+        columns: { userId: true, organizationId: true },
+      });
+      const userId = searchRecord?.userId;
+      const organizationId = searchRecord?.organizationId;
+      
       log.error("strategy.failed", {
+        userId,
+        organizationId,
         source,
         strategyId,
         error: failureData.failResponse,
@@ -205,7 +223,7 @@ const { POST: workflowPost } = serve<StrategyWorkflowPayload>(
           .set({ status: "error", error: `Workflow failed: ${failureData.failStatus}` })
           .where(eq(sourcingStrategies.id, strategyId));
       } catch (e) {
-        log.error("status_update.failed", { source, error: e });
+        log.error("status_update.failed", { userId, organizationId, source, error: e instanceof Error ? e.message : String(e) });
       }
       
       return `Strategy workflow failed with status ${failureData.failStatus}`;

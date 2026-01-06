@@ -78,7 +78,8 @@ export async function getCustomerPortalPaymentMethodSession() {
       error: null,
     };
   } catch (error) {
-    log.error("payment_method_portal.error", { source, error });
+    const { userId, activeOrgId } = await getSessionWithOrg();
+    log.error("payment_method_portal.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
     return {
       url: null,
       error:
@@ -124,7 +125,8 @@ export async function getCustomerInvoices(params?: { limit?: number }) {
       error: null,
     };
   } catch (error) {
-    log.error("list_invoices.error", { source, error });
+    const { userId, activeOrgId } = await getSessionWithOrg();
+    log.error("list_invoices.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
     return {
       invoices: [],
       error:
@@ -174,7 +176,8 @@ export async function getCustomerPaymentMethods(params?: { limit?: number }) {
       error: null,
     };
   } catch (error) {
-    log.error("list_payment_methods.error", { source, error });
+    const { userId, activeOrgId } = await getSessionWithOrg();
+    log.error("list_payment_methods.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
     return {
       paymentMethods: [],
       defaultPaymentMethodId: null,
@@ -198,10 +201,11 @@ export async function getUserSubscription() {
     return { subscription: orgSubscription || null, error: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to fetch subscription";
+    const { userId, activeOrgId } = await getSessionWithOrg();
     if (message.includes("Not authenticated") || message.includes("No active organization")) {
-      log.warn("fetch_subscription.warn", { source, error });
+      log.warn("fetch_subscription.warn", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
     } else {
-      log.error("fetch_subscription.error", { source, error });
+      log.error("fetch_subscription.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
     }
     return { subscription: null, error: error instanceof Error ? error.message : "Failed to fetch subscription" };
   }
@@ -228,7 +232,8 @@ export async function getOrganizationSubscription(organizationId: string) {
 
     return { subscription: orgSubscription[0] || null, error: null };
   } catch (error) {
-    log.error("fetch_org_subscription.error", { source, error });
+    const { userId, activeOrgId } = await getSessionWithOrg();
+    log.error("fetch_org_subscription.error", { userId, organizationId: activeOrgId, source, targetOrgId: organizationId, error: error instanceof Error ? error.message : String(error) });
     return { subscription: null, error: "Failed to fetch organization subscription" };
   }
 }
@@ -409,7 +414,8 @@ export async function getCustomerPortalSession() {
       error: null,
     };
   } catch (error) {
-    log.error("customer_portal.error", { source, error });
+    const { userId, activeOrgId } = await getSessionWithOrg();
+    log.error("customer_portal.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
     return {
       url: null,
       error:
@@ -476,7 +482,8 @@ export async function startProBillingNow() {
       error: null,
     };
   } catch (error) {
-    log.error("unlock_trial.error", { source, error });
+    const { userId, activeOrgId } = await getSessionWithOrg();
+    log.error("unlock_trial.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to unlock trial",
@@ -543,7 +550,7 @@ export async function cancelSubscription() {
         });
       }
     } catch (e) {
-      log.warn("cancel_email.failed", { source, error: e });
+      log.warn("cancel_email.failed", { source, userId, organizationId: activeOrgId, error: e instanceof Error ? e.message : String(e) });
     }
 
     return {
@@ -552,7 +559,8 @@ export async function cancelSubscription() {
       error: null,
     };
   } catch (error) {
-    log.error("cancel_subscription.error", { source, error });
+    const { userId, activeOrgId } = await getSessionWithOrg();
+    log.error("cancel_subscription.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
     return {
       success: false,
       error:
@@ -618,7 +626,7 @@ export async function resumeSubscription() {
         });
       }
     } catch (e) {
-      log.warn("resume_email.failed", { source, error: e });
+      log.warn("resume_email.failed", { source, userId, organizationId: activeOrgId, error: e instanceof Error ? e.message : String(e) });
     }
 
     return {
@@ -627,7 +635,8 @@ export async function resumeSubscription() {
       error: null,
     };
   } catch (error) {
-    log.error("resume_subscription.error", { source, error });
+    const { userId, activeOrgId } = await getSessionWithOrg();
+    log.error("resume_subscription.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
     return {
       success: false,
       error:
@@ -673,7 +682,8 @@ export async function setDefaultPaymentMethod(paymentMethodId: string) {
       error: null,
     };
   } catch (error) {
-    log.error("set_default_payment_method.error", { source, error });
+    const { userId, activeOrgId } = await getSessionWithOrg();
+    log.error("set_default_payment_method.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to set default payment method",
@@ -722,7 +732,8 @@ export async function removePaymentMethod(paymentMethodId: string) {
       error: null,
     };
   } catch (error) {
-    log.error("remove_payment_method.error", { source, error });
+    const { userId, activeOrgId } = await getSessionWithOrg();
+    log.error("remove_payment_method.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to remove payment method",

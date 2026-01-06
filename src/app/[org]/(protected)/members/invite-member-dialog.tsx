@@ -67,7 +67,7 @@ export function InviteMemberDialog({
         });
       }
     } catch (error) {
-      log.error("Error sending invitation", { source, error });
+      log.error("invite.send_error", { source, error: error instanceof Error ? error.message : String(error) });
       toast.error("Error", {
         description: "An unexpected error occurred",
       });

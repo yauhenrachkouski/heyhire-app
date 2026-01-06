@@ -1,6 +1,7 @@
 "use server";
 
 import { log } from "@/lib/axiom/server";
+import { getSessionWithOrg } from "@/lib/auth-helpers";
 
 import "server-only";
 
@@ -26,6 +27,7 @@ export async function updateSearchName(
   searchId: string,
   newName: string
 ): Promise<{ success: boolean; error?: string }> {
+  const { userId, activeOrgId } = await getSessionWithOrg();
   try {
     const searchRow = await requireSearchReadAccess(searchId);
     await assertNotReadOnlyForOrganization(searchRow.organizationId);
@@ -48,7 +50,7 @@ export async function updateSearchName(
     return { success: true };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    log.error("update_name.error", { source, searchId, error: errorMessage });
+    log.error("update_name.error", { userId, organizationId: activeOrgId, source, searchId, error: errorMessage });
     return { success: false, error: errorMessage };
   }
 }
@@ -62,6 +64,7 @@ export async function saveSearch(
   userId: string,
   organizationId: string
 ): Promise<{ success: boolean; data?: { id: string }; error?: string }> {
+  const { userId: sessionUserId, activeOrgId } = await getSessionWithOrg();
   try {
     const signedIn = await getSignedInUser();
     if (!signedIn) {
@@ -105,7 +108,7 @@ export async function saveSearch(
     };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    log.error("save.error", { source, userId, organizationId, error: errorMessage });
+    log.error("save.error", { source, userId: sessionUserId, organizationId: activeOrgId, error: errorMessage });
     return {
       success: false,
       error: errorMessage,
@@ -129,10 +132,11 @@ export async function getRecentSearches(
   }>;
   error?: string;
 }> {
+  const { userId, activeOrgId } = await getSessionWithOrg();
   try {
     await requireOrganizationReadAccess(organizationId);
 
-    log.debug("recent.fetch_started", { source, organizationId, limit });
+    log.debug("recent.fetch_started", { userId, organizationId: activeOrgId, source, limit });
 
     const fetchRecentSearches = unstable_cache(
       async () => {
@@ -159,7 +163,7 @@ export async function getRecentSearches(
 
     const parsedSearches = await fetchRecentSearches();
 
-    log.debug("recent.fetch_completed", { source, organizationId, count: parsedSearches.length });
+    log.debug("recent.fetch_completed", { userId, organizationId: activeOrgId, source, count: parsedSearches.length });
 
     return {
       success: true,
@@ -167,7 +171,7 @@ export async function getRecentSearches(
     };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    log.error("recent.fetch_error", { source, organizationId, error: errorMessage });
+    log.error("recent.fetch_error", { source, userId, organizationId: activeOrgId, error: errorMessage });
     return {
       success: false,
       error: errorMessage,
@@ -192,6 +196,7 @@ export async function searchSearchesByTitle(
   }>;
   error?: string;
 }> {
+  const { userId, activeOrgId } = await getSessionWithOrg();
   try {
     await requireOrganizationReadAccess(organizationId);
 
@@ -199,7 +204,7 @@ export async function searchSearchesByTitle(
       return { success: true, data: [] };
     }
 
-    log.debug("title_search.started", { source, organizationId, query });
+    log.debug("title_search.started", { userId, organizationId: activeOrgId, source, query });
 
     const searches = await db
       .select({
@@ -218,7 +223,7 @@ export async function searchSearchesByTitle(
       .orderBy(desc(search.createdAt))
       .limit(limit);
 
-    log.debug("title_search.completed", { source, organizationId, count: searches.length });
+    log.debug("title_search.completed", { userId, organizationId: activeOrgId, source, count: searches.length });
 
     return {
       success: true,
@@ -226,7 +231,7 @@ export async function searchSearchesByTitle(
     };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    log.error("title_search.error", { source, organizationId, query, error: errorMessage });
+    log.error("title_search.error", { source, userId, organizationId: activeOrgId, query, error: errorMessage });
     return {
       success: false,
       error: errorMessage,
@@ -257,6 +262,7 @@ export async function getSearchById(
   };
   error?: string;
 }> {
+  const { userId, activeOrgId } = await getSessionWithOrg();
   try {
     await requireSearchReadAccess(id);
 
@@ -315,7 +321,7 @@ export async function getSearchById(
     };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    log.error("get.error", { source, searchId: id, error: errorMessage });
+    log.error("get.error", { userId, organizationId: activeOrgId, source, searchId: id, error: errorMessage });
     return {
       success: false,
       error: errorMessage,

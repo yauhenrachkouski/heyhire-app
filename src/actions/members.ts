@@ -1,6 +1,7 @@
 "use server";
 
 import { log } from "@/lib/axiom/server";
+import { getSessionWithOrg } from "@/lib/auth-helpers";
 
 const source = "actions/members";
 
@@ -45,6 +46,7 @@ export async function getMembers(input?: {
   limit?: number;
   offset?: number;
 }): Promise<GetMembersResult> {
+  const { userId, activeOrgId } = await getSessionWithOrg();
   try {
     const limit = input?.limit || 100;
     const offset = input?.offset || 0;
@@ -105,7 +107,7 @@ export async function getMembers(input?: {
       total: combinedData.length,
     };
   } catch (error) {
-    log.error("fetch_members.error", { source, error });
+    log.error("fetch_members.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
     throw new Error(getErrorMessage(error));
   }
 }
@@ -114,6 +116,7 @@ export async function getMembers(input?: {
  * Remove a member from the organization
  */
 export async function removeMember(memberIdOrEmail: string) {
+  const { userId, activeOrgId } = await getSessionWithOrg();
   try {
     const reqHeaders = await headers();
 
@@ -170,7 +173,7 @@ export async function removeMember(memberIdOrEmail: string) {
         });
       }
     } catch (e) {
-      log.warn("removed_email.failed", { source, error: e });
+      log.warn("removed_email.failed", { userId: session?.user?.id, organizationId: session?.session?.activeOrganizationId, source, error: e instanceof Error ? e.message : String(e) });
     }
 
     return {
@@ -178,7 +181,7 @@ export async function removeMember(memberIdOrEmail: string) {
       message: "Member removed successfully",
     };
   } catch (error) {
-    log.error("remove_member.error", { source, error });
+    log.error("remove_member.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
     return {
       success: false,
       error: getErrorMessage(error),
@@ -190,6 +193,7 @@ export async function removeMember(memberIdOrEmail: string) {
  * Update a member's role
  */
 export async function updateMemberRole(memberId: string, role: string) {
+  const { userId, activeOrgId } = await getSessionWithOrg();
   try {
     await auth.api.updateMemberRole({
       body: {
@@ -204,7 +208,7 @@ export async function updateMemberRole(memberId: string, role: string) {
       message: "Member role updated successfully",
     };
   } catch (error) {
-    log.error("update_role.error", { source, error });
+    log.error("update_role.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
     return {
       success: false,
       error: getErrorMessage(error),
@@ -225,6 +229,7 @@ export async function updateMember(input: { id: string; role: string }) {
  * Uses native better-auth updateMemberRole in batch
  */
 export async function updateMembers(input: { ids: string[]; role: string }) {
+  const { userId, activeOrgId } = await getSessionWithOrg();
   try {
     const reqHeaders = await headers();
     const results = await Promise.allSettled(
@@ -241,7 +246,7 @@ export async function updateMembers(input: { ids: string[]; role: string }) {
 
     const failures = results.filter((r) => r.status === "rejected");
     if (failures.length > 0) {
-      log.error("batch_update.partial_failure", { source, failures });
+      log.error("batch_update.partial_failure", { userId, organizationId: activeOrgId, source, failureCount: failures.length });
       return {
         success: false,
         error: `Failed to update ${failures.length} of ${input.ids.length} members`,
@@ -253,7 +258,7 @@ export async function updateMembers(input: { ids: string[]; role: string }) {
       message: `Successfully updated ${input.ids.length} members`,
     };
   } catch (error) {
-    log.error("batch_update.error", { source, error });
+    log.error("batch_update.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
     return {
       success: false,
       error: getErrorMessage(error),
@@ -267,6 +272,7 @@ export async function updateMembers(input: { ids: string[]; role: string }) {
  * Uses native better-auth removeMember and cancelInvitation
  */
 export async function deleteMembers(input: { ids: string[] }) {
+  const { userId, activeOrgId } = await getSessionWithOrg();
   try {
     const reqHeaders = await headers();
     const session = await auth.api.getSession({ headers: reqHeaders });
@@ -328,7 +334,7 @@ export async function deleteMembers(input: { ids: string[] }) {
               });
             }
           } catch (e) {
-            log.warn("removed_email.failed", { source, error: e });
+            log.warn("removed_email.failed", { userId: session?.user?.id, organizationId: session?.session?.activeOrganizationId, source, error: e instanceof Error ? e.message : String(e) });
           }
         } catch {
           // If removeMember fails, try to cancel as invitation
@@ -344,7 +350,7 @@ export async function deleteMembers(input: { ids: string[] }) {
 
     const failures = results.filter((r) => r.status === "rejected");
     if (failures.length > 0) {
-      log.error("batch_delete.partial_failure", { source, failures });
+      log.error("batch_delete.partial_failure", { userId, organizationId: activeOrgId, source, failureCount: failures.length });
       return {
         success: false,
         error: `Failed to remove ${failures.length} of ${input.ids.length} members`,
@@ -356,7 +362,7 @@ export async function deleteMembers(input: { ids: string[] }) {
       message: `Successfully removed ${input.ids.length} members`,
     };
   } catch (error) {
-    log.error("batch_delete.error", { source, error });
+    log.error("batch_delete.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
     return {
       success: false,
       error: getErrorMessage(error),

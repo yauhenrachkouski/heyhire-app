@@ -30,7 +30,7 @@ export function trackServerEvent(
             },
         });
     } catch (e) {
-        log.error("capture.error", { source, event, error: e });
+        log.error("capture.error", { source, event, error: e instanceof Error ? e.message : String(e) });
     }
 }
 

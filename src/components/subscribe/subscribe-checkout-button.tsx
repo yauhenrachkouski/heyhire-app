@@ -100,7 +100,7 @@ export function SubscribeCheckoutButton({
           } catch (e) {
             const message = e instanceof Error ? e.message : "Failed to start checkout"
 
-            log.error("subscription.upgrade threw", { source, error: e })
+            log.error("subscription.upgrade threw", { source, error: e instanceof Error ? e.message : String(e) })
 
             if (message.includes("Not authenticated")) {
               router.push("/auth/signin")

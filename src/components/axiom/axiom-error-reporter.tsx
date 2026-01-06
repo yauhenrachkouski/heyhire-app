@@ -14,16 +14,15 @@ export function AxiomErrorReporter() {
         filename: event.filename,
         lineno: event.lineno,
         colno: event.colno,
-        error: event.error,
+        error: event.error instanceof Error ? event.error.message : String(event.error),
       });
     };
 
     const handleRejection = (event: PromiseRejectionEvent) => {
-      if (event.reason instanceof Error) {
-        log.error("unhandled_rejection", { source, error: event.reason });
-      } else {
-        log.error("unhandled_rejection", { source, reason: event.reason });
-      }
+      const errorMessage = event.reason instanceof Error
+        ? event.reason.message
+        : String(event.reason);
+      log.error("unhandled_rejection", { source, error: errorMessage });
     };
 
     window.addEventListener("error", handleError);

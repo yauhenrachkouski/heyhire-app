@@ -44,7 +44,7 @@ export function ConnectedAccountsSection({ accounts: initialAccounts }: Connecte
         toast.error(result.error || 'Failed to disconnect account')
       }
     } catch (err) {
-      log.error("Unlink account error", { source, error: err })
+      log.error("unlink_account.error", { source, error: err instanceof Error ? err.message : String(err) })
       toast.error('Failed to disconnect account')
     } finally {
       setUnlinkingId(null)
@@ -59,7 +59,7 @@ export function ConnectedAccountsSection({ accounts: initialAccounts }: Connecte
         callbackURL: '/account',
       })
     } catch (err) {
-      log.error("Google connect error", { source, error: err })
+      log.error("google_connect.error", { source, error: err instanceof Error ? err.message : String(err) })
       toast.error('Failed to connect Google account')
       setIsConnecting(false)
     }

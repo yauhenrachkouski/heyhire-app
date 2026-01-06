@@ -1,6 +1,7 @@
 "use server";
 
 import { log } from "@/lib/axiom/server";
+import { getSessionWithOrg } from "@/lib/auth-helpers";
 
 import "server-only";
 
@@ -19,11 +20,12 @@ import { realtime } from "@/lib/realtime";
  * Used for "Get 100 more" functionality.
  */
 export async function analyzeAndContinueSearch(searchId: string) {
+  const { userId, activeOrgId } = await getSessionWithOrg();
   try {
     const searchRow = await requireSearchReadAccess(searchId);
     await assertNotReadOnlyForOrganization(searchRow.organizationId);
 
-    log.info("analyze.started", { source, searchId });
+    log.info("analyze.started", { userId, organizationId: activeOrgId, source, searchId });
 
     // Immediately mark search as processing in DB so page refresh shows correct state
     await db.update(search)
@@ -65,7 +67,7 @@ export async function analyzeAndContinueSearch(searchId: string) {
         // Fallback: If no candidates are scored yet, we can't analyze.
         // We should just re-run all successful strategies or maybe just all?
         // Let's assume we want to re-run all strategies that didn't fail.
-        log.info("analyze.fallback", { source, searchId, reason: "no_scored_candidates" });
+        log.info("analyze.fallback", { userId, organizationId: activeOrgId, source, searchId, reason: "no_scored_candidates" });
         return await reRunAllSuccessfulStrategies(searchId);
     }
 
@@ -104,7 +106,7 @@ export async function analyzeAndContinueSearch(searchId: string) {
     
     strategyMetrics.sort((a, b) => b.median - a.median);
 
-    log.info("analyze.metrics_computed", { source, searchId, strategyMetrics: JSON.stringify(strategyMetrics) });
+    log.info("analyze.metrics_computed", { userId, organizationId: activeOrgId, source, searchId, strategyCount: strategyMetrics.length });
 
     // Select top strategies
     // Logic: 
@@ -146,15 +148,16 @@ export async function analyzeAndContinueSearch(searchId: string) {
 
     if (strategyIdsToRun.length === 0) {
         // Should not happen given logic above, but fallback
-        log.info("analyze.fallback", { source, searchId, reason: "no_valid_strategies" });
+        log.info("analyze.fallback", { userId, organizationId: activeOrgId, source, searchId, reason: "no_valid_strategies" });
         return await reRunAllSuccessfulStrategies(searchId);
     }
 
     log.info("analyze.strategies_selected", {
+      userId,
+      organizationId: activeOrgId,
       source,
       searchId,
       count: strategyIdsToRun.length,
-      strategyIds: JSON.stringify(strategyIdsToRun),
     });
 
     // Trigger the workflow with specific strategies
@@ -181,7 +184,8 @@ export async function analyzeAndContinueSearch(searchId: string) {
 
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    log.error("analyze.error", { source, searchId, error: errorMessage });
+    const { userId, activeOrgId } = await getSessionWithOrg();
+    log.error("analyze.error", { userId, organizationId: activeOrgId, source, searchId, error: errorMessage });
 
     // Reset status to completed on error (don't leave it stuck in processing)
     await db.update(search)

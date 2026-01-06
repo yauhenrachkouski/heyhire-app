@@ -25,7 +25,7 @@ const fetchCompanySuggestions = async (domain: string): Promise<string | null> =
     
     return sorted[0]?.name || null
   } catch (e) {
-    log.error("Failed to fetch company suggestions", { source, error: e })
+    log.error("company_suggestions.fetch_error", { source, error: e instanceof Error ? e.message : String(e) })
     return null
   }
 }
@@ -35,7 +35,7 @@ const validateFavicon = async (url: string): Promise<boolean> => {
     const response = await fetch(url, { method: 'HEAD' })
     return response.ok
   } catch (e) {
-    log.error("Failed to validate favicon", { source, error: e })
+    log.error("favicon.validate_error", { source, error: e instanceof Error ? e.message : String(e) })
     return false
   }
 }

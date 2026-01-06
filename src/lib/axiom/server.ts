@@ -7,6 +7,7 @@ import {
   transformRouteHandlerErrorResult,
   transformRouteHandlerSuccessResult,
 } from "@axiomhq/nextjs";
+import { auth } from "@/lib/auth";
 
 const dataset = process.env.AXIOM_DATASET ?? process.env.NEXT_PUBLIC_AXIOM_DATASET;
 
@@ -36,14 +37,41 @@ export const logger = new Logger({
 const isProduction = process.env.NODE_ENV === "production";
 
 /**
+ * Stringify complex objects into a single JSON field.
+ * Use this for error logs where you need full context for debugging
+ * without exploding Axiom key limits.
+ *
+ * @example
+ * log.error("parse.failed", {
+ *   source,
+ *   error: err.message,
+ *   debug: stringify({ criteria, response }), // single field with full data
+ * });
+ */
+export function stringify(data: unknown): string {
+  try {
+    return JSON.stringify(data);
+  } catch {
+    return "[unserializable]";
+  }
+}
+
+/**
  * Server-side logger with debug filtering in production.
  *
  * @example
- * import { log } from "@/lib/axiom/server";
- * import { getUserContext } from "@/lib/logger";
+ * import { log, stringify } from "@/lib/axiom/server";
+ * import { getSessionWithOrg } from "@/lib/auth-helpers";
  *
- * const ctx = await getUserContext();
- * log.info("Creating item", { ...ctx, itemId });
+ * // Info logs - use flat fields
+ * log.info("parse.done", { source, jobTitle, criteriaCount: 4 });
+ *
+ * // Error logs - use stringify for full debug context
+ * log.error("parse.failed", {
+ *   userId, organizationId: activeOrgId,
+ *   error: err.message,
+ *   debug: stringify({ criteria, response }),
+ * });
  */
 export const log = {
   debug: (message: string, fields?: Record<string, unknown>) => {
@@ -60,7 +88,7 @@ export const log = {
   },
 };
 
-const withRequestMeta = (
+const withRequestMeta = async (
   report: Record<string | symbol, any>,
   req: Request | { headers: Headers; nextUrl?: URL }
 ) => {
@@ -78,12 +106,28 @@ const withRequestMeta = (
   if ("nextUrl" in req && req.nextUrl) {
     event.request.searchParams = Object.fromEntries(req.nextUrl.searchParams);
   }
+
+  // Add user context if available
+  try {
+    const headers = req instanceof Request ? req.headers : req.headers;
+    const session = await auth.api.getSession({ headers });
+    
+    if (session?.user) {
+      report.userId = session.user.id;
+      if (session.session?.activeOrganizationId) {
+        report.organizationId = session.session.activeOrganizationId;
+      }
+    }
+  } catch {
+    // Silently fail if session cannot be retrieved (e.g., unauthenticated requests)
+    // This is expected for public routes
+  }
 };
 
 export const withAxiom = createAxiomRouteHandler(logger, {
   onSuccess: async (data) => {
     const [message, report] = transformRouteHandlerSuccessResult(data);
-    withRequestMeta(report, data.req);
+    await withRequestMeta(report, data.req);
     logger.info(message, report);
     await logger.flush();
   },
@@ -92,7 +136,7 @@ export const withAxiom = createAxiomRouteHandler(logger, {
       logger.error(error.error.message, error.error);
     }
     const [message, report] = transformRouteHandlerErrorResult(error);
-    withRequestMeta(report, error.req);
+    await withRequestMeta(report, error.req);
     const statusCode = (report[EVENT]?.request?.statusCode as number) ?? 500;
     logger.log(getLogLevelFromStatusCode(statusCode), message, report);
     await logger.flush();

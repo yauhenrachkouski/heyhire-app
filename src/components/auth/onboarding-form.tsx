@@ -95,7 +95,7 @@ export function OnboardingForm({
         try {
           await addDemoWorkspaceForCurrentUser()
         } catch (demoError) {
-          log.warn("Failed to add demo workspace", { source, error: demoError })
+          log.warn("Failed to add demo workspace", { source, error: demoError instanceof Error ? demoError.message : String(demoError) })
         }
       }
 
@@ -112,7 +112,7 @@ export function OnboardingForm({
       router.refresh()
       router.push('/paywall')
     } catch (err: any) {
-      log.error("Organization creation error", { source, error: err })
+      log.error("organization.create_error", { source, error: err instanceof Error ? err.message : String(err) })
       setError(err?.message || 'Failed to create organization')
       toast.error('Failed to create organization. Please try again.')
     } finally {
@@ -141,7 +141,7 @@ export function OnboardingForm({
         try {
           await addDemoWorkspaceForCurrentUser()
         } catch (demoError) {
-          log.warn("Failed to add demo workspace", { source, error: demoError })
+          log.warn("Failed to add demo workspace", { source, error: demoError instanceof Error ? demoError.message : String(demoError) })
         }
       }
 
@@ -157,7 +157,7 @@ export function OnboardingForm({
       router.refresh()
       router.push('/paywall')
     } catch (err: any) {
-      log.error("Failed to create organization", { source, error: err })
+      log.error("organization.create_failed", { source, error: err instanceof Error ? err.message : String(err) })
       toast.error('Failed to create organization. Please try again.')
     } finally {
       setIsLoading(false)

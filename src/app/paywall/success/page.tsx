@@ -45,7 +45,7 @@ export default function SubscribeSuccessPage() {
         setIsReady(true);
         setIsChecking(false);
       } catch (error) {
-        log.error("Error checking subscription", { source, error });
+        log.error("subscription.check_error", { source, error: error instanceof Error ? error.message : String(error) });
         setIsReady(true);
         setIsChecking(false);
       }

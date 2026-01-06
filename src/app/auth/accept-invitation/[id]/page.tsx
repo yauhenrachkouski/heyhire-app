@@ -152,7 +152,7 @@ export default async function AcceptInvitationPage({
     // Redirect to organization page on success
     redirect(activeOrganization ? `/${activeOrganization.id}/organization?invitation=accepted` : "/");
   } catch (error: any) {
-    log.error("Error accepting invitation", { source, error });
+    log.error("invitation.accept_error", { source, error: error instanceof Error ? error.message : String(error) });
 
     // Check if the error is specifically about wrong recipient
     const errorMessage = error?.message || error?.body?.message || '';

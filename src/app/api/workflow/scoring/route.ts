@@ -43,9 +43,12 @@ export const POST = withAxiom(async (request: Request) => {
     });
 
     if (!searchRecord) {
-      log.error("scoring.search_not_found", { source, searchId });
+      log.error("scoring.search_not_found", { userId: undefined, organizationId: undefined, source, searchId });
       return NextResponse.json({ error: "Search not found" }, { status: 404 });
     }
+    
+    const userId = searchRecord.userId;
+    const organizationId = searchRecord.organizationId;
 
     // Scoring model must be built in a previous workflow step via /api/scoring/model
     if (!searchRecord.scoringModel || !searchRecord.scoringModelId) {
@@ -72,6 +75,8 @@ export const POST = withAxiom(async (request: Request) => {
 
     // Log only when starting a scoring batch (meaningful event)
     log.info("scoring.batch_started", {
+      userId,
+      organizationId,
       source,
       searchId,
       candidateCount: unscoredCandidates.length,
@@ -128,7 +133,24 @@ export const POST = withAxiom(async (request: Request) => {
       searchId,
     });
   } catch (error) {
+    // Try to get context from searchId if available
+    let userId: string | undefined;
+    let organizationId: string | undefined;
+    if (searchId) {
+      try {
+        const searchRecord = await db.query.search.findFirst({
+          where: eq(search.id, searchId),
+          columns: { userId: true, organizationId: true },
+        });
+        userId = searchRecord?.userId;
+        organizationId = searchRecord?.organizationId;
+      } catch {
+        // Ignore errors fetching context
+      }
+    }
     log.error("scoring.batch_error", {
+      userId,
+      organizationId,
       source,
       searchId,
       error: error instanceof Error ? error.message : "Unknown error",

@@ -66,7 +66,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
         toast.error(result.error || 'Failed to update profile')
       }
     } catch (err) {
-      log.error("Profile update error", { source, error: err })
+      log.error("profile.update_error", { source, error: err instanceof Error ? err.message : String(err) })
       toast.error('Failed to update profile')
     } finally {
       setIsLoading(false)
@@ -116,7 +116,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
         toast.error(result.error || 'Failed to upload avatar')
       }
     } catch (err) {
-      log.error("Avatar upload error", { source, error: err })
+      log.error("avatar.upload_error", { source, error: err instanceof Error ? err.message : String(err) })
       toast.error('Failed to upload avatar')
     } finally {
       setIsUploadingAvatar(false)
@@ -149,7 +149,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
         toast.error(result.error || 'Failed to remove avatar')
       }
     } catch (err) {
-      log.error("Avatar removal error", { source, error: err })
+      log.error("avatar.removal_error", { source, error: err instanceof Error ? err.message : String(err) })
       toast.error('Failed to remove avatar')
     } finally {
       setIsUploadingAvatar(false)

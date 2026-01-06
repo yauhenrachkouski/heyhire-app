@@ -1,9 +1,6 @@
 import { AppSidebar } from "@/components/sidebar/app-sidebar"
 import { Separator } from "@/components/ui/separator"
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
-import { log } from "@/lib/axiom/server";
-
-const source = "app/[org]/layout";
 
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { PersistentSidebarProvider } from "@/providers/sidebar-provider"
@@ -54,18 +51,6 @@ export default async function DashboardLayout({
     ? await getRecentSearches(activeOrganization.id, 10)
     : { success: false, data: [] }
   const recentSearches = recentSearchesResponse.success ? recentSearchesResponse.data : []
-
-  // Debug: Log what we received from better-auth APIs
-  log.info("layout.loaded", {
-    source,
-    organizationId: activeOrganization?.id,
-    userId: activeMember?.user?.id,
-    organizationsCount: organizations?.length ?? 0,
-    organizationsList: organizations?.map(o => ({ id: o.id, name: o.name })) ?? [],
-    activeOrgName: activeOrganization?.name,
-    currentUserRole: activeMember?.role,
-    hasSubscription: !!subscription
-  })
 
   // Fetch credits for active organization and create extended type
   let activeOrgWithCredits: (typeof activeOrganization & { credits?: number }) | null = activeOrganization;

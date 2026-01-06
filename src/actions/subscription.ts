@@ -45,8 +45,8 @@ export async function hasUsedTrial() {
 }
 
 export async function isInTrialPeriod() {
+  const { userId, activeOrgId } = await getSessionWithOrg();
   try {
-    const { activeOrgId } = await getSessionWithOrg()
 
     const orgSubscription = await db
       .select()
@@ -70,7 +70,7 @@ export async function isInTrialPeriod() {
       error: null as string | null,
     }
   } catch (error) {
-    log.error("check_trial.error", { source, error })
+    log.error("check_trial.error", { source, userId, organizationId: activeOrgId, error: error instanceof Error ? error.message : String(error) })
     return {
       inTrial: false,
       error: error instanceof Error ? error.message : "Failed to check trial period",

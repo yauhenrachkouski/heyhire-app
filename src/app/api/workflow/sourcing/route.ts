@@ -53,8 +53,18 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
         return null;
       }
 
+      // Get search context for logging
+      const searchRecord = await db.query.search.findFirst({
+        where: eq(search.id, searchId),
+        columns: { userId: true, organizationId: true },
+      });
+      const userId = searchRecord?.userId;
+      const organizationId = searchRecord?.organizationId;
+
       // Log workflow start (key milestone)
       log.info("sourcing.started", {
+        userId,
+        organizationId,
         source,
         searchId,
         isContinuation: Boolean(strategyIdsToRun?.length),
@@ -70,6 +80,14 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
     
     const { searchId, rawText, criteria, strategyIdsToRun } = payload;
     const channel = `search:${searchId}`;
+
+    // Get search context for logging (fetch once and reuse)
+    const searchRecord = await db.query.search.findFirst({
+      where: eq(search.id, searchId),
+      columns: { userId: true, organizationId: true },
+    });
+    const userId = searchRecord?.userId;
+    const organizationId = searchRecord?.organizationId;
 
     // Step 1: Update search status to processing
     await context.run("update-status-processing", async () => {
@@ -154,7 +172,7 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
       
       if (allGeneratedStrategies.length === 0) {
          // Fallback if IDs were invalid (shouldn't happen if logic is correct)
-         log.warn("sourcing.no_strategies_found", { source, searchId });
+         log.warn("sourcing.no_strategies_found", { userId, organizationId, source, searchId });
       } else {
          await realtime.channel(channel).emit( "status.updated", {
           status: "processing",
@@ -194,7 +212,13 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
           await realtime.channel(channel).emit( "search.failed", {
             error: `Strategy generation failed: ${generateResponse.status}`
           });
+          const searchRecord = await db.query.search.findFirst({
+            where: eq(search.id, searchId),
+            columns: { userId: true, organizationId: true },
+          });
           log.error("sourcing.strategy_generation_failed", {
+            userId: searchRecord?.userId,
+            organizationId: searchRecord?.organizationId,
             source,
             searchId,
             status: generateResponse.status,
@@ -226,7 +250,11 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
           await realtime.channel(channel).emit( "search.failed", {
             error: "Strategy generation response invalid"
           });
-          log.error("sourcing.strategy_schema_error", { source, searchId, error });
+          const searchRecord = await db.query.search.findFirst({
+            where: eq(search.id, searchId),
+            columns: { userId: true, organizationId: true },
+          });
+          log.error("sourcing.strategy_schema_error", { userId: searchRecord?.userId, organizationId: searchRecord?.organizationId, source, searchId, error: error instanceof Error ? error.message : String(error) });
         });
         return { success: false, error: "Strategy generation response invalid" };
       }
@@ -269,6 +297,8 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
 
     // Log strategy count (useful for debugging)
     log.info("sourcing.strategies_ready", {
+      userId,
+      organizationId,
       source,
       searchId,
       totalStrategies: allGeneratedStrategies.length,
@@ -349,7 +379,7 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
         await realtime.channel(channel).emit( "search.failed", {
           error: `Strategy execution failed: ${executeResponse.status}`
         });
-        log.error("Strategy execution failed", {
+        log.error("strategy.execution_failed", {
           source,
           status: executeResponse.status,
         });
@@ -384,7 +414,11 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
         await realtime.channel(channel).emit( "search.failed", {
           error: "Strategy execution response invalid"
         });
-        log.error("Strategy execution schema validation failed", { source, error });
+        const searchRecord = await db.query.search.findFirst({
+          where: eq(search.id, searchId),
+          columns: { userId: true, organizationId: true },
+        });
+        log.error("strategy.execution_schema_validation_failed", { userId: searchRecord?.userId, organizationId: searchRecord?.organizationId, source, error: error instanceof Error ? error.message : String(error) });
       });
       return { success: false, error: "Strategy execution response invalid" };
     }
@@ -392,6 +426,8 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
     const taskId = executeData.task_id;
 
     log.info("sourcing.execution_started", {
+      userId,
+      organizationId,
       source,
       searchId,
       taskId,
@@ -451,6 +487,8 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
         // Only log client errors (4xx) as they indicate a real problem
         if (pollResponse.status >= 400 && pollResponse.status < 500) {
           log.error("sourcing.poll_error", {
+            userId,
+            organizationId,
             source,
             searchId,
             pollCount,
@@ -476,7 +514,7 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
         pollData = strategyResultsResponseSchema.parse(pollResponse.body);
       } catch (error) {
          // Schema errors are rare and worth logging
-         log.error("sourcing.poll_schema_error", { source, searchId, pollCount, error });
+         log.error("sourcing.poll_schema_error", { userId, organizationId, source, searchId, pollCount, error: error instanceof Error ? error.message : String(error) });
          continue;
       }
 
@@ -610,13 +648,15 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
 
         // Single completion log with all relevant data
         log.info("sourcing.completed", {
+          userId,
+          organizationId,
           source,
           searchId,
           candidateCount: candidatesData.length,
           strategyCount: executedStrategyIds.length,
         });
       } catch (error) {
-        log.error("sourcing.finalize_error", { source, searchId, error });
+        log.error("sourcing.finalize_error", { userId, organizationId, source, searchId, error: error instanceof Error ? error.message : String(error) });
       }
     });
 
@@ -638,6 +678,8 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
           });
           if (!scoringModelRes.ok) {
             log.error("sourcing.scoring_model_failed", {
+              userId,
+              organizationId,
               source,
               searchId,
               status: scoringModelRes.status,
@@ -658,7 +700,7 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
             },
           });
         } catch (error) {
-          log.error("sourcing.scoring_trigger_failed", { source, searchId, error });
+          log.error("sourcing.scoring_trigger_failed", { userId, organizationId, source, searchId, error: error instanceof Error ? error.message : String(error) });
           // Don't throw - sourcing is complete, scoring failure shouldn't affect that
           await realtime.channel(channel).emit("scoring.failed", {
             error: error instanceof Error ? error.message : "Unknown error",
@@ -690,8 +732,26 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
       const searchId = failureData.context?.requestPayload?.searchId;
       const channel = `search:${searchId}`;
 
+      // Get search context for logging
+      let userId: string | undefined;
+      let organizationId: string | undefined;
+      if (searchId) {
+        try {
+          const searchRecord = await db.query.search.findFirst({
+            where: eq(search.id, searchId),
+            columns: { userId: true, organizationId: true },
+          });
+          userId = searchRecord?.userId;
+          organizationId = searchRecord?.organizationId;
+        } catch {
+          // Ignore errors fetching context
+        }
+      }
+
       // Log workflow failure (critical event)
       log.error("sourcing.workflow_failed", {
+        userId,
+        organizationId,
         source,
         searchId: searchId ?? "unknown",
         status: failureData.failStatus,
@@ -711,7 +771,7 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
           });
         }
       } catch (e) {
-        log.error("sourcing.status_update_failed", { source, searchId, error: e });
+        log.error("sourcing.status_update_failed", { userId, organizationId, source, searchId, error: e instanceof Error ? e.message : String(e) });
       }
 
       return `Workflow failed with status ${failureData.failStatus}`;

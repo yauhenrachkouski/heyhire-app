@@ -34,7 +34,7 @@ async function signInWithGoogle(callbackURL: string) {
       callbackURL,
     })
   } catch (err) {
-    log.error("google_signin.error", { source, error: err })
+    log.error("google_signin.error", { source, error: err instanceof Error ? err.message : String(err) })
   }
 }
 

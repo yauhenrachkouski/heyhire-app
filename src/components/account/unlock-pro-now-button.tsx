@@ -58,7 +58,7 @@ export function UnlockProNowButton({
           toast.error(result.error || "Failed to upgrade trial")
         }
       } catch (error) {
-        log.error("Error upgrading trial", { source, error })
+        log.error("upgrade_trial.error", { source, error: error instanceof Error ? error.message : String(error) })
         toast.error("Failed to upgrade trial. Please try again.")
       }
     })

@@ -52,7 +52,7 @@ export function DeleteAccountDialog({ userEmail }: DeleteAccountDialogProps) {
         toast.error(result.error || 'Failed to delete account')
       }
     } catch (err) {
-      log.error("Delete account error", { source, error: err })
+      log.error("delete_account.error", { source, error: err instanceof Error ? err.message : String(err) })
       toast.error('Failed to delete account')
     } finally {
       setIsDeleting(false)

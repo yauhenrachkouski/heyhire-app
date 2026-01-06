@@ -1,6 +1,7 @@
 "use server";
 
 import { log } from "@/lib/axiom/server";
+import { getSessionWithOrg } from "@/lib/auth-helpers";
 
 const source = "actions/invitations";
 
@@ -61,7 +62,8 @@ export async function inviteMember(input: InviteMemberInput) {
       message: `Invitation sent to ${validatedInput.email}`,
     };
   } catch (error) {
-    log.error("invite.error", { source, error });
+    const { userId, activeOrgId } = await getSessionWithOrg();
+    log.error("invite.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
     return {
       success: false,
       error: getErrorMessage(error),
@@ -84,7 +86,8 @@ export async function getInvitations(organizationId?: string) {
       data: invitations || [],
     };
   } catch (error) {
-    log.error("fetch.error", { source, error });
+    const { userId, activeOrgId } = await getSessionWithOrg();
+    log.error("fetch.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
     return {
       success: false,
       error: getErrorMessage(error),
@@ -114,7 +117,8 @@ export async function cancelInvitation(invitationId: string) {
       message: "Invitation canceled successfully",
     };
   } catch (error) {
-    log.error("cancel.error", { source, error });
+    const { userId, activeOrgId } = await getSessionWithOrg();
+    log.error("cancel.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
     return {
       success: false,
       error: getErrorMessage(error),

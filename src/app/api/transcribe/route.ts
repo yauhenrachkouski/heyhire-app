@@ -34,7 +34,7 @@ export const POST = withAxiom(async (request: NextRequest) => {
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    log.error("transcription.error", { source, error });
+    log.error("transcription.error", { source, error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 });

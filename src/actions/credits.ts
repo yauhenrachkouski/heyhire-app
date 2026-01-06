@@ -63,11 +63,11 @@ export async function getCreditsUsageForPeriod(params: {
   endDate: Date;
   creditType?: CreditType;
 }): Promise<{ used: number; error: string | null }> {
+  const { userId, activeOrgId } = await getSessionWithOrg();
   try {
     const { organizationId, startDate, endDate, creditType } = params;
 
     // Verify access
-    const { activeOrgId } = await getSessionWithOrg();
     if (activeOrgId !== organizationId) {
       return { used: 0, error: "Unauthorized" };
     }
@@ -90,7 +90,7 @@ export async function getCreditsUsageForPeriod(params: {
 
     return { used: Number(result[0]?.used ?? 0), error: null };
   } catch (error) {
-    log.error("period_usage.error", { source, error });
+    log.error("period_usage.error", { source, userId, organizationId: activeOrgId, error: error instanceof Error ? error.message : String(error) });
     return {
       used: 0,
       error: error instanceof Error ? error.message : "Failed to calculate usage",
@@ -258,7 +258,7 @@ export async function addCredits(
         }
       }
     } catch (e) {
-      log.warn("low_credits_email.failed", { source, error: e });
+      log.warn("low_credits_email.failed", { source, organizationId, userId, error: e instanceof Error ? e.message : String(e) });
     }
     
     // Track credit addition events
@@ -278,7 +278,7 @@ export async function addCredits(
       transaction: result,
     };
   } catch (error) {
-    log.error("add_credits.error", { source, error });
+    log.error("add_credits.error", { source, organizationId, userId, error: error instanceof Error ? error.message : String(error) });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to add credits",
@@ -367,7 +367,7 @@ export async function setCreditsBalance(params: {
       transaction: result ?? undefined,
     };
   } catch (error) {
-    log.error("set_balance.error", { source, error });
+    log.error("set_balance.error", { source, organizationId, userId, error: error instanceof Error ? error.message : String(error) });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to set credit balance",
@@ -490,7 +490,7 @@ export async function deductCredits(
       transaction: result,
     };
   } catch (error) {
-    log.error("deduct_credits.error", { source, error });
+    log.error("deduct_credits.error", { source, organizationId, userId, error: error instanceof Error ? error.message : String(error) });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to deduct credits",

@@ -132,7 +132,10 @@ export async function saveCandidatesFromSearch(
   candidateProfiles: CandidateProfile[],
   _rawText: string
 ): Promise<{ success: boolean; saved: number; linked: number }> {
+  const { userId, activeOrgId } = await getSessionWithOrg();
   log.info("batch_save.started", {
+    userId,
+    organizationId: activeOrgId,
     source,
     searchId,
     count: candidateProfiles.length,
@@ -141,14 +144,14 @@ export async function saveCandidatesFromSearch(
   // Filter profiles with valid LinkedIn URLs
   const validProfiles = candidateProfiles.filter(profile => {
     if (!profile.linkedinUrl) {
-      log.debug("Skipping candidate without LinkedIn URL", { source, searchId });
+      log.debug("Skipping candidate without LinkedIn URL", { userId, organizationId: activeOrgId, source, searchId });
       return false;
     }
     return true;
   });
 
   if (validProfiles.length === 0) {
-    log.info("batch_save.skipped", { source, searchId, reason: "no_valid_candidates" });
+    log.info("batch_save.skipped", { userId, organizationId: activeOrgId, source, searchId, reason: "no_valid_candidates" });
     return { success: true, saved: 0, linked: 0 };
   }
 
@@ -160,6 +163,8 @@ export async function saveCandidatesFromSearch(
 
   const existingByUrl = new Map(existingCandidates.map(c => [c.linkedinUrl, c]));
   log.debug("batch_save.existing_found", {
+    userId,
+    organizationId: activeOrgId,
     source,
     searchId,
     count: existingCandidates.length,
@@ -201,12 +206,14 @@ export async function saveCandidatesFromSearch(
     try {
       await db.insert(candidates).values(candidatesToInsert);
       log.info("batch_save.inserted", {
+        userId,
+        organizationId: activeOrgId,
         source,
         searchId,
         count: candidatesToInsert.length,
       });
     } catch (error) {
-      log.error("batch_save.insert_error", { source, searchId, error });
+      log.error("batch_save.insert_error", { userId, organizationId: activeOrgId, source, searchId, error: error instanceof Error ? error.message : String(error) });
       throw error;
     }
   }
@@ -215,6 +222,8 @@ export async function saveCandidatesFromSearch(
   // IMPORTANT: Neon serverless can't handle parallel connections well - must be sequential
   if (candidatesToUpdate.length > 0) {
     log.debug("batch_save.update_started", {
+      userId,
+      organizationId: activeOrgId,
       source,
       searchId,
       count: candidatesToUpdate.length,
@@ -226,11 +235,13 @@ export async function saveCandidatesFromSearch(
         await db.update(candidates).set(data).where(eq(candidates.id, id));
         updated++;
       } catch (error) {
-        log.error("batch_save.update_error", { source, searchId, candidateId: id, error });
+        log.error("batch_save.update_error", { userId, organizationId: activeOrgId, source, searchId, candidateId: id, error: error instanceof Error ? error.message : String(error) });
         // Continue with remaining candidates instead of failing entirely
       }
     }
     log.debug("batch_save.update_completed", {
+      userId,
+      organizationId: activeOrgId,
       source,
       searchId,
       updated,
@@ -254,7 +265,7 @@ export async function saveCandidatesFromSearch(
       },
     });
   } catch (error) {
-    log.error("batch_save.links_fetch_error", { source, searchId, error });
+    log.error("batch_save.links_fetch_error", { userId, organizationId: activeOrgId, source, searchId, error: error instanceof Error ? error.message : String(error) });
     // Continue with empty links - we'll insert all as new
   }
 
@@ -284,12 +295,14 @@ export async function saveCandidatesFromSearch(
     try {
       await db.insert(searchCandidates).values(linksToInsert);
       log.info("batch_save.linked", {
+        userId,
+        organizationId: activeOrgId,
         source,
         searchId,
         count: linksToInsert.length,
       });
     } catch (error) {
-      log.error("batch_save.link_error", { source, searchId, error });
+      log.error("batch_save.link_error", { userId, organizationId: activeOrgId, source, searchId, error: error instanceof Error ? error.message : String(error) });
       // Don't throw - we've already saved the candidates, links can be retried
     }
   }
@@ -297,7 +310,7 @@ export async function saveCandidatesFromSearch(
   const saved = candidatesToInsert.length;
   const linked = linksToInsert.length;
 
-  log.info("batch_save.completed", { source, searchId, saved, linked });
+  log.info("batch_save.completed", { userId, organizationId: activeOrgId, source, searchId, saved, linked });
 
   // Step 7: Link search candidates to sourcing strategies
   // First, collect all unique strategy IDs from candidates
@@ -316,7 +329,7 @@ export async function saveCandidatesFromSearch(
       });
       validStrategyIds = new Set(existingStrategies.map(s => s.id));
     } catch (error) {
-      log.error("batch_save.strategies_fetch_error", { source, searchId, error });
+      log.error("batch_save.strategies_fetch_error", { userId, organizationId: activeOrgId, source, searchId, error: error instanceof Error ? error.message : String(error) });
       // Continue with empty set - won't link any strategies
     }
   }
@@ -349,12 +362,14 @@ export async function saveCandidatesFromSearch(
         .values(strategyLinks)
         .onConflictDoNothing();
       log.debug("batch_save.strategies_linked", {
+        userId,
+        organizationId: activeOrgId,
         source,
         searchId,
         count: strategyLinks.length,
       });
     } catch (error) {
-      log.error("batch_save.strategies_link_error", { source, searchId, error });
+      log.error("batch_save.strategies_link_error", { userId, organizationId: activeOrgId, source, searchId, error: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -440,7 +455,8 @@ export async function getSearchCandidateById(searchCandidateId: string) {
       }
     };
   } catch (error) {
-    log.error("get_search_candidate.error", { source, searchCandidateId, error });
+    const { userId, activeOrgId } = await getSessionWithOrg();
+    log.error("get_search_candidate.error", { userId, organizationId: activeOrgId, source, searchCandidateId, error: error instanceof Error ? error.message : String(error) });
     return { success: false, error: "Failed to fetch candidate" };
   }
 }
@@ -462,7 +478,8 @@ export async function getCandidatesForSearch(
     includeTotalCount?: boolean;
   }
 ) {
-  log.info("fetch.started", { source, searchId, options: JSON.stringify(options) });
+  const { userId, activeOrgId } = await getSessionWithOrg();
+  log.info("fetch.started", { userId, organizationId: activeOrgId, source, searchId, options: JSON.stringify(options) });
 
   await requireSearchReadAccess(searchId);
 
@@ -624,7 +641,6 @@ export async function getCandidatesForSearch(
     const revealedCandidateIds = new Set<string>();
 
     if (candidateIdsOnPage.length > 0) {
-      const { activeOrgId } = await getSessionWithOrg();
       const revealedTransactions = await db.query.creditTransactions.findMany({
         where: and(
           eq(creditTransactions.organizationId, activeOrgId),
@@ -728,7 +744,6 @@ export async function getCandidatesForSearch(
   const revealedCandidateIds = new Set<string>();
 
   if (candidateIdsOnPage.length > 0) {
-    const { activeOrgId } = await getSessionWithOrg();
     const revealedTransactions = await db.query.creditTransactions.findMany({
       where: and(
         eq(creditTransactions.organizationId, activeOrgId),
@@ -752,7 +767,7 @@ export async function getCandidatesForSearch(
     isRevealed: revealedCandidateIds.has(result.candidateId)
   }));
 
-  log.info("fetch.completed", { source, searchId, count: enrichedResults.length, total });
+  log.info("fetch.completed", { userId, organizationId: activeOrgId, source, searchId, count: enrichedResults.length, total });
 
   return {
     data: enrichedResults,
@@ -773,7 +788,8 @@ export async function addCandidateToSearch(
   candidateId: string,
   sourceProvider: string
 ) {
-  log.info("add_candidate.started", { source, searchId, candidateId, sourceProvider });
+  const { userId, activeOrgId } = await getSessionWithOrg();
+  log.info("add_candidate.started", { userId, organizationId: activeOrgId, source, searchId, candidateId, sourceProvider });
 
   const searchCandidateId = generateId();
 
@@ -785,7 +801,7 @@ export async function addCandidateToSearch(
     status: "new",
   });
 
-  log.info("add_candidate.completed", { source, searchId, candidateId, searchCandidateId });
+  log.info("add_candidate.completed", { userId, organizationId: activeOrgId, source, searchId, candidateId, searchCandidateId });
   return { searchCandidateId };
 }
 
@@ -797,7 +813,8 @@ export async function updateMatchScore(
   score: number,
   notes?: string
 ) {
-  log.info("update_score.started", { source, searchCandidateId, score });
+  const { userId, activeOrgId } = await getSessionWithOrg();
+  log.info("update_score.started", { userId, organizationId: activeOrgId, source, searchCandidateId, score });
 
   const sc = await db.query.searchCandidates.findFirst({
     where: eq(searchCandidates.id, searchCandidateId),
@@ -828,7 +845,8 @@ export async function updateCandidateStatus(
   status: "new" | "reviewing" | "contacted" | "rejected" | "hired",
   notes?: string
 ) {
-  log.info("update_status.started", { source, searchCandidateId, status });
+  const { userId, activeOrgId } = await getSessionWithOrg();
+  log.info("update_status.started", { userId, organizationId: activeOrgId, source, searchCandidateId, status });
 
   const sc = await db.query.searchCandidates.findFirst({
     where: eq(searchCandidates.id, searchCandidateId),

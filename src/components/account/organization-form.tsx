@@ -80,7 +80,7 @@ export function OrganizationForm({ organization }: OrganizationFormProps) {
         toast.error(result.error || 'Failed to update organization')
       }
     } catch (err) {
-      log.error("Organization update error", { source, error: err })
+      log.error("organization.update_error", { source, error: err instanceof Error ? err.message : String(err) })
       toast.error('Failed to update organization')
     } finally {
       setIsLoading(false)

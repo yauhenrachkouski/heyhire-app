@@ -154,7 +154,7 @@ export function SearchClient({}: SearchClientProps) {
       });
       router.push(`/${activeOrg.id}/search/${searchId}`);
     } catch (error) {
-      log.error("Search error", { source, error });
+      log.error("search.error", { source, error: error instanceof Error ? error.message : String(error) });
       const errorMessage =
         error instanceof Error ? error.message : "An unexpected error occurred";
 

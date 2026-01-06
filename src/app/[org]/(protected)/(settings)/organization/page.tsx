@@ -45,7 +45,7 @@ export default async function OrganizationSettingsPage() {
           : currentOrganization.metadata
         size = metadata.size || ''
       } catch (e) {
-        log.error("Failed to parse organization metadata", { source, error: e })
+        log.error("organization.metadata_parse_error", { source, error: e instanceof Error ? e.message : String(e) })
       }
     }
 

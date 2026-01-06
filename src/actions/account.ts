@@ -1,6 +1,7 @@
 'use server'
 
-import { log } from "@/lib/axiom/server";
+import { log, stringify } from "@/lib/axiom/server";
+import { getSessionWithOrg } from "@/lib/auth-helpers";
 
 const source = "actions/account";
 
@@ -21,7 +22,9 @@ export async function updateUserProfile(data: {
   name: string
   image?: string
 }) {
+  const { userId: sessionUserId, activeOrgId } = await getSessionWithOrg();
   let userId: string | undefined;
+  let organizationId: string | null | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -32,6 +35,7 @@ export async function updateUserProfile(data: {
     }
 
     userId = session.user.id;
+    organizationId = session.session.activeOrganizationId;
 
     // Update user in database
     await db.update(user)
@@ -43,7 +47,7 @@ export async function updateUserProfile(data: {
 
     return { success: true }
   } catch (err) {
-    log.error("update_profile.error", { source, userId, error: err })
+    log.error("update_profile.error", { source, userId: sessionUserId, organizationId: activeOrgId, error: err instanceof Error ? err.message : String(err) })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to update profile'
@@ -52,7 +56,9 @@ export async function updateUserProfile(data: {
 }
 
 export async function uploadAvatar(formData: FormData) {
+  const { userId: sessionUserId, activeOrgId } = await getSessionWithOrg();
   let userId: string | undefined;
+  let organizationId: string | null | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -63,6 +69,7 @@ export async function uploadAvatar(formData: FormData) {
     }
 
     userId = session.user.id;
+    organizationId = session.session.activeOrganizationId;
 
     const file = formData.get('file') as File
     if (!file) {
@@ -97,7 +104,7 @@ export async function uploadAvatar(formData: FormData) {
 
     return { success: true, imageUrl }
   } catch (err) {
-    log.error("upload_avatar.error", { source, userId, error: err })
+    log.error("upload_avatar.error", { source, userId: sessionUserId, organizationId: activeOrgId, error: err instanceof Error ? err.message : String(err) })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to upload avatar'
@@ -106,7 +113,9 @@ export async function uploadAvatar(formData: FormData) {
 }
 
 export async function removeAvatar() {
+  const { userId: sessionUserId, activeOrgId } = await getSessionWithOrg();
   let userId: string | undefined;
+  let organizationId: string | null | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -117,6 +126,7 @@ export async function removeAvatar() {
     }
 
     userId = session.user.id;
+    organizationId = session.session.activeOrganizationId;
 
     // Remove user image from database
     await db.update(user)
@@ -130,7 +140,7 @@ export async function removeAvatar() {
 
     return { success: true }
   } catch (err) {
-    log.error("remove_avatar.error", { source, userId, error: err })
+    log.error("remove_avatar.error", { source, userId: sessionUserId, organizationId: activeOrgId, error: err instanceof Error ? err.message : String(err) })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to remove avatar'
@@ -139,6 +149,7 @@ export async function removeAvatar() {
 }
 
 export async function getOrganizationMembership(organizationId: string) {
+  const { userId: sessionUserId, activeOrgId } = await getSessionWithOrg();
   let userId: string | undefined;
   try {
     const session = await auth.api.getSession({
@@ -171,7 +182,7 @@ export async function getOrganizationMembership(organizationId: string) {
       }
     }
   } catch (err) {
-    log.error("get_membership.error", { source, userId, organizationId, error: err })
+    log.error("get_membership.error", { source, userId: sessionUserId, organizationId: activeOrgId, error: err instanceof Error ? err.message : String(err) })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to get membership'
@@ -184,6 +195,7 @@ export async function updateOrganization(data: {
   name: string
   size?: string
 }) {
+  const { userId: sessionUserId, activeOrgId } = await getSessionWithOrg();
   let userId: string | undefined;
   try {
     const session = await auth.api.getSession({
@@ -237,7 +249,7 @@ export async function updateOrganization(data: {
 
     return { success: true }
   } catch (err) {
-    log.error("update_org.error", { source, userId, organizationId: data.organizationId, error: err })
+    log.error("update_org.error", { source, userId: sessionUserId, organizationId: activeOrgId, error: err instanceof Error ? err.message : String(err) })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to update organization'
@@ -246,7 +258,9 @@ export async function updateOrganization(data: {
 }
 
 export async function getUserAccounts() {
+  const { userId: sessionUserId, activeOrgId } = await getSessionWithOrg();
   let userId: string | undefined;
+  let organizationId: string | null | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -257,6 +271,7 @@ export async function getUserAccounts() {
     }
 
     userId = session.user.id;
+    organizationId = session.session.activeOrganizationId;
 
     const accounts = await db.query.account.findMany({
       where: eq(account.userId, session.user.id)
@@ -271,7 +286,7 @@ export async function getUserAccounts() {
       }))
     }
   } catch (err) {
-    log.error("get_accounts.error", { source, userId, error: err })
+    log.error("get_accounts.error", { source, userId: sessionUserId, organizationId: activeOrgId, error: err instanceof Error ? err.message : String(err) })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to get accounts',
@@ -281,7 +296,9 @@ export async function getUserAccounts() {
 }
 
 export async function unlinkAccount(accountId: string) {
+  const { userId: sessionUserId, activeOrgId } = await getSessionWithOrg();
   let userId: string | undefined;
+  let organizationId: string | null | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -292,6 +309,7 @@ export async function unlinkAccount(accountId: string) {
     }
 
     userId = session.user.id;
+    organizationId = session.session.activeOrganizationId;
 
     // Delete the account (magic link is always available as fallback authentication)
     await db.delete(account)
@@ -302,7 +320,7 @@ export async function unlinkAccount(accountId: string) {
 
     return { success: true }
   } catch (err) {
-    log.error("unlink.error", { source, userId, accountId, error: err })
+    log.error("unlink.error", { source, userId: sessionUserId, organizationId: activeOrgId, accountId, error: err instanceof Error ? err.message : String(err) })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to unlink account'
@@ -311,7 +329,9 @@ export async function unlinkAccount(accountId: string) {
 }
 
 export async function softDeleteAccount() {
+  const { userId: sessionUserId, activeOrgId } = await getSessionWithOrg();
   let userId: string | undefined;
+  let organizationId: string | null | undefined;
   try {
     const session = await auth.api.getSession({
       headers: await headers()
@@ -322,6 +342,7 @@ export async function softDeleteAccount() {
     }
 
     userId = session.user.id;
+    organizationId = session.session.activeOrganizationId;
 
     try {
       const emailContent = AccountDeletedEmail({
@@ -334,7 +355,7 @@ export async function softDeleteAccount() {
         react: emailContent,
       })
     } catch (e) {
-      log.warn("deleted_email.failed", { source, userId, error: e })
+      log.warn("deleted_email.failed", { source, userId, organizationId, error: e instanceof Error ? e.message : String(e) })
     }
 
     // Soft delete by setting a deletedAt timestamp
@@ -354,7 +375,7 @@ export async function softDeleteAccount() {
 
     return { success: true }
   } catch (err) {
-    log.error("delete.error", { source, userId, error: err })
+    log.error("delete.error", { source, userId: sessionUserId, organizationId: activeOrgId, error: err instanceof Error ? err.message : String(err) })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to delete account'
@@ -372,6 +393,7 @@ export async function createOrganizationWithSetup(data: {
   logo?: string
   googleLink?: string
 }) {
+  const { userId: sessionUserId, activeOrgId } = await getSessionWithOrg();
   let userId: string | undefined;
   try {
     const session = await auth.api.getSession({
@@ -379,7 +401,7 @@ export async function createOrganizationWithSetup(data: {
     })
 
     if (!session?.user) {
-      log.error("create_org.no_auth", { source })
+      log.error("create_org.no_auth", { userId: sessionUserId, organizationId: activeOrgId, source })
       return { success: false, error: 'Not authenticated' }
     }
 
@@ -388,6 +410,7 @@ export async function createOrganizationWithSetup(data: {
     log.info("create_org.started", {
       source,
       userId,
+      organizationId: activeOrgId,
       name: data.name,
       size: data.size,
     })
@@ -418,7 +441,7 @@ export async function createOrganizationWithSetup(data: {
     const organizationName = data.name.trim() || 'Default Workspace'
     const slug = `${organizationName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${generateId().slice(0, 8)}`
 
-    log.debug("create_org.slug_generated", { source, userId, slug })
+    log.debug("create_org.slug_generated", { source, userId, organizationId: activeOrgId, slug })
 
     // Use better-auth's server API to create organization
     const createResult = await auth.api.createOrganization({
@@ -433,7 +456,7 @@ export async function createOrganizationWithSetup(data: {
     })
 
     if (!createResult) {
-      log.error("create_org.failed", { source, userId, reason: "no_result" })
+      log.error("create_org.failed", { source, userId: sessionUserId, organizationId: activeOrgId, reason: "no_result" })
       throw new Error('Failed to create organization')
     }
 
@@ -464,7 +487,7 @@ export async function createOrganizationWithSetup(data: {
       }
     }
   } catch (err) {
-    log.error("create_org.error", { source, userId, error: err })
+    log.error("create_org.error", { source, userId: sessionUserId, organizationId: activeOrgId, error: err instanceof Error ? err.message : String(err) })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to create organization'
@@ -473,6 +496,7 @@ export async function createOrganizationWithSetup(data: {
 }
 
 export async function createDefaultOrganization() {
+  const { userId: sessionUserId, activeOrgId } = await getSessionWithOrg();
   let userId: string | undefined;
   try {
     const session = await auth.api.getSession({
@@ -535,7 +559,7 @@ export async function createDefaultOrganization() {
 
     return { success: true, organizationId }
   } catch (err) {
-    log.error("create_default_org.error", { source, userId, error: err })
+    log.error("create_default_org.error", { source, userId: sessionUserId, organizationId: activeOrgId, error: err instanceof Error ? err.message : String(err) })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to create default organization'
