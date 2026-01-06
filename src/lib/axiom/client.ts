@@ -41,7 +41,7 @@ export function stringify(data: unknown): string {
 /**
  * Client-side logger with automatic user/org context injection.
  * Automatically includes:
- * - userId, organizationId (from Zustand store when available)
+ * - userId, organizationId (from logging context when available)
  * - path, href (from window.location)
  *
  * @example
