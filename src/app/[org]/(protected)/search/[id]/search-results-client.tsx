@@ -24,7 +24,7 @@ import { toast } from "sonner";
 import { useSearchRealtime } from "@/hooks/use-search-realtime";
 import posthog from 'posthog-js';
 import { useActiveOrganization } from "@/lib/auth-client";
-import { useIsReadOnly } from "@/hooks/use-is-read-only";
+import { useUserRole } from "@/hooks/use-user-role";
 import { SearchRightSidebar } from "@/components/search/search-right-sidebar";
 import { searchCandidatesKeys, recentSearchesKeys, searchKeys } from "@/lib/query-keys/search";
 
@@ -107,7 +107,7 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   const queryClient = useQueryClient();
 
   const { data: activeOrg } = useActiveOrganization();
-  const isReadOnly = useIsReadOnly();
+  const { isReadOnly } = useUserRole();
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [searchName, setSearchName] = useState(search.name);

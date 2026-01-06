@@ -2,7 +2,7 @@
 import { Logger, LogLevel, ProxyTransport, ConsoleTransport, type Transport } from '@axiomhq/logging';
 import { createUseLogger, createWebVitalsComponent } from '@axiomhq/react';
 import { nextJsFormatters } from '@axiomhq/nextjs/client';
-import { getUserContext } from '@/stores/user-context-store';
+import { getLoggingContext } from '@/lib/logging-context';
 
 const clientTransports: [Transport, ...Transport[]] = [
   new ProxyTransport({ url: `${process.env.NEXT_PUBLIC_APP_URL}/api/axiom`, autoFlush: true }),
@@ -75,8 +75,8 @@ export const log = {
 };
 
 function buildPayload(fields?: Record<string, unknown>): Record<string, unknown> {
-  // Get user context from Zustand store (non-reactive, safe outside React)
-  const ctx = getUserContext();
+  // Get user context from logging context module (non-reactive, safe outside React)
+  const ctx = getLoggingContext();
 
   const base: Record<string, unknown> = {
     // Only include userId and organizationId if they exist

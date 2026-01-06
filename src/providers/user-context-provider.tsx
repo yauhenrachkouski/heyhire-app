@@ -6,9 +6,7 @@ import { useActiveOrganization, useSession, authClient } from "@/lib/auth-client
 import { useQuery } from "@tanstack/react-query"
 import { getSubscriptionStatus } from "@/actions/stripe"
 import { getOrganizationCredits } from "@/actions/credits"
-import { useUserContextStore } from "@/stores/user-context-store"
-
-const DEMO_ORG_SLUG = process.env.NEXT_PUBLIC_DEMO_ORG_SLUG || "heyhire-demo"
+import { setLoggingContext, clearLoggingContext } from "@/lib/logging-context"
 
 export function UserContextProvider({
   children,
@@ -17,7 +15,6 @@ export function UserContextProvider({
 }) {
   const { data: session } = useSession()
   const { data: activeOrg } = useActiveOrganization()
-  const { setUser, setOrganization, setSubscription, setMembership, clear } = useUserContextStore()
 
   const userId = session?.user?.id
   const organizationId = activeOrg?.id
@@ -25,18 +22,7 @@ export function UserContextProvider({
   // Track previous org for switch detection
   const prevOrgIdRef = useRef<string | undefined>(undefined)
 
-  // Fetch active member role
-  const { data: activeMember } = useQuery({
-    queryKey: ["active-member", organizationId],
-    queryFn: async () => {
-      const member = await authClient.organization.getActiveMember()
-      return member.data
-    },
-    enabled: !!organizationId,
-    staleTime: 5 * 60 * 1000,
-  })
-
-  // Fetch subscription and credits
+  // Fetch subscription and credits for PostHog properties
   const { data: subscriptionData } = useQuery({
     queryKey: ["subscription-status", organizationId],
     queryFn: () => getSubscriptionStatus(),
@@ -51,15 +37,10 @@ export function UserContextProvider({
     staleTime: 60 * 1000,
   })
 
-  // Sync user to Zustand store + PostHog identify
+  // Sync to logging context + PostHog identify
   useEffect(() => {
     if (userId && session?.user?.email) {
-      setUser({
-        id: userId,
-        name: session.user.name ?? "",
-        email: session.user.email,
-        isAnonymous: session.user.isAnonymous ?? false,
-      })
+      setLoggingContext({ userId, organizationId })
 
       posthog.identify(userId, {
         email: session.user.email,
@@ -67,20 +48,14 @@ export function UserContextProvider({
         is_anonymous: session.user.isAnonymous ?? false,
       })
     } else {
-      clear()
+      clearLoggingContext()
       posthog.reset()
     }
-  }, [userId, session?.user?.email, session?.user?.name, session?.user?.isAnonymous, setUser, clear])
+  }, [userId, organizationId, session?.user?.email, session?.user?.name, session?.user?.isAnonymous])
 
-  // Sync organization to Zustand store + PostHog group
+  // PostHog group + org switch tracking
   useEffect(() => {
     if (organizationId && activeOrg?.name) {
-      setOrganization({
-        id: organizationId,
-        name: activeOrg.name,
-        slug: activeOrg.slug,
-      })
-
       posthog.group("organization", organizationId, {
         name: activeOrg.name,
         slug: activeOrg.slug,
@@ -95,27 +70,12 @@ export function UserContextProvider({
         })
       }
       prevOrgIdRef.current = organizationId
-    } else {
-      setOrganization(null)
     }
-  }, [organizationId, activeOrg?.name, activeOrg?.slug, setOrganization])
+  }, [organizationId, activeOrg?.name, activeOrg?.slug])
 
-  // Sync membership (role) to Zustand store
+  // Sync subscription to PostHog properties
   useEffect(() => {
-    if (activeMember?.role && activeOrg?.slug) {
-      const isDemoMode = activeOrg.slug === DEMO_ORG_SLUG
-      setMembership({
-        role: activeMember.role,
-        isDemoMode,
-      })
-    } else {
-      setMembership(null)
-    }
-  }, [activeMember?.role, activeOrg?.slug, setMembership])
-
-  // Sync subscription to Zustand store + PostHog properties
-  useEffect(() => {
-    if (subscriptionData) {
+    if (subscriptionData && userId && organizationId) {
       const sub = {
         plan: subscriptionData.plan || "none",
         status: subscriptionData.status || "none",
@@ -123,25 +83,21 @@ export function UserContextProvider({
         credits: credits ?? 0,
       }
 
-      setSubscription(sub)
+      posthog.setPersonProperties({
+        current_plan: sub.plan,
+        subscription_status: sub.status,
+        is_trialing: sub.isTrialing,
+        credits_remaining: sub.credits,
+      })
 
-      if (userId && organizationId) {
-        posthog.setPersonProperties({
-          current_plan: sub.plan,
-          subscription_status: sub.status,
-          is_trialing: sub.isTrialing,
-          credits_remaining: sub.credits,
-        })
-
-        posthog.group("organization", organizationId, {
-          plan: sub.plan,
-          subscription_status: sub.status,
-          is_trialing: sub.isTrialing,
-          credits_remaining: sub.credits,
-        })
-      }
+      posthog.group("organization", organizationId, {
+        plan: sub.plan,
+        subscription_status: sub.status,
+        is_trialing: sub.isTrialing,
+        credits_remaining: sub.credits,
+      })
     }
-  }, [subscriptionData, credits, userId, organizationId, setSubscription])
+  }, [subscriptionData, credits, userId, organizationId])
 
   return children
 }
