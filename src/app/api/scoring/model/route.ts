@@ -67,9 +67,9 @@ export const POST = withAxiom(async (request: Request) => {
       body: JSON.stringify(parseData),
     });
 
-    const calculationRaw = await calculationResponse.json();
     if (!calculationResponse.ok) {
-      const errorMessage = `Calculation failed: ${calculationResponse.status}`;
+      const errorText = await calculationResponse.text();
+      const errorMessage = `Calculation failed ${calculationResponse.status}: ${errorText.slice(0, 100)}`;
       await db
         .update(search)
         .set({
@@ -77,8 +77,10 @@ export const POST = withAxiom(async (request: Request) => {
           scoringModelUpdatedAt: new Date(),
         })
         .where(eq(search.id, searchId));
-      return NextResponse.json({ error: errorMessage, response: calculationRaw }, { status: 502 });
+      return NextResponse.json({ error: errorMessage }, { status: 502 });
     }
+
+    const calculationRaw = await calculationResponse.json();
 
     const scoringModelId = searchRecord.scoringModelId ?? generateId();
     await db

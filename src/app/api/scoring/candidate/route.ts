@@ -32,6 +32,8 @@ const receiver = new Receiver({
  * Score a single candidate - called by QStash for each candidate in parallel
  */
 export const POST = withAxiom(async (request: Request) => {
+  let searchId: string | undefined;
+  
   try {
     // Get the raw body for signature verification
     const body = await request.text();
@@ -52,7 +54,8 @@ export const POST = withAxiom(async (request: Request) => {
 
     // Parse the body
     const payload: CandidateScoringPayload = JSON.parse(body);
-    const { searchId, searchCandidateId, candidateId, candidateData, total } = payload;
+    searchId = payload.searchId;
+    const { searchCandidateId, candidateId, candidateData, total } = payload;
 
     if (!candidateId || !searchId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -71,7 +74,14 @@ export const POST = withAxiom(async (request: Request) => {
       return NextResponse.json({ success: false, error: "Search not found" }, { status: 404 });
     }
 
+    // Extract organization context for logging
+    const userId = searchRecord.userId;
+    const organizationId = searchRecord.organizationId;
+
     const channel = `search:${searchId}`;
+    
+    // searchId is guaranteed to be defined at this point (validated above)
+    const validatedSearchId = searchId;
 
     const getScoringCounts = async () => {
       const [counts] = await db
@@ -82,7 +92,7 @@ export const POST = withAxiom(async (request: Request) => {
           ),
         })
         .from(searchCandidates)
-        .where(eq(searchCandidates.searchId, searchId));
+        .where(eq(searchCandidates.searchId, validatedSearchId));
       return {
         scored: counts?.scored ?? 0,
         errors: counts?.errors ?? 0,
@@ -93,7 +103,7 @@ export const POST = withAxiom(async (request: Request) => {
       const { scored, errors } = await getScoringCounts();
       if (total > 0 && scored + errors >= total) {
         // Log completion (this is a meaningful aggregate event)
-        log.info("scoring.all_completed", { source, searchId, scored, errors });
+        log.info("scoring.all_completed", { userId, organizationId, source, searchId, scored, errors });
         await realtime.channel(channel).emit("scoring.completed", {
           scored,
           errors,
@@ -228,10 +238,12 @@ export const POST = withAxiom(async (request: Request) => {
           }),
         });
 
-        const evaluateRaw = await evaluateResponse.json();
         if (!evaluateResponse.ok) {
-          throw new Error(`Evaluate API error: ${evaluateResponse.status}`);
+          const errorText = await evaluateResponse.text();
+          throw new Error(`Evaluate API error ${evaluateResponse.status}: ${errorText.slice(0, 100)}`);
         }
+
+        const evaluateRaw = await evaluateResponse.json();
 
         result = evaluateRaw;
         matchScore = result?.final_score;
@@ -246,6 +258,8 @@ export const POST = withAxiom(async (request: Request) => {
         // Only log on final attempt failure (not every retry)
         if (attempt === MAX_SCORING_ATTEMPTS) {
           log.error("scoring.candidate_failed", {
+            userId,
+            organizationId,
             source,
             searchId,
             candidateId,
@@ -264,7 +278,11 @@ export const POST = withAxiom(async (request: Request) => {
 
     if (matchScore === undefined || matchScore === null) {
       await recordScoringError(lastError ?? "Scoring failed");
-      return NextResponse.json({ success: false, error: lastError ?? "Scoring failed" });
+      // Return 502 to signal QStash to retry - the external scoring API may be temporarily unavailable
+      return NextResponse.json(
+        { success: false, error: lastError ?? "Scoring failed" },
+        { status: 502 }
+      );
     }
 
     const roundedScore = Math.round(matchScore);
@@ -310,8 +328,27 @@ export const POST = withAxiom(async (request: Request) => {
     return NextResponse.json({ success: true, score: matchScore, scored, total });
   } catch (error) {
     // Generic catch-all error (unexpected errors only)
+    // Try to get context from searchId if available
+    let userId: string | undefined;
+    let organizationId: string | undefined;
+    if (searchId) {
+      try {
+        const searchRecord = await db.query.search.findFirst({
+          where: eq(search.id, searchId),
+          columns: { userId: true, organizationId: true },
+        });
+        userId = searchRecord?.userId;
+        organizationId = searchRecord?.organizationId;
+      } catch {
+        // Ignore errors fetching context
+      }
+    }
+    
     log.error("scoring.unexpected_error", {
+      userId,
+      organizationId,
       source,
+      searchId,
       error: error instanceof Error ? error.message : "Unknown error",
     });
     return NextResponse.json(
