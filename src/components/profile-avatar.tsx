@@ -10,9 +10,15 @@ function getInitials(fullName?: string | null) {
   const value = (fullName || "").trim();
   if (!value) return "?";
 
-  const parts = value.split(/\s+/).filter(Boolean);
-  const first = parts[0]?.charAt(0) ?? "";
-  const last = parts.length > 1 ? parts[parts.length - 1]?.charAt(0) ?? "" : "";
+  // Remove emojis to avoid hydration mismatches (emojis are surrogate pairs)
+  const cleanValue = value.replace(/\p{Emoji}/gu, "").trim();
+  if (!cleanValue) return "?";
+
+  const parts = cleanValue.split(/\s+/).filter(Boolean);
+  // Use Array.from to properly handle Unicode characters
+  const first = Array.from(parts[0] || "")[0] ?? "";
+  const last =
+    parts.length > 1 ? Array.from(parts[parts.length - 1] || "")[0] ?? "" : "";
 
   const initials = `${first}${last}`.toUpperCase();
   return initials || "?";

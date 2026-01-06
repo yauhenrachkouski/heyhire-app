@@ -45,6 +45,9 @@ export async function updateSearchName(
       .set({ name: safeName })
       .where(eq(search.id, searchId));
 
+    // Revalidate the recent searches cache so sidebar updates
+    // Must await to ensure cache is invalidated before client refetches
+    await revalidateTag(recentSearchesTag(searchRow.organizationId), 'max');
     revalidatePath(`/${searchRow.organizationId}/search`);
 
     return { success: true };

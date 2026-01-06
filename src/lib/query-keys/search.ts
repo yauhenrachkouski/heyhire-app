@@ -5,6 +5,11 @@ export const recentSearchesKeys = {
     [...recentSearchesKeys.lists(), organizationId, limit] as const,
 };
 
+export const searchKeys = {
+  all: ["search"] as const,
+  detail: (searchId: string) => [...searchKeys.all, "detail", searchId] as const,
+};
+
 export const searchCandidatesKeys = {
   all: ["search-candidates"] as const,
   lists: () => [...searchCandidatesKeys.all, "list"] as const,

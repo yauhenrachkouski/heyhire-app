@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getRecentSearches } from "@/actions/search";
 import { withAxiom } from "@/lib/axiom/server";
 
+export const dynamic = "force-dynamic";
+
 export const GET = withAxiom(async (request: Request) => {
   try {
     const { searchParams } = new URL(request.url);
@@ -20,7 +22,10 @@ export const GET = withAxiom(async (request: Request) => {
       return NextResponse.json({ error: result.error || "Failed to load" }, { status: 500 });
     }
 
-    return NextResponse.json({ data: result.data ?? [] });
+    return NextResponse.json(
+      { data: result.data ?? [] },
+      { headers: { "Cache-Control": "no-store, max-age=0" } }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load";
     return NextResponse.json({ error: message }, { status: 500 });

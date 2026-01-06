@@ -25,7 +25,7 @@ import posthog from 'posthog-js';
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useIsReadOnly } from "@/hooks/use-is-read-only";
 import { SearchRightSidebar } from "@/components/search/search-right-sidebar";
-import { searchCandidatesKeys } from "@/lib/query-keys/search";
+import { searchCandidatesKeys, recentSearchesKeys, searchKeys } from "@/lib/query-keys/search";
 
 // Logging source constant for consistent filtering
 const source = "SearchResults";
@@ -482,6 +482,29 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
       });
       toast.success("Search name updated");
       setSearchName(newName);
+
+      // Update caches optimistically (server cache invalidated by action)
+      const breadcrumbKey = searchKeys.detail(search.id);
+      const sidebarKey = activeOrg?.id ? recentSearchesKeys.list(activeOrg.id, 10) : null;
+
+      // Cancel any in-flight queries to prevent them from overwriting our update
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: breadcrumbKey }),
+        sidebarKey ? queryClient.cancelQueries({ queryKey: sidebarKey }) : Promise.resolve(),
+      ]);
+
+      // Update breadcrumb cache
+      queryClient.setQueryData(breadcrumbKey, newName);
+
+      // Update sidebar cache
+      if (sidebarKey) {
+        queryClient.setQueryData(sidebarKey, (oldData: any[] | undefined) => {
+          if (!oldData) return oldData;
+          return oldData.map((s: any) =>
+            s.id === search.id ? { ...s, name: newName } : s
+          );
+        });
+      }
     } else {
       toast.error("Failed to update search name", { description: result.error });
       if (titleRef.current) titleRef.current.innerText = search.name;
