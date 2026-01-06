@@ -4,8 +4,6 @@ import { log } from "@/lib/axiom/server";
 
 const source = "actions/stripe";
 
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
 import { db } from "@/db/drizzle";
 import { subscription, user, organization, member } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
@@ -212,33 +210,6 @@ export async function getUserSubscription() {
 }
 
 /**
- * Get an organization's subscription
- */
-export async function getOrganizationSubscription(organizationId: string) {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  if (!session?.user) {
-    return { subscription: null, error: "Not authenticated" };
-  }
-
-  try {
-    const orgSubscription = await db
-      .select()
-      .from(subscription)
-      .where(eq(subscription.referenceId, organizationId))
-      .limit(1);
-
-    return { subscription: orgSubscription[0] || null, error: null };
-  } catch (error) {
-    const { userId, activeOrgId } = await getSessionWithOrg();
-    log.error("fetch_org_subscription.error", { userId, organizationId: activeOrgId, source, targetOrgId: organizationId, error: error instanceof Error ? error.message : String(error) });
-    return { subscription: null, error: "Failed to fetch organization subscription" };
-  }
-}
-
-/**
  * Check if the active organization has a subscription
  */
 export async function requireActiveSubscription() {
@@ -374,56 +345,6 @@ export async function getSubscriptionStatus() {
     seats: orgSubscription.seats,
     error: null,
   };
-}
-
-/**
- * Get Stripe Customer Portal URL for subscription management
- */
-export async function getCustomerPortalSession() {
-  try {
-    const { activeOrgId, userId } = await getSessionWithOrg(); // Verify session exists
-    await requireBillingAdmin(activeOrgId, userId);
-    const { subscription: orgSubscription } = await getUserSubscription();
-
-    if (!orgSubscription?.stripeCustomerId) {
-      return {
-        url: null,
-        error: "No Stripe customer found for this organization",
-      };
-    }
-
-    // Dynamic import to access stripeClient
-    const { stripeClient } = await import("@/lib/auth");
-
-    const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
-      "http://localhost:3000";
-
-    const portalSession = await stripeClient.billingPortal.sessions.create({
-      customer: orgSubscription.stripeCustomerId,
-      return_url: `${baseUrl}/billing`,
-    });
-
-    trackServerEvent(userId, "billing_portal_session_created", activeOrgId, {
-      stripe_customer_id: orgSubscription.stripeCustomerId,
-    })
-
-    return {
-      url: portalSession.url,
-      error: null,
-    };
-  } catch (error) {
-    const { userId, activeOrgId } = await getSessionWithOrg();
-    log.error("customer_portal.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
-    return {
-      url: null,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Failed to create billing portal session",
-    };
-  }
 }
 
 /**

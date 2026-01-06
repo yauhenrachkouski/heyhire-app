@@ -72,31 +72,6 @@ export async function inviteMember(input: InviteMemberInput) {
 }
 
 /**
- * Get pending invitations for an organization
- */
-export async function getInvitations(organizationId?: string) {
-  try {
-    const invitations = await auth.api.listInvitations({
-      query: organizationId ? { organizationId } : {},
-      headers: await headers(),
-    });
-
-    return {
-      success: true,
-      data: invitations || [],
-    };
-  } catch (error) {
-    const { userId, activeOrgId } = await getSessionWithOrg();
-    log.error("fetch.error", { userId, organizationId: activeOrgId, source, error: error instanceof Error ? error.message : String(error) });
-    return {
-      success: false,
-      error: getErrorMessage(error),
-      data: [],
-    };
-  }
-}
-
-/**
  * Cancel/Revoke an invitation using Better Auth
  */
 export async function cancelInvitation(invitationId: string) {

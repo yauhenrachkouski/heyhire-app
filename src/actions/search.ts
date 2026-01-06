@@ -12,7 +12,7 @@ import { getErrorMessage } from "@/lib/handle-error";
 import { type SourcingCriteria } from "@/types/search";
 import { db } from "@/db/drizzle";
 import { search, user } from "@/db/schema";
-import { eq, desc, ilike, and } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { generateId } from "@/lib/id";
 import { assertNotReadOnlyForOrganization, getSignedInUser, requireOrganizationReadAccess, requireSearchReadAccess } from "@/lib/request-access";
 const SEARCH_NAME_MAX_LENGTH = 50;
@@ -175,66 +175,6 @@ export async function getRecentSearches(
   } catch (error) {
     const errorMessage = getErrorMessage(error);
     log.error("recent.fetch_error", { source, userId, organizationId: activeOrgId, error: errorMessage });
-    return {
-      success: false,
-      error: errorMessage,
-    };
-  }
-}
-
-/**
- * Search through searches by title using full-text search (ILIKE)
- */
-export async function searchSearchesByTitle(
-  organizationId: string,
-  query: string,
-  limit: number = 10
-): Promise<{
-  success: boolean;
-  data?: Array<{
-    id: string;
-    name: string;
-    query: string;
-    createdAt: Date;
-  }>;
-  error?: string;
-}> {
-  const { userId, activeOrgId } = await getSessionWithOrg();
-  try {
-    await requireOrganizationReadAccess(organizationId);
-
-    if (!query.trim()) {
-      return { success: true, data: [] };
-    }
-
-    log.debug("title_search.started", { userId, organizationId: activeOrgId, source, query });
-
-    const searches = await db
-      .select({
-        id: search.id,
-        name: search.name,
-        query: search.query,
-        createdAt: search.createdAt,
-      })
-      .from(search)
-      .where(
-        and(
-          eq(search.organizationId, organizationId),
-          ilike(search.name, `%${query}%`)
-        )
-      )
-      .orderBy(desc(search.createdAt))
-      .limit(limit);
-
-    log.debug("title_search.completed", { userId, organizationId: activeOrgId, source, count: searches.length });
-
-    return {
-      success: true,
-      data: searches,
-    };
-  } catch (error) {
-    const errorMessage = getErrorMessage(error);
-    log.error("title_search.error", { source, userId, organizationId: activeOrgId, query, error: errorMessage });
     return {
       success: false,
       error: errorMessage,

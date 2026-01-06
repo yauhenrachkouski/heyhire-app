@@ -2,13 +2,11 @@
 
 import "server-only"
 
-import { z } from "zod"
 import { and, eq, gt, isNull, or, sql } from "drizzle-orm"
 import { headers } from "next/headers"
 
 import { db } from "@/db/drizzle"
 import * as schema from "@/db/schema"
-import { generateId } from "@/lib/id"
 import { auth } from "@/lib/auth"
 import { hashShareToken } from "@/lib/demo"
 import { ADMIN_ROLES } from "@/lib/roles"
@@ -33,40 +31,6 @@ async function requireOrgAdmin(params: { organizationId: string; userId: string 
   if (!member?.role || !ADMIN_ROLES.has(member.role)) {
     throw new Error("Not authorized")
   }
-}
-
-const createShareLinkSchema = z.object({
-  organizationId: z.string().min(1),
-  expiresAt: z.date().optional(),
-  maxViews: z.number().int().positive().optional(),
-  preset: z
-    .object({
-      searchId: z.string().optional(),
-    })
-    .optional(),
-})
-
-export async function createShareLink(input: z.infer<typeof createShareLinkSchema>) {
-  const user = await requireSignedInUser()
-  const data = createShareLinkSchema.parse(input)
-
-  await requireOrgAdmin({ organizationId: data.organizationId, userId: user.id })
-
-  const id = generateId()
-  const token = id
-  const tokenHash = hashShareToken(token)
-
-  await db.insert(schema.organizationShareLink).values({
-    id,
-    organizationId: data.organizationId,
-    createdByUserId: user.id,
-    tokenHash,
-    expiresAt: data.expiresAt,
-    maxViews: data.maxViews,
-    preset: data.preset ? JSON.stringify(data.preset) : null,
-  })
-
-  return { id, token }
 }
 
 export async function listShareLinks(organizationId: string) {
@@ -96,27 +60,6 @@ export async function listShareLinks(organizationId: string) {
     ...l,
     preset: l.preset ? (JSON.parse(l.preset) as unknown) : null,
   }))
-}
-
-export async function revokeShareLink(linkId: string) {
-  const user = await requireSignedInUser()
-  if (!linkId) throw new Error("Missing linkId")
-
-  const link = await db.query.organizationShareLink.findFirst({
-    where: eq(schema.organizationShareLink.id, linkId),
-    columns: { id: true, organizationId: true },
-  })
-
-  if (!link) throw new Error("Share link not found")
-
-  await requireOrgAdmin({ organizationId: link.organizationId, userId: user.id })
-
-  await db
-    .update(schema.organizationShareLink)
-    .set({ revokedAt: new Date() })
-    .where(eq(schema.organizationShareLink.id, linkId))
-
-  return { success: true }
 }
 
 export async function validateAndTrackShareToken(token: string) {

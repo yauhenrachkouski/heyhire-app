@@ -6,7 +6,7 @@ const source = "actions/candidates";
 
 import { db } from "@/db/drizzle";
 import { candidates, searchCandidates, search, searchCandidateStrategies, sourcingStrategies, creditTransactions } from "@/db/schema";
-import { eq, and, gte, lte, lt, gt, or, isNull, inArray, count, desc, asc, sql } from "drizzle-orm";
+import { eq, and, gte, lte, inArray, count, desc, asc, sql } from "drizzle-orm";
 import { generateId } from "@/lib/id";
 import type { CandidateProfile } from "@/types/search";
 import { assertNotReadOnlyForOrganization, requireSearchReadAccess } from "@/lib/request-access";
@@ -380,27 +380,6 @@ export async function saveCandidatesFromSearch(
   }
 
   return { success: true, saved, linked };
-}
-
-/**
- * Score a single candidate and update the database
- */
-/**
- * Get a candidate by LinkedIn URL
- */
-export async function getCandidateByLinkedinUrl(linkedinUrl: string) {
-  return await db.query.candidates.findFirst({
-    where: eq(candidates.linkedinUrl, linkedinUrl),
-  });
-}
-
-/**
- * Get candidate by ID
- */
-export async function getCandidateById(candidateId: string) {
-  return await db.query.candidates.findFirst({
-    where: eq(candidates.id, candidateId),
-  });
 }
 
 /**
@@ -784,95 +763,6 @@ export async function getCandidatesForSearch(
       totalPages: Math.ceil(total / limit)
     }
   };
-}
-
-/**
- * Add a candidate to a search
- */
-export async function addCandidateToSearch(
-  searchId: string,
-  candidateId: string,
-  sourceProvider: string
-) {
-  const { userId, activeOrgId } = await getSessionWithOrg();
-  log.info("add_candidate.started", { userId, organizationId: activeOrgId, source, searchId, candidateId, sourceProvider });
-
-  const searchCandidateId = generateId();
-
-  await db.insert(searchCandidates).values({
-    id: searchCandidateId,
-    searchId,
-    candidateId,
-    sourceProvider,
-    status: "new",
-  });
-
-  log.info("add_candidate.completed", { userId, organizationId: activeOrgId, source, searchId, candidateId, searchCandidateId });
-  return { searchCandidateId };
-}
-
-/**
- * Update candidate match score
- */
-export async function updateMatchScore(
-  searchCandidateId: string,
-  score: number,
-  notes?: string
-) {
-  const { userId, activeOrgId } = await getSessionWithOrg();
-  log.info("update_score.started", { userId, organizationId: activeOrgId, source, searchCandidateId, score });
-
-  const sc = await db.query.searchCandidates.findFirst({
-    where: eq(searchCandidates.id, searchCandidateId),
-    with: { search: { columns: { organizationId: true } } },
-    columns: { id: true },
-  });
-  if (sc?.search?.organizationId) {
-    await assertNotReadOnlyForOrganization(sc.search.organizationId);
-  }
-
-  await db
-    .update(searchCandidates)
-    .set({
-      matchScore: score,
-      notes,
-      updatedAt: new Date(),
-    })
-    .where(eq(searchCandidates.id, searchCandidateId));
-
-  return { success: true };
-}
-
-/**
- * Update candidate status
- */
-export async function updateCandidateStatus(
-  searchCandidateId: string,
-  status: "new" | "reviewing" | "contacted" | "rejected" | "hired",
-  notes?: string
-) {
-  const { userId, activeOrgId } = await getSessionWithOrg();
-  log.info("update_status.started", { userId, organizationId: activeOrgId, source, searchCandidateId, status });
-
-  const sc = await db.query.searchCandidates.findFirst({
-    where: eq(searchCandidates.id, searchCandidateId),
-    with: { search: { columns: { organizationId: true } } },
-    columns: { id: true },
-  });
-  if (sc?.search?.organizationId) {
-    await assertNotReadOnlyForOrganization(sc.search.organizationId);
-  }
-
-  await db
-    .update(searchCandidates)
-    .set({
-      status,
-      notes: notes || undefined,
-      updatedAt: new Date(),
-    })
-    .where(eq(searchCandidates.id, searchCandidateId));
-
-  return { success: true };
 }
 
 /**
