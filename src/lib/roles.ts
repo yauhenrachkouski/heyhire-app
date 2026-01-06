@@ -62,9 +62,8 @@ export const PERMISSIONS: Record<string, readonly Role[]> = {
   billing_view: ["owner", "admin"],
   billing_manage: ["owner", "admin"],
 
-  // Share link permissions
-  share_links_create: ["owner", "admin"],
-  share_links_revoke: ["owner", "admin"],
+  // Account permissions (all authenticated users can view their own account)
+  account_view: ["owner", "admin", "member", "viewer"],
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;

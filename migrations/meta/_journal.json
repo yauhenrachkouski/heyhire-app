@@ -169,6 +169,13 @@
       "when": 1767721620248,
       "tag": "0023_famous_scrambler",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1767723633126,
+      "tag": "0024_clear_mantis",
+      "breakpoints": true
     }
   ]
 }

@@ -5,7 +5,6 @@ import { SettingsPageHeader } from '@/components/account/settings-page-header'
 import { redirect } from 'next/navigation'
 import { SimpleMembersTable } from './simple-members-table'
 import { getMembers } from '@/actions/members'
-import { listShareLinks } from '@/actions/share-links'
 import { log } from "@/lib/axiom/server";
 
 const source = "app/organization";
@@ -29,8 +28,6 @@ export default async function OrganizationSettingsPage() {
   const organizations = await auth.api.listOrganizations({
     headers: await headers()
   })
-
-  const activeMember = await auth.api.getActiveMember({ headers: await headers() })
 
   // Use active organization or first organization as fallback
   const currentOrganization = activeOrganization || (organizations && organizations.length > 0 ? organizations[0] : null)
@@ -62,11 +59,6 @@ export default async function OrganizationSettingsPage() {
     limit: 100,
     offset: 0,
   })
-
-  const shareLinks =
-    currentOrganization && (activeMember?.role === 'owner' || activeMember?.role === 'admin')
-      ? await listShareLinks(currentOrganization.id)
-      : []
 
   return (
     <>

@@ -1,6 +1,5 @@
 import "server-only"
 
-import { createHash } from "node:crypto"
 import { eq } from "drizzle-orm"
 
 import { db } from "@/db/drizzle"
@@ -22,14 +21,6 @@ export function getDemoOrgSlug() {
  */
 export function getDemoOrgName() {
   return process.env.DEMO_ORG_NAME || "Demo"
-}
-
-/**
- * Hash a share token using SHA-256.
- * Tokens are never stored in plaintext.
- */
-export function hashShareToken(token: string) {
-  return createHash("sha256").update(token).digest("hex")
 }
 
 /**

@@ -113,30 +113,6 @@ export const invitation = pgTable("invitation", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const organizationShareLink = pgTable(
-  "organization_share_link",
-  {
-    id: text("id").primaryKey(),
-    organizationId: text("organization_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
-    createdByUserId: text("created_by_user_id").references(() => user.id, {
-      onDelete: "set null",
-    }),
-    tokenHash: text("token_hash").notNull(),
-    expiresAt: timestamp("expires_at"),
-    maxViews: integer("max_views"),
-    viewCount: integer("view_count").default(0).notNull(),
-    revokedAt: timestamp("revoked_at"),
-    preset: text("preset"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    lastViewedAt: timestamp("last_viewed_at"),
-  },
-  (table) => ({
-    uniqueTokenHash: unique().on(table.tokenHash),
-  })
-)
-
 export const subscription = pgTable("subscription", {
   id: text("id").primaryKey(),
   plan: text("plan").notNull(),
@@ -376,7 +352,6 @@ export const organizationRelations = relations(organization, ({ many }) => ({
   members: many(member),
   invitations: many(invitation),
   searches: many(search),
-  shareLinks: many(organizationShareLink),
   creditTransactions: many(creditTransactions),
 }));
 
@@ -401,20 +376,6 @@ export const invitationRelations = relations(invitation, ({ one }) => ({
     references: [user.id],
   }),
 }));
-
-export const organizationShareLinkRelations = relations(
-  organizationShareLink,
-  ({ one }) => ({
-    organization: one(organization, {
-      fields: [organizationShareLink.organizationId],
-      references: [organization.id],
-    }),
-    createdByUser: one(user, {
-      fields: [organizationShareLink.createdByUserId],
-      references: [user.id],
-    }),
-  })
-)
 
 export const searchRelations = relations(search, ({ one, many }) => ({
   user: one(user, {
