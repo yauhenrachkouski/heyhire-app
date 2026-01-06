@@ -1,8 +1,8 @@
 "use client";
 
-import { log } from "@/lib/axiom/client-log";
+import { log } from "@/lib/axiom/client";
 
-const LOG_SOURCE = "app/paywall/success";
+const source = "app/paywall/success";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -45,7 +45,7 @@ export default function SubscribeSuccessPage() {
         setIsReady(true);
         setIsChecking(false);
       } catch (error) {
-        log.error(LOG_SOURCE, "Error checking subscription", { error });
+        log.error("Error checking subscription", { source, error });
         setIsReady(true);
         setIsChecking(false);
       }

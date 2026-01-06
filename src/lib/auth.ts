@@ -12,14 +12,14 @@ import { eq, and } from "drizzle-orm";
 import { trackServerEvent } from "@/lib/posthog/track";
 import { getPostHogServer } from "@/lib/posthog/posthog-server";
 import { handleStripeEvent } from "@/lib/stripe/webhooks";
-import { log } from "@/lib/axiom/server-log";
+import { log } from "@/lib/axiom/server";
 import { InvitationAcceptedEmail, InvitationEmail, MagicLinkEmail, WelcomeEmail } from "@/emails";
 import { generateId } from "@/lib/id";
 import { ADMIN_ROLES } from "@/lib/roles";
 import { CREDIT_TYPES, getPlanCreditAllocation, getTrialCreditAllocation } from "@/lib/credits";
 import { PLAN_LIMITS } from "@/types/plans";
 
-const LOG_SOURCE = "auth";
+const source = "auth";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -242,7 +242,8 @@ export const auth = betterAuth({
          },
          organizationHooks: {
             afterCreateOrganization: async ({ organization, user }) => {
-               log.info(LOG_SOURCE, "Organization created", {
+               log.info("Organization created", {
+                  source,
                   organizationId: organization.id,
                   organizationName: organization.name,
                   userEmail: user.email,
@@ -277,7 +278,8 @@ export const auth = betterAuth({
                });
             },
             afterCreateInvitation: async ({ invitation, inviter, organization }) => {
-               log.info(LOG_SOURCE, "Invitation created", {
+               log.info("Invitation created", {
+                  source,
                   invitationId: invitation.id,
                   invitedEmail: invitation.email,
                   organizationId: organization.id,
@@ -290,7 +292,8 @@ export const auth = betterAuth({
                });
             },
             afterAcceptInvitation: async ({ invitation, member, user, organization }) => {
-               log.info(LOG_SOURCE, "Invitation accepted", {
+               log.info("Invitation accepted", {
+                  source,
                   invitationId: invitation.id,
                   memberId: member.id,
                   organizationId: organization.id,
@@ -335,7 +338,8 @@ export const auth = betterAuth({
                }
             },
             afterRejectInvitation: async ({ invitation, user, organization }) => {
-               log.info(LOG_SOURCE, "Invitation rejected", {
+               log.info("Invitation rejected", {
+                  source,
                   invitationId: invitation.id,
                   organizationId: organization.id,
                   userEmail: user.email,
@@ -345,7 +349,8 @@ export const auth = betterAuth({
                });
             },
             afterCancelInvitation: async ({ invitation, cancelledBy, organization }) => {
-               log.info(LOG_SOURCE, "Invitation canceled", {
+               log.info("Invitation canceled", {
+                  source,
                   invitationId: invitation.id,
                   invitedEmail: invitation.email,
                   cancelledByEmail: cancelledBy.email,
@@ -540,7 +545,8 @@ export const auth = betterAuth({
                return memberRecord?.role ? ADMIN_ROLES.has(memberRecord.role) : false;
             },
             onSubscriptionComplete: async ({ subscription, plan }) => {
-               log.info(LOG_SOURCE, "Stripe subscription activated", {
+               log.info("Stripe subscription activated", {
+                  source,
                   stripeSubscriptionId: subscription.id,
                   planName: plan.name,
                });
@@ -629,7 +635,8 @@ export const auth = betterAuth({
             },
             onSubscriptionCancel: async ({ subscription }) => {
                const referenceId = subscription.referenceId;
-               log.info(LOG_SOURCE, "Stripe subscription canceled", {
+               log.info("Stripe subscription canceled", {
+                  source,
                   stripeSubscriptionId: subscription.id,
                   referenceId,
                });
@@ -699,7 +706,8 @@ export const auth = betterAuth({
                });
 
                if (userMember) {
-                  log.info(LOG_SOURCE, "Auto-setting active org", {
+                  log.info("Auto-setting active org", {
+                     source,
                      userId: session.userId,
                      organizationId: userMember.organizationId,
                   });

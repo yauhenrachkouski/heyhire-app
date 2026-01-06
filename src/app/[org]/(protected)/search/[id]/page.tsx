@@ -2,9 +2,9 @@ import { notFound } from "next/navigation";
 import { getSearchById } from "@/actions/search";
 import { SearchResultsClient } from "./search-results-client";
 import { getCandidatesForSearch, getSearchCandidateById, getSearchProgress } from "@/actions/candidates";
-import { log } from "@/lib/axiom/server-log";
+import { log } from "@/lib/axiom/server";
 
-const LOG_SOURCE = "app/search/[id]";
+const source = "app/search/[id]";
 
 interface SearchPageProps {
   params: Promise<{ id: string }>;
@@ -16,16 +16,16 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
   const resolvedSearchParams = await searchParams;
   const candidateParam = resolvedSearchParams.candidateId;
   const candidateId = Array.isArray(candidateParam) ? candidateParam[0] : candidateParam;
-  
-  log.info(LOG_SOURCE, "Loading search", { searchId: id });
-  
+
+  log.info("page.loading", { source, searchId: id });
+
   const searchResult = await getSearchById(id);
-  
+
   if (!searchResult.success || !searchResult.data) {
-    log.error(LOG_SOURCE, "Search not found", { searchId: id });
+    log.error("page.not_found", { source, searchId: id });
     notFound();
   }
-  
+
   const search = searchResult.data;
 
   // Parse search params for initial query
@@ -38,7 +38,7 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
   let initialData;
   let initialCandidateDetail;
   try {
-      log.info(LOG_SOURCE, "Prefetching candidates");
+      log.info("page.prefetching_candidates", { source, searchId: id });
       const { data: candidatesData, pagination } = await getCandidatesForSearch(search.id, {
         scoreMin: scoreMin !== 0 ? scoreMin : undefined,
         scoreMax: scoreMax !== 100 ? scoreMax : undefined,
@@ -78,19 +78,19 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
         },
       }));
   } catch (error) {
-      log.error(LOG_SOURCE, "Error prefetching candidates", { error });
+      log.error("page.prefetch_candidates_error", { source, searchId: id, error });
   }
 
   if (candidateId) {
     try {
-      log.info(LOG_SOURCE, "Prefetching candidate details", { candidateId });
+      log.info("page.prefetching_candidate_detail", { source, searchId: id, candidateId });
       const result = await getSearchCandidateById(candidateId);
       initialCandidateDetail = JSON.parse(JSON.stringify({
         candidateId,
         result,
       }));
     } catch (error) {
-      log.error(LOG_SOURCE, "Error prefetching candidate details", { error });
+      log.error("page.prefetch_candidate_detail_error", { source, searchId: id, candidateId, error });
     }
   }
   

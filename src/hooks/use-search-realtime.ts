@@ -1,11 +1,11 @@
 "use client";
 
-import { log } from "@/lib/axiom/client-log";
+import { log } from "@/lib/axiom/client";
 import { useState, useCallback, useRef } from "react";
 import { useRealtime } from "@upstash/realtime/client";
 import type { RealtimeEvents } from "@/lib/realtime";
 
-const LOG_SOURCE = "SearchRealtime";
+const source = "SearchRealtime";
 
 interface SearchRealtimeState {
   status: string;
@@ -92,7 +92,8 @@ export function useSearchRealtime({
         // CRITICAL: Once we reach a terminal status, don't allow reverting to active
         // This prevents flickering back to loading state after completion
         if (hasReachedTerminalRef.current && SOURCING_ACTIVE_STATUSES.includes(data.status)) {
-          log.warn(LOG_SOURCE, "stale_status_ignored", {
+          log.warn("stale_status_ignored", {
+            source,
             searchId,
             attemptedStatus: data.status,
             reason: "terminal_already_reached",

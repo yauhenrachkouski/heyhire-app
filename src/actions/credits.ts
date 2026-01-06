@@ -1,8 +1,8 @@
 "use server";
 
-import { log } from "@/lib/axiom/server-log";
+import { log } from "@/lib/axiom/server";
 
-const LOG_SOURCE = "actions/credits";
+const source = "actions/credits";
 
 import { db } from "@/db/drizzle";
 import { organization, creditTransactions, member, user } from "@/db/schema";
@@ -90,7 +90,7 @@ export async function getCreditsUsageForPeriod(params: {
 
     return { used: Number(result[0]?.used ?? 0), error: null };
   } catch (error) {
-    log.error(LOG_SOURCE, "period_usage.error", { error });
+    log.error("period_usage.error", { source, error });
     return {
       used: 0,
       error: error instanceof Error ? error.message : "Failed to calculate usage",
@@ -258,7 +258,7 @@ export async function addCredits(
         }
       }
     } catch (e) {
-      log.warn(LOG_SOURCE, "low_credits_email.failed", { error: e });
+      log.warn("low_credits_email.failed", { source, error: e });
     }
     
     // Track credit addition events
@@ -278,7 +278,7 @@ export async function addCredits(
       transaction: result,
     };
   } catch (error) {
-    log.error(LOG_SOURCE, "add_credits.error", { error });
+    log.error("add_credits.error", { source, error });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to add credits",
@@ -367,7 +367,7 @@ export async function setCreditsBalance(params: {
       transaction: result ?? undefined,
     };
   } catch (error) {
-    log.error(LOG_SOURCE, "set_balance.error", { error });
+    log.error("set_balance.error", { source, error });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to set credit balance",
@@ -490,7 +490,7 @@ export async function deductCredits(
       transaction: result,
     };
   } catch (error) {
-    log.error(LOG_SOURCE, "deduct_credits.error", { error });
+    log.error("deduct_credits.error", { source, error });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to deduct credits",

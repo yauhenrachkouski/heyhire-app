@@ -1,8 +1,7 @@
-import { log } from "@/lib/axiom/server-log";
-import { withAxiom } from "@/lib/axiom/server";
+import { log, withAxiom } from "@/lib/axiom/server";
 import { NextRequest, NextResponse } from "next/server";
 
-const LOG_SOURCE = "api/transcribe";
+const source = "api/transcribe";
 
 export const POST = withAxiom(async (request: NextRequest) => {
   try {
@@ -28,14 +27,14 @@ export const POST = withAxiom(async (request: NextRequest) => {
 
     if (!response.ok) {
       const error = await response.text();
-      log.error(LOG_SOURCE, "whisper.api_error", { error });
+      log.error("whisper.api_error", { source, error });
       return NextResponse.json({ error: "Transcription failed" }, { status: 500 });
     }
 
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    log.error(LOG_SOURCE, "transcription.error", { error });
+    log.error("transcription.error", { source, error });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 });

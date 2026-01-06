@@ -1,7 +1,7 @@
 import { getPostHogServer } from "./posthog-server";
-import { log } from "@/lib/axiom/server-log";
+import { log } from "@/lib/axiom/server";
 
-const LOG_SOURCE = "lib/posthog";
+const source = "lib/posthog";
 
 /**
  * Server-side PostHog event tracking.
@@ -30,7 +30,7 @@ export function trackServerEvent(
             },
         });
     } catch (e) {
-        log.error(LOG_SOURCE, "capture.error", { event, error: e });
+        log.error("capture.error", { source, event, error: e });
     }
 }
 

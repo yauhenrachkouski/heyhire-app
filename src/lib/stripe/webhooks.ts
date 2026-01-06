@@ -4,7 +4,7 @@ import { subscription as subscriptionTable, member, creditTransactions, organiza
 import { eq, and } from "drizzle-orm";
 import { trackServerEvent } from "@/lib/posthog/track";
 import { generateId } from "@/lib/id";
-import { log } from "@/lib/axiom/server-log";
+import { log } from "@/lib/axiom/server";
 import { getPlanCreditAllocation, CREDIT_TYPES } from "@/lib/credits";
 import { Resend } from "resend";
 import { revalidatePath } from "next/cache";
@@ -13,7 +13,7 @@ import {
     TrialEndingSoonEmail,
 } from "@/emails";
 
-const LOG_SOURCE = "stripe-webhook";
+const source = "stripe-webhook";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -88,7 +88,7 @@ async function markBillingActionProcessed(params: {
             stripeSubscriptionId: params.stripeSubscriptionId ?? null,
         });
     } catch (e) {
-        log.info(LOG_SOURCE, "Billing action already marked processed", { key: params.key, error: String(e) });
+        log.info("billing.action_duplicate", { source, key: params.key, error: String(e) });
     }
 }
 
@@ -109,7 +109,7 @@ async function markStripeEventProcessed(params: {
         });
     } catch (e) {
         // Idempotency: unique index on stripe_event_id
-        log.info(LOG_SOURCE, "Stripe event already marked processed", { eventId: params.event.id, error: String(e) });
+        log.info("stripe.event_duplicate", { eventId: params.event.id, error: String(e) });
     }
 }
 
@@ -118,7 +118,7 @@ async function markStripeEventProcessed(params: {
  */
 export async function handleStripeEvent(event: Stripe.Event, stripeClient: Stripe) {
     const eventContext = { eventId: event.id, eventType: event.type };
-    log.info(LOG_SOURCE, "Webhook received", eventContext);
+    log.info("webhook.received", { source, ...eventContext });
 
     // Note: We don't track webhook_received here - we track specific events with proper user context
 
@@ -155,14 +155,14 @@ export async function handleStripeEvent(event: Stripe.Event, stripeClient: Strip
                 break;
 
             default:
-                log.info(LOG_SOURCE, "Unhandled event type", eventContext);
+                log.info("webhook.unhandled", { source, ...eventContext });
         }
     } catch (error) {
-        log.error(LOG_SOURCE, "Event processing failed", { ...eventContext, error: String(error) });
+        log.error("webhook.error", { source, ...eventContext, error: String(error) });
         throw error; // Re-throw so Stripe knows to retry
     }
 
-    log.info(LOG_SOURCE, "Event processing complete", eventContext);
+    log.info("webhook.completed", { source, ...eventContext });
 }
 
 async function handleTrialWillEnd(ctx: WebhookContext) {
@@ -170,19 +170,19 @@ async function handleTrialWillEnd(ctx: WebhookContext) {
     const sub = ctx.event.data.object;
 
     if (await isStripeEventProcessed(ctx.event.id)) {
-        log.info(LOG_SOURCE, "trial_will_end already processed", { eventId: ctx.event.id });
+        log.info("trial_will_end.duplicate", { source, eventId: ctx.event.id });
         return;
     }
 
     const referenceId = requireReferenceIdFromMetadata(sub.metadata);
     if (!referenceId) {
-        log.warn(LOG_SOURCE, "trial_will_end missing referenceId", { eventId: ctx.event.id, stripeSubscriptionId: sub.id });
+        log.warn("trial_will_end.missing_reference", { source, eventId: ctx.event.id, stripeSubscriptionId: sub.id });
         return;
     }
 
     const ownerId = await getOrgOwnerId(referenceId);
     if (!ownerId) {
-        log.warn(LOG_SOURCE, "trial_will_end: could not resolve owner", { eventId: ctx.event.id, referenceId });
+        log.warn("trial_will_end.no_owner", { source, eventId: ctx.event.id, referenceId });
         return;
     }
 
@@ -226,7 +226,7 @@ async function handleTrialWillEnd(ctx: WebhookContext) {
             stripeSubscriptionId: sub.id,
         });
     } catch (e) {
-        log.warn(LOG_SOURCE, "Failed to send trial_will_end email", { eventId: ctx.event.id, error: String(e) });
+        log.warn("trial_will_end.email_failed", { source, eventId: ctx.event.id, error: String(e) });
     }
 }
 
@@ -236,20 +236,20 @@ async function handleInvoiceUpcoming(ctx: WebhookContext) {
 
     const invoiceSubscriptionId = typeof (invoice as any).subscription === "string" ? (invoice as any).subscription : null;
     if (!invoiceSubscriptionId) {
-        log.warn(LOG_SOURCE, "invoice.upcoming missing subscription id", { eventId: ctx.event.id, invoiceId: invoice.id });
+        log.warn("invoice_upcoming.missing_subscription", { source, eventId: ctx.event.id, invoiceId: invoice.id });
         return;
     }
 
     const stripeSub = await ctx.stripeClient.subscriptions.retrieve(invoiceSubscriptionId);
     const referenceId = requireReferenceIdFromMetadata(stripeSub.metadata);
     if (!referenceId) {
-        log.warn(LOG_SOURCE, "invoice.upcoming subscription missing referenceId", { eventId: ctx.event.id, invoiceId: invoice.id, stripeSubscriptionId: invoiceSubscriptionId });
+        log.warn("invoice_upcoming.missing_reference", { source, eventId: ctx.event.id, invoiceId: invoice.id, stripeSubscriptionId: invoiceSubscriptionId });
         return;
     }
 
     const ownerId = await getOrgOwnerId(referenceId);
     if (!ownerId) {
-        log.warn(LOG_SOURCE, "invoice_upcoming: could not resolve owner", { eventId: ctx.event.id, referenceId });
+        log.warn("invoice_upcoming.no_owner", { source, eventId: ctx.event.id, referenceId });
         return;
     }
 
@@ -270,7 +270,8 @@ async function handleCustomerUpdated(ctx: WebhookContext) {
     });
 
     if (!subscriptionRecord?.referenceId) {
-        log.warn(LOG_SOURCE, "customer_updated: could not find subscription for customer", {
+        log.warn("customer_updated.no_subscription", {
+            source,
             eventId: ctx.event.id,
             stripeCustomerId: customer.id
         });
@@ -281,7 +282,7 @@ async function handleCustomerUpdated(ctx: WebhookContext) {
     const ownerId = await getOrgOwnerId(referenceId);
 
     if (!ownerId) {
-        log.warn(LOG_SOURCE, "customer_updated: could not resolve owner", { eventId: ctx.event.id, referenceId });
+        log.warn("customer_updated.no_owner", { source, eventId: ctx.event.id, referenceId });
         return;
     }
 
@@ -298,15 +299,16 @@ async function handleInvoicePaymentSucceeded(ctx: WebhookContext) {
 
     // Idempotency check
     if (await isStripeEventProcessed(ctx.event.id)) {
-        log.info(LOG_SOURCE, "Invoice event already processed", eventContext);
+        log.info("invoice_succeeded.duplicate", { source, ...eventContext });
         return;
     }
 
-    log.info(LOG_SOURCE, "Processing successful payment", eventContext);
+    log.info("invoice_succeeded.processing", { source, ...eventContext });
 
     const invoiceSubscriptionId = typeof (invoice as any).subscription === "string" ? (invoice as any).subscription : null;
     if (!invoiceSubscriptionId) {
-        log.warn(LOG_SOURCE, "Invoice missing subscription id; cannot map to internal subscription", {
+        log.warn("invoice_succeeded.missing_subscription", {
+            source,
             ...eventContext,
             stripeCustomerId: invoice.customer as string,
         });
@@ -316,7 +318,7 @@ async function handleInvoicePaymentSucceeded(ctx: WebhookContext) {
     const stripeSub = await ctx.stripeClient.subscriptions.retrieve(invoiceSubscriptionId);
     const referenceId = requireReferenceIdFromMetadata(stripeSub.metadata);
     if (!referenceId) {
-        log.warn(LOG_SOURCE, "Invoice subscription missing referenceId metadata", { ...eventContext, stripeSubscriptionId: invoiceSubscriptionId });
+        log.warn("invoice_succeeded.missing_reference", { source, ...eventContext, stripeSubscriptionId: invoiceSubscriptionId });
         return;
     }
 
@@ -325,7 +327,7 @@ async function handleInvoicePaymentSucceeded(ctx: WebhookContext) {
     });
 
     if (!subscriptionRecord) {
-        log.warn(LOG_SOURCE, "No internal subscription found for invoice payment_succeeded", { ...eventContext, referenceId });
+        log.warn("invoice_succeeded.no_internal_subscription", { source, ...eventContext, referenceId });
         return;
     }
     const ownerId = await getOrgOwnerId(subscriptionRecord.referenceId);
@@ -365,7 +367,8 @@ async function handleInvoicePaymentSucceeded(ctx: WebhookContext) {
     }
 
     if (creditsAlreadyGranted) {
-        log.info(LOG_SOURCE, "Credits already reset for billing period", {
+        log.info("credits.already_granted", {
+            source,
             referenceId,
             internal_subscription_id: subscriptionRecord.id,
             periodStart: periodStartKey,
@@ -380,7 +383,7 @@ async function handleInvoicePaymentSucceeded(ctx: WebhookContext) {
         });
     }
 
-    log.info(LOG_SOURCE, "Invoice processed", { ...eventContext, internalId: subscriptionRecord.id });
+    log.info("invoice_succeeded.completed", { source, ...eventContext, internalId: subscriptionRecord.id });
 
     revalidatePath(`/${referenceId}`, "layout");
     revalidatePath(`/${referenceId}/billing`);
@@ -399,15 +402,16 @@ async function handleInvoicePaymentFailed(ctx: WebhookContext) {
     const eventContext = { eventId: ctx.event.id, invoiceId: invoice.id };
 
     if (await isStripeEventProcessed(ctx.event.id)) {
-        log.info(LOG_SOURCE, "Invoice payment_failed already processed", eventContext);
+        log.info("invoice_failed.duplicate", { source, ...eventContext });
         return;
     }
 
-    log.warn(LOG_SOURCE, "Processing failed payment", eventContext);
+    log.warn("invoice_failed.processing", { source, ...eventContext });
 
     const invoiceSubscriptionId = typeof (invoice as any).subscription === "string" ? (invoice as any).subscription : null;
     if (!invoiceSubscriptionId) {
-        log.warn(LOG_SOURCE, "Invoice missing subscription id; cannot map to internal subscription", {
+        log.warn("invoice_failed.missing_subscription", {
+            source,
             ...eventContext,
             stripeCustomerId: invoice.customer as string,
         });
@@ -417,7 +421,7 @@ async function handleInvoicePaymentFailed(ctx: WebhookContext) {
     const stripeSub = await ctx.stripeClient.subscriptions.retrieve(invoiceSubscriptionId);
     const referenceId = requireReferenceIdFromMetadata(stripeSub.metadata);
     if (!referenceId) {
-        log.warn(LOG_SOURCE, "Invoice subscription missing referenceId metadata", { ...eventContext, stripeSubscriptionId: invoiceSubscriptionId });
+        log.warn("invoice_failed.missing_reference", { source, ...eventContext, stripeSubscriptionId: invoiceSubscriptionId });
         return;
     }
 
@@ -426,7 +430,7 @@ async function handleInvoicePaymentFailed(ctx: WebhookContext) {
     });
 
     if (subscriptionRecord) {
-        log.info(LOG_SOURCE, "Subscription marked past_due", { ...eventContext, internalId: subscriptionRecord.id });
+        log.info("invoice_failed.marked_past_due", { source, ...eventContext, internalId: subscriptionRecord.id });
 
         const ownerId = await getOrgOwnerId(subscriptionRecord.referenceId);
         if (ownerId) {
@@ -462,7 +466,7 @@ async function handleInvoicePaymentFailed(ctx: WebhookContext) {
                 }
             }
         } catch (e) {
-            log.warn(LOG_SOURCE, "Failed to send payment failed email", { eventId: ctx.event.id, error: String(e) });
+            log.warn("invoice_failed.email_failed", { source, eventId: ctx.event.id, error: String(e) });
         }
     }
 
@@ -482,7 +486,7 @@ async function handlePaymentRiskEvent(ctx: WebhookContext) {
     const stripeCustomerId = obj?.customer as string | undefined;
 
     if (!stripeCustomerId) {
-        log.warn(LOG_SOURCE, "payment_risk: missing customer ID", { eventId: ctx.event.id });
+        log.warn("payment_risk.missing_customer", { source, eventId: ctx.event.id });
         return;
     }
 
@@ -492,7 +496,8 @@ async function handlePaymentRiskEvent(ctx: WebhookContext) {
     });
 
     if (!subscriptionRecord?.referenceId) {
-        log.warn(LOG_SOURCE, "payment_risk: could not find subscription for customer", {
+        log.warn("payment_risk.no_subscription", {
+            source,
             eventId: ctx.event.id,
             stripeCustomerId
         });
@@ -503,11 +508,12 @@ async function handlePaymentRiskEvent(ctx: WebhookContext) {
     const ownerId = await getOrgOwnerId(referenceId);
 
     if (!ownerId) {
-        log.warn(LOG_SOURCE, "payment_risk: could not resolve owner", { eventId: ctx.event.id, referenceId });
+        log.warn("payment_risk.no_owner", { source, eventId: ctx.event.id, referenceId });
         return;
     }
 
-    log.warn(LOG_SOURCE, "Payment risk event received", {
+    log.warn("payment_risk.received", {
+        source,
         eventId: ctx.event.id,
         eventType: ctx.event.type,
         chargeId: obj?.charge || obj?.id,
@@ -584,5 +590,5 @@ async function grantPlanCreditsWithTransaction(
         });
     });
 
-    log.info(LOG_SOURCE, "Credits granted", { organizationId, plan, credits: creditsToGrant });
+    log.info("credits.granted", { source, organizationId, plan, credits: creditsToGrant });
 }

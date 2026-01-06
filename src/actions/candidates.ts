@@ -1,8 +1,8 @@
 "use server";
 
-import { log, logWithContext } from "@/lib/axiom/server-log";
+import { log } from "@/lib/axiom/server";
 
-const LOG_SOURCE = "actions/candidates";
+const source = "actions/candidates";
 
 import { db } from "@/db/drizzle";
 import { candidates, searchCandidates, search, searchCandidateStrategies, sourcingStrategies, creditTransactions } from "@/db/schema";
@@ -132,23 +132,23 @@ export async function saveCandidatesFromSearch(
   candidateProfiles: CandidateProfile[],
   _rawText: string
 ): Promise<{ success: boolean; saved: number; linked: number }> {
-  const ctxLog = logWithContext("Candidates", { searchId });
-
-  ctxLog.info("Batch saving candidates", {
+  log.info("batch_save.started", {
+    source,
+    searchId,
     count: candidateProfiles.length,
   });
   
   // Filter profiles with valid LinkedIn URLs
   const validProfiles = candidateProfiles.filter(profile => {
     if (!profile.linkedinUrl) {
-      ctxLog.debug("Skipping candidate without LinkedIn URL");
+      log.debug("Skipping candidate without LinkedIn URL", { source, searchId });
       return false;
     }
     return true;
   });
 
   if (validProfiles.length === 0) {
-    ctxLog.info("No valid candidates to save");
+    log.info("batch_save.skipped", { source, searchId, reason: "no_valid_candidates" });
     return { success: true, saved: 0, linked: 0 };
   }
 
@@ -159,7 +159,9 @@ export async function saveCandidatesFromSearch(
   });
 
   const existingByUrl = new Map(existingCandidates.map(c => [c.linkedinUrl, c]));
-  ctxLog.debug("Found existing candidates", {
+  log.debug("batch_save.existing_found", {
+    source,
+    searchId,
     count: existingCandidates.length,
   });
 
@@ -198,11 +200,13 @@ export async function saveCandidatesFromSearch(
   if (candidatesToInsert.length > 0) {
     try {
       await db.insert(candidates).values(candidatesToInsert);
-      ctxLog.info("Batch inserted new candidates", {
+      log.info("batch_save.inserted", {
+        source,
+        searchId,
         count: candidatesToInsert.length,
       });
     } catch (error) {
-      ctxLog.error("Error batch inserting candidates", { error });
+      log.error("batch_save.insert_error", { source, searchId, error });
       throw error;
     }
   }
@@ -210,7 +214,9 @@ export async function saveCandidatesFromSearch(
   // Step 4: Update existing candidates sequentially
   // IMPORTANT: Neon serverless can't handle parallel connections well - must be sequential
   if (candidatesToUpdate.length > 0) {
-    ctxLog.debug("Starting sequential update of existing candidates", {
+    log.debug("batch_save.update_started", {
+      source,
+      searchId,
       count: candidatesToUpdate.length,
     });
     let updated = 0;
@@ -220,11 +226,13 @@ export async function saveCandidatesFromSearch(
         await db.update(candidates).set(data).where(eq(candidates.id, id));
         updated++;
       } catch (error) {
-        ctxLog.error("Error updating candidate", { candidateId: id, error });
+        log.error("batch_save.update_error", { source, searchId, candidateId: id, error });
         // Continue with remaining candidates instead of failing entirely
       }
     }
-    ctxLog.debug("Sequential update complete", {
+    log.debug("batch_save.update_completed", {
+      source,
+      searchId,
       updated,
       total: candidatesToUpdate.length,
     });
@@ -246,7 +254,7 @@ export async function saveCandidatesFromSearch(
       },
     });
   } catch (error) {
-    ctxLog.error("Error fetching existing links", { error });
+    log.error("batch_save.links_fetch_error", { source, searchId, error });
     // Continue with empty links - we'll insert all as new
   }
 
@@ -275,11 +283,13 @@ export async function saveCandidatesFromSearch(
   if (linksToInsert.length > 0) {
     try {
       await db.insert(searchCandidates).values(linksToInsert);
-      ctxLog.info("Batch linked candidates to search", {
+      log.info("batch_save.linked", {
+        source,
+        searchId,
         count: linksToInsert.length,
       });
     } catch (error) {
-      ctxLog.error("Error batch linking candidates", { error });
+      log.error("batch_save.link_error", { source, searchId, error });
       // Don't throw - we've already saved the candidates, links can be retried
     }
   }
@@ -287,7 +297,7 @@ export async function saveCandidatesFromSearch(
   const saved = candidatesToInsert.length;
   const linked = linksToInsert.length;
 
-  ctxLog.info("Batch save complete", { saved, linked });
+  log.info("batch_save.completed", { source, searchId, saved, linked });
 
   // Step 7: Link search candidates to sourcing strategies
   // First, collect all unique strategy IDs from candidates
@@ -306,7 +316,7 @@ export async function saveCandidatesFromSearch(
       });
       validStrategyIds = new Set(existingStrategies.map(s => s.id));
     } catch (error) {
-      ctxLog.error("Error fetching valid strategies", { error });
+      log.error("batch_save.strategies_fetch_error", { source, searchId, error });
       // Continue with empty set - won't link any strategies
     }
   }
@@ -338,11 +348,13 @@ export async function saveCandidatesFromSearch(
         .insert(searchCandidateStrategies)
         .values(strategyLinks)
         .onConflictDoNothing();
-      ctxLog.debug("Linked candidate-strategy pairs", {
+      log.debug("batch_save.strategies_linked", {
+        source,
+        searchId,
         count: strategyLinks.length,
       });
     } catch (error) {
-      ctxLog.error("Error linking candidate strategies", { error });
+      log.error("batch_save.strategies_link_error", { source, searchId, error });
     }
   }
 
@@ -419,8 +431,8 @@ export async function getSearchCandidateById(searchCandidateId: string) {
       sourceData: null, // Don't send huge source data to client
     };
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       data: {
         ...result,
         candidate: transformedCandidate,
@@ -428,7 +440,7 @@ export async function getSearchCandidateById(searchCandidateId: string) {
       }
     };
   } catch (error) {
-    log.error(LOG_SOURCE, "get_search_candidate.error", { error });
+    log.error("get_search_candidate.error", { source, searchCandidateId, error });
     return { success: false, error: "Failed to fetch candidate" };
   }
 }
@@ -450,7 +462,7 @@ export async function getCandidatesForSearch(
     includeTotalCount?: boolean;
   }
 ) {
-  log.info(LOG_SOURCE, "fetch.started", { searchId, options });
+  log.info("fetch.started", { source, searchId, options: JSON.stringify(options) });
 
   await requireSearchReadAccess(searchId);
 
@@ -740,8 +752,8 @@ export async function getCandidatesForSearch(
     isRevealed: revealedCandidateIds.has(result.candidateId)
   }));
 
-  log.info(LOG_SOURCE, "fetch.found", { count: enrichedResults.length, total });
-  
+  log.info("fetch.completed", { source, searchId, count: enrichedResults.length, total });
+
   return {
     data: enrichedResults,
     pagination: {
@@ -761,10 +773,10 @@ export async function addCandidateToSearch(
   candidateId: string,
   sourceProvider: string
 ) {
-  log.info(LOG_SOURCE, "add.started", { searchId, candidateId, sourceProvider });
+  log.info("add_candidate.started", { source, searchId, candidateId, sourceProvider });
 
   const searchCandidateId = generateId();
-  
+
   await db.insert(searchCandidates).values({
     id: searchCandidateId,
     searchId,
@@ -773,7 +785,7 @@ export async function addCandidateToSearch(
     status: "new",
   });
 
-  log.info(LOG_SOURCE, "add.created", { searchCandidateId });
+  log.info("add_candidate.completed", { source, searchId, candidateId, searchCandidateId });
   return { searchCandidateId };
 }
 
@@ -785,7 +797,7 @@ export async function updateMatchScore(
   score: number,
   notes?: string
 ) {
-  log.info(LOG_SOURCE, "update_score", { searchCandidateId, score });
+  log.info("update_score.started", { source, searchCandidateId, score });
 
   const sc = await db.query.searchCandidates.findFirst({
     where: eq(searchCandidates.id, searchCandidateId),
@@ -816,7 +828,7 @@ export async function updateCandidateStatus(
   status: "new" | "reviewing" | "contacted" | "rejected" | "hired",
   notes?: string
 ) {
-  log.info(LOG_SOURCE, "update_status", { searchCandidateId, status });
+  log.info("update_status.started", { source, searchCandidateId, status });
 
   const sc = await db.query.searchCandidates.findFirst({
     where: eq(searchCandidates.id, searchCandidateId),

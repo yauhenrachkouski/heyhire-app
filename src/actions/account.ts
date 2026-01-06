@@ -1,8 +1,8 @@
 'use server'
 
-import { log, logWithContext } from "@/lib/axiom/server-log";
+import { log } from "@/lib/axiom/server";
 
-const LOG_SOURCE = "actions/account";
+const source = "actions/account";
 
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
@@ -43,7 +43,7 @@ export async function updateUserProfile(data: {
 
     return { success: true }
   } catch (err) {
-    log.error(LOG_SOURCE, "update_profile.error", { userId, error: err })
+    log.error("update_profile.error", { source, userId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to update profile'
@@ -97,7 +97,7 @@ export async function uploadAvatar(formData: FormData) {
 
     return { success: true, imageUrl }
   } catch (err) {
-    log.error(LOG_SOURCE, "upload_avatar.error", { userId, error: err })
+    log.error("upload_avatar.error", { source, userId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to upload avatar'
@@ -130,7 +130,7 @@ export async function removeAvatar() {
 
     return { success: true }
   } catch (err) {
-    log.error(LOG_SOURCE, "remove_avatar.error", { userId, error: err })
+    log.error("remove_avatar.error", { source, userId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to remove avatar'
@@ -171,7 +171,7 @@ export async function getOrganizationMembership(organizationId: string) {
       }
     }
   } catch (err) {
-    log.error(LOG_SOURCE, "get_membership.error", { userId, organizationId, error: err })
+    log.error("get_membership.error", { source, userId, organizationId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to get membership'
@@ -237,7 +237,7 @@ export async function updateOrganization(data: {
 
     return { success: true }
   } catch (err) {
-    log.error(LOG_SOURCE, "update_org.error", { userId, organizationId: data.organizationId, error: err })
+    log.error("update_org.error", { source, userId, organizationId: data.organizationId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to update organization'
@@ -271,7 +271,7 @@ export async function getUserAccounts() {
       }))
     }
   } catch (err) {
-    log.error(LOG_SOURCE, "get_accounts.error", { userId, error: err })
+    log.error("get_accounts.error", { source, userId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to get accounts',
@@ -302,7 +302,7 @@ export async function unlinkAccount(accountId: string) {
 
     return { success: true }
   } catch (err) {
-    log.error(LOG_SOURCE, "unlink.error", { userId, accountId, error: err })
+    log.error("unlink.error", { source, userId, accountId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to unlink account'
@@ -334,7 +334,7 @@ export async function softDeleteAccount() {
         react: emailContent,
       })
     } catch (e) {
-      log.warn(LOG_SOURCE, "deleted_email.failed", { userId, error: e })
+      log.warn("deleted_email.failed", { source, userId, error: e })
     }
 
     // Soft delete by setting a deletedAt timestamp
@@ -354,7 +354,7 @@ export async function softDeleteAccount() {
 
     return { success: true }
   } catch (err) {
-    log.error(LOG_SOURCE, "delete.error", { userId, error: err })
+    log.error("delete.error", { source, userId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to delete account'
@@ -379,14 +379,15 @@ export async function createOrganizationWithSetup(data: {
     })
 
     if (!session?.user) {
-      log.error(LOG_SOURCE, "create_org.no_auth")
+      log.error("create_org.no_auth", { source })
       return { success: false, error: 'Not authenticated' }
     }
 
     userId = session.user.id;
-    const ctxLog = logWithContext(LOG_SOURCE, { userId });
 
-    ctxLog.info("Starting organization creation", {
+    log.info("create_org.started", {
+      source,
+      userId,
       name: data.name,
       size: data.size,
     })
@@ -397,7 +398,9 @@ export async function createOrganizationWithSetup(data: {
     })
 
     if (existingMembership) {
-      ctxLog.info("User already has organization", {
+      log.info("create_org.existing_found", {
+        source,
+        userId,
         organizationId: existingMembership.organizationId,
       })
       // User already has an organization, just set it as active and return
@@ -415,7 +418,7 @@ export async function createOrganizationWithSetup(data: {
     const organizationName = data.name.trim() || 'Default Workspace'
     const slug = `${organizationName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${generateId().slice(0, 8)}`
 
-    ctxLog.info("Creating organization with slug", { slug })
+    log.debug("create_org.slug_generated", { source, userId, slug })
 
     // Use better-auth's server API to create organization
     const createResult = await auth.api.createOrganization({
@@ -430,11 +433,13 @@ export async function createOrganizationWithSetup(data: {
     })
 
     if (!createResult) {
-      ctxLog.error("Failed to create organization - no result")
+      log.error("create_org.failed", { source, userId, reason: "no_result" })
       throw new Error('Failed to create organization')
     }
 
-    ctxLog.info("Organization created successfully", {
+    log.info("create_org.created", {
+      source,
+      userId,
       organizationId: createResult.id,
     })
 
@@ -447,7 +452,7 @@ export async function createOrganizationWithSetup(data: {
     revalidatePath(`/${createResult.id}`, 'layout')
     revalidatePath('/paywall')
 
-    ctxLog.info("Organization set as active", { organizationId: createResult.id })
+    log.info("create_org.completed", { source, userId, organizationId: createResult.id })
 
     return {
       success: true,
@@ -459,7 +464,7 @@ export async function createOrganizationWithSetup(data: {
       }
     }
   } catch (err) {
-    log.error(LOG_SOURCE, "create_org.error", { userId, error: err })
+    log.error("create_org.error", { source, userId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to create organization'
@@ -530,7 +535,7 @@ export async function createDefaultOrganization() {
 
     return { success: true, organizationId }
   } catch (err) {
-    log.error(LOG_SOURCE, "create_default_org.error", { userId, error: err })
+    log.error("create_default_org.error", { source, userId, error: err })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to create default organization'

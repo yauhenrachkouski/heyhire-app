@@ -1,11 +1,10 @@
 import { getCandidatesForSearch, getSearchProgress } from "@/actions/candidates";
-import { log } from "@/lib/axiom/server-log";
-import { withAxiom } from "@/lib/axiom/server";
+import { log, withAxiom } from "@/lib/axiom/server";
 import { NextRequest } from "next/server";
 
 export const dynamic = 'force-dynamic';
 
-const LOG_SOURCE = "api/search/candidates";
+const source = "api/search/candidates";
 
 export const GET = withAxiom(async (
   req: NextRequest,
@@ -90,7 +89,8 @@ export const GET = withAxiom(async (
 
     // Only log actual errors (5xx), not auth/permission issues
     if (status >= 500) {
-      log.error(LOG_SOURCE, "candidates.fetch_error", {
+      log.error("candidates.fetch_error", {
+        source,
         searchId,
         error: errorMessage,
       });

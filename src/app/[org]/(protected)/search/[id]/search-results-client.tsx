@@ -1,6 +1,6 @@
 "use client";
 
-import { log } from "@/lib/axiom/client-log";
+import { log } from "@/lib/axiom/client";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQueryClient, useInfiniteQuery, useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useQueryState, parseAsInteger, parseAsString } from "nuqs";
@@ -28,7 +28,7 @@ import { SearchRightSidebar } from "@/components/search/search-right-sidebar";
 import { searchCandidatesKeys } from "@/lib/query-keys/search";
 
 // Logging source constant for consistent filtering
-const LOG_SOURCE = "SearchResults";
+const source = "SearchResults";
 
 // Statuses that mean the SOURCING is still actively running (not scoring)
 const SOURCING_ACTIVE_STATUSES = ["created", "processing", "pending", "generating", "generated", "executing", "polling"];
@@ -135,7 +135,8 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   useEffect(() => {
     if (!hasLoggedViewRef.current) {
       hasLoggedViewRef.current = true;
-      log.info(LOG_SOURCE, "search.viewed", {
+      log.info("search.viewed", {
+        source,
         searchId: search.id,
         status: search.status,
         candidateCount: initialData?.candidates?.length ?? 0,
@@ -219,7 +220,8 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
 
       const response = await fetch(url.toString());
       if (!response.ok) {
-        log.error(LOG_SOURCE, "candidates.fetch_failed", {
+        log.error("candidates.fetch_failed", {
+          source,
           searchId: search.id,
           status: response.status,
           cursor: pageParam,
@@ -239,7 +241,8 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
 
   // ========== Realtime handlers ==========
   const handleSearchCompleted = useCallback(async (candidatesCount: number) => {
-    log.info(LOG_SOURCE, "sourcing.completed", {
+    log.info("sourcing.completed", {
+      source,
       searchId: search.id,
       candidatesCount,
     });
@@ -256,7 +259,8 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   }, [queryClient, search.id]);
 
   const handleSearchFailed = useCallback((errorMsg: string) => {
-    log.error(LOG_SOURCE, "sourcing.failed", {
+    log.error("sourcing.failed", {
+      source,
       searchId: search.id,
       error: errorMsg,
     });
@@ -327,7 +331,8 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   }, [queryClient, search.id, updateCandidateScoreInCache]);
 
   const handleScoringStarted = useCallback((data: { total: number }) => {
-    log.info(LOG_SOURCE, "scoring.started", {
+    log.info("scoring.started", {
+      source,
       searchId: search.id,
       total: data.total,
     });
@@ -337,7 +342,8 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
   }, [search.id]);
 
   const handleScoringCompleted = useCallback((data: { scored: number; errors: number }) => {
-    log.info(LOG_SOURCE, "scoring.completed", {
+    log.info("scoring.completed", {
+      source,
       searchId: search.id,
       scored: data.scored,
       errors: data.errors,

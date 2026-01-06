@@ -6,10 +6,9 @@ import { NextResponse } from "next/server";
 import { Receiver } from "@upstash/qstash";
 import { jobParsingResponseV3Schema } from "@/types/search";
 import { generateId } from "@/lib/id";
-import { log } from "@/lib/axiom/server-log";
-import { withAxiom } from "@/lib/axiom/server";
+import { log, withAxiom } from "@/lib/axiom/server";
 
-const LOG_SOURCE = "api/scoring/candidate";
+const source = "api/scoring/candidate";
 
 const API_BASE_URL = "http://57.131.25.45";
 const MAX_SCORING_ATTEMPTS = 3;
@@ -46,7 +45,7 @@ export const POST = withAxiom(async (request: Request) => {
       });
       
       if (!isValid) {
-        log.error(LOG_SOURCE, "scoring.invalid_signature", {});
+        log.error("scoring.invalid_signature", { source });
         return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
       }
     }
@@ -68,7 +67,7 @@ export const POST = withAxiom(async (request: Request) => {
     });
 
     if (!searchRecord) {
-      log.error(LOG_SOURCE, "scoring.search_not_found", { searchId, candidateId });
+      log.error("scoring.search_not_found", { source, searchId, candidateId });
       return NextResponse.json({ success: false, error: "Search not found" }, { status: 404 });
     }
 
@@ -94,7 +93,7 @@ export const POST = withAxiom(async (request: Request) => {
       const { scored, errors } = await getScoringCounts();
       if (total > 0 && scored + errors >= total) {
         // Log completion (this is a meaningful aggregate event)
-        log.info(LOG_SOURCE, "scoring.all_completed", { searchId, scored, errors });
+        log.info("scoring.all_completed", { source, searchId, scored, errors });
         await realtime.channel(channel).emit("scoring.completed", {
           scored,
           errors,
@@ -246,7 +245,8 @@ export const POST = withAxiom(async (request: Request) => {
         lastError = error instanceof Error ? error.message : "Scoring failed";
         // Only log on final attempt failure (not every retry)
         if (attempt === MAX_SCORING_ATTEMPTS) {
-          log.error(LOG_SOURCE, "scoring.candidate_failed", {
+          log.error("scoring.candidate_failed", {
+            source,
             searchId,
             candidateId,
             attempts: attempt,
@@ -310,7 +310,8 @@ export const POST = withAxiom(async (request: Request) => {
     return NextResponse.json({ success: true, score: matchScore, scored, total });
   } catch (error) {
     // Generic catch-all error (unexpected errors only)
-    log.error(LOG_SOURCE, "scoring.unexpected_error", {
+    log.error("scoring.unexpected_error", {
+      source,
       error: error instanceof Error ? error.message : "Unknown error",
     });
     return NextResponse.json(

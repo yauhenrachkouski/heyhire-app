@@ -1,10 +1,10 @@
 "use server";
 
-import { log, logWithContext } from "@/lib/axiom/server-log";
+import { log } from "@/lib/axiom/server";
 
 import "server-only";
 
-const LOG_SOURCE = "actions/search";
+const source = "actions/search";
 
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { getErrorMessage } from "@/lib/handle-error";
@@ -48,7 +48,7 @@ export async function updateSearchName(
     return { success: true };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    log.error(LOG_SOURCE, "update_name.error", { searchId, error: errorMessage });
+    log.error("update_name.error", { source, searchId, error: errorMessage });
     return { success: false, error: errorMessage };
   }
 }
@@ -62,8 +62,6 @@ export async function saveSearch(
   userId: string,
   organizationId: string
 ): Promise<{ success: boolean; data?: { id: string }; error?: string }> {
-  const ctxLog = logWithContext(LOG_SOURCE, { userId, organizationId });
-
   try {
     const signedIn = await getSignedInUser();
     if (!signedIn) {
@@ -76,12 +74,12 @@ export async function saveSearch(
     await requireOrganizationReadAccess(organizationId);
     await assertNotReadOnlyForOrganization(organizationId);
 
-    ctxLog.info("Saving search");
+    log.info("save.started", { source, userId, organizationId });
 
     const rawName = criteria.search_name?.trim();
     const name = rawName || "Untitled Search";
     const id = generateId();
-    ctxLog.info("Generated new search ID", { searchId: id });
+    log.debug("save.id_generated", { source, userId, organizationId, searchId: id });
 
     await db.insert(search).values({
       id,
@@ -96,7 +94,7 @@ export async function saveSearch(
       organizationId,
     });
 
-    ctxLog.info("Search saved", { searchId: id });
+    log.info("save.completed", { source, userId, organizationId, searchId: id });
 
     revalidateTag(recentSearchesTag(organizationId), 'max');
     revalidatePath(`/${organizationId}`);
@@ -107,7 +105,7 @@ export async function saveSearch(
     };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    ctxLog.error("Error saving search", { error: errorMessage });
+    log.error("save.error", { source, userId, organizationId, error: errorMessage });
     return {
       success: false,
       error: errorMessage,
@@ -131,12 +129,10 @@ export async function getRecentSearches(
   }>;
   error?: string;
 }> {
-  const ctxLog = logWithContext(LOG_SOURCE, { organizationId });
-
   try {
     await requireOrganizationReadAccess(organizationId);
 
-    ctxLog.debug("Fetching recent searches", { limit });
+    log.debug("recent.fetch_started", { source, organizationId, limit });
 
     const fetchRecentSearches = unstable_cache(
       async () => {
@@ -163,7 +159,7 @@ export async function getRecentSearches(
 
     const parsedSearches = await fetchRecentSearches();
 
-    ctxLog.debug("Found recent searches", { count: parsedSearches.length });
+    log.debug("recent.fetch_completed", { source, organizationId, count: parsedSearches.length });
 
     return {
       success: true,
@@ -171,7 +167,7 @@ export async function getRecentSearches(
     };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    ctxLog.error("Error fetching recent searches", { error: errorMessage });
+    log.error("recent.fetch_error", { source, organizationId, error: errorMessage });
     return {
       success: false,
       error: errorMessage,
@@ -196,8 +192,6 @@ export async function searchSearchesByTitle(
   }>;
   error?: string;
 }> {
-  const ctxLog = logWithContext(LOG_SOURCE, { organizationId });
-
   try {
     await requireOrganizationReadAccess(organizationId);
 
@@ -205,7 +199,7 @@ export async function searchSearchesByTitle(
       return { success: true, data: [] };
     }
 
-    ctxLog.debug("Searching searches by title", { query });
+    log.debug("title_search.started", { source, organizationId, query });
 
     const searches = await db
       .select({
@@ -224,7 +218,7 @@ export async function searchSearchesByTitle(
       .orderBy(desc(search.createdAt))
       .limit(limit);
 
-    ctxLog.debug("Found matching searches", { count: searches.length });
+    log.debug("title_search.completed", { source, organizationId, count: searches.length });
 
     return {
       success: true,
@@ -232,7 +226,7 @@ export async function searchSearchesByTitle(
     };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    ctxLog.error("Error searching searches by title", { query, error: errorMessage });
+    log.error("title_search.error", { source, organizationId, query, error: errorMessage });
     return {
       success: false,
       error: errorMessage,
@@ -321,7 +315,7 @@ export async function getSearchById(
     };
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    log.error(LOG_SOURCE, "get_by_id.error", { searchId: id, error: errorMessage });
+    log.error("get.error", { source, searchId: id, error: errorMessage });
     return {
       success: false,
       error: errorMessage,

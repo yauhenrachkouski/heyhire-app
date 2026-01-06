@@ -5,14 +5,13 @@ import { eq, and, isNull } from "drizzle-orm";
 import { realtime } from "@/lib/realtime";
 import { prepareCandidateForScoring } from "@/actions/scoring";
 import { NextResponse } from "next/server";
-import { log } from "@/lib/axiom/server-log";
-import { withAxiom } from "@/lib/axiom/server";
+import { log, withAxiom } from "@/lib/axiom/server";
 
 const qstash = new Client({
   token: process.env.QSTASH_TOKEN!,
 });
 
-const LOG_SOURCE = "api/workflow/scoring";
+const source = "api/workflow/scoring";
 
 // Default parallelism - how many candidates to score at once
 const DEFAULT_PARALLELISM = 5;
@@ -44,7 +43,7 @@ export const POST = withAxiom(async (request: Request) => {
     });
 
     if (!searchRecord) {
-      log.error(LOG_SOURCE, "scoring.search_not_found", { searchId });
+      log.error("scoring.search_not_found", { source, searchId });
       return NextResponse.json({ error: "Search not found" }, { status: 404 });
     }
 
@@ -72,7 +71,8 @@ export const POST = withAxiom(async (request: Request) => {
     }
 
     // Log only when starting a scoring batch (meaningful event)
-    log.info(LOG_SOURCE, "scoring.batch_started", {
+    log.info("scoring.batch_started", {
+      source,
       searchId,
       candidateCount: unscoredCandidates.length,
       parallelism,
@@ -128,7 +128,8 @@ export const POST = withAxiom(async (request: Request) => {
       searchId,
     });
   } catch (error) {
-    log.error(LOG_SOURCE, "scoring.batch_error", {
+    log.error("scoring.batch_error", {
+      source,
       searchId,
       error: error instanceof Error ? error.message : "Unknown error",
     });

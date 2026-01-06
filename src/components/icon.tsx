@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react'
-import { log } from '@/lib/axiom/client-log'
+import { log } from '@/lib/axiom/client'
 import { 
   IconPlus, 
   IconMinus, 
@@ -233,7 +233,7 @@ interface IconProps extends Omit<TablerIconProps, 'name'> {
   name: IconName
 }
 
-const LOG_SOURCE = 'components/icon';
+const source = 'components/icon';
 
 /**
  * Icon component abstraction using Tabler icons
@@ -244,7 +244,7 @@ export function Icon({ name, size = 20, ...props }: IconProps) {
 
   if (!IconComponent) {
     if (process.env.NODE_ENV !== 'production') {
-      log.warn(LOG_SOURCE, 'Icon not found in iconMap', { iconName: name })
+      log.warn('Icon not found in iconMap', { source, iconName: name })
     }
     return null
   }

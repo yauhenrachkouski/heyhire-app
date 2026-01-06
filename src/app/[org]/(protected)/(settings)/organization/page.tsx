@@ -5,9 +5,9 @@ import { redirect } from 'next/navigation'
 import { SimpleMembersTable } from './simple-members-table'
 import { getMembers } from '@/actions/members'
 import { listShareLinks } from '@/actions/share-links'
-import { log } from "@/lib/axiom/server-log";
+import { log } from "@/lib/axiom/server";
 
-const LOG_SOURCE = "app/organization";
+const source = "app/organization";
 
 export default async function OrganizationSettingsPage() {
   // Fetch session data on the server
@@ -45,7 +45,7 @@ export default async function OrganizationSettingsPage() {
           : currentOrganization.metadata
         size = metadata.size || ''
       } catch (e) {
-        log.error(LOG_SOURCE, "Failed to parse organization metadata", { error: e })
+        log.error("Failed to parse organization metadata", { source, error: e })
       }
     }
 

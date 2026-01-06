@@ -1,5 +1,5 @@
 import axiomClient from "@/lib/axiom/axiom";
-import { AxiomJSTransport, ConsoleTransport, EVENT, Logger, type Transport } from "@axiomhq/logging";
+import { AxiomJSTransport, ConsoleTransport, EVENT, Logger, LogLevel, type Transport } from "@axiomhq/logging";
 import {
   createAxiomRouteHandler,
   getLogLevelFromStatusCode,
@@ -32,6 +32,33 @@ export const logger = new Logger({
     gitSha: process.env.VERCEL_GIT_COMMIT_SHA,
   },
 });
+
+const isProduction = process.env.NODE_ENV === "production";
+
+/**
+ * Server-side logger with debug filtering in production.
+ *
+ * @example
+ * import { log } from "@/lib/axiom/server";
+ * import { getUserContext } from "@/lib/logger";
+ *
+ * const ctx = await getUserContext();
+ * log.info("Creating item", { ...ctx, itemId });
+ */
+export const log = {
+  debug: (message: string, fields?: Record<string, unknown>) => {
+    if (!isProduction) logger.log(LogLevel.debug, message, fields);
+  },
+  info: (message: string, fields?: Record<string, unknown>) => {
+    logger.log(LogLevel.info, message, fields);
+  },
+  warn: (message: string, fields?: Record<string, unknown>) => {
+    logger.log(LogLevel.warn, message, fields);
+  },
+  error: (message: string, fields?: Record<string, unknown>) => {
+    logger.log(LogLevel.error, message, fields);
+  },
+};
 
 const withRequestMeta = (
   report: Record<string | symbol, any>,

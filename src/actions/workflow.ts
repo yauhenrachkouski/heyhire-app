@@ -1,8 +1,10 @@
 "use server";
 
-import { log, logWithContext } from "@/lib/axiom/server-log";
+import { log } from "@/lib/axiom/server";
 
 import "server-only";
+
+const source = "actions/workflow";
 import { db } from "@/db/drizzle";
 import { searchCandidates, searchCandidateStrategies, sourcingStrategies, search } from "@/db/schema";
 import { eq, and, isNotNull } from "drizzle-orm";
@@ -17,13 +19,11 @@ import { realtime } from "@/lib/realtime";
  * Used for "Get 100 more" functionality.
  */
 export async function analyzeAndContinueSearch(searchId: string) {
-  const ctxLog = logWithContext("Workflow", { searchId });
-
   try {
     const searchRow = await requireSearchReadAccess(searchId);
     await assertNotReadOnlyForOrganization(searchRow.organizationId);
 
-    ctxLog.info("Analyzing strategies for search");
+    log.info("analyze.started", { source, searchId });
 
     // Immediately mark search as processing in DB so page refresh shows correct state
     await db.update(search)
@@ -65,7 +65,7 @@ export async function analyzeAndContinueSearch(searchId: string) {
         // Fallback: If no candidates are scored yet, we can't analyze.
         // We should just re-run all successful strategies or maybe just all?
         // Let's assume we want to re-run all strategies that didn't fail.
-        ctxLog.info("No scored candidates found; re-running all successful strategies");
+        log.info("analyze.fallback", { source, searchId, reason: "no_scored_candidates" });
         return await reRunAllSuccessfulStrategies(searchId);
     }
 
@@ -104,7 +104,7 @@ export async function analyzeAndContinueSearch(searchId: string) {
     
     strategyMetrics.sort((a, b) => b.median - a.median);
 
-    ctxLog.info("Strategy metrics", { strategyMetrics });
+    log.info("analyze.metrics_computed", { source, searchId, strategyMetrics: JSON.stringify(strategyMetrics) });
 
     // Select top strategies
     // Logic: 
@@ -146,13 +146,15 @@ export async function analyzeAndContinueSearch(searchId: string) {
 
     if (strategyIdsToRun.length === 0) {
         // Should not happen given logic above, but fallback
-        ctxLog.info("No valid strategies selected; re-running all successful");
+        log.info("analyze.fallback", { source, searchId, reason: "no_valid_strategies" });
         return await reRunAllSuccessfulStrategies(searchId);
     }
 
-    ctxLog.info("Selected strategies to re-run", {
+    log.info("analyze.strategies_selected", {
+      source,
+      searchId,
       count: strategyIdsToRun.length,
-      strategyIds: strategyIdsToRun,
+      strategyIds: JSON.stringify(strategyIdsToRun),
     });
 
     // Trigger the workflow with specific strategies
@@ -179,7 +181,7 @@ export async function analyzeAndContinueSearch(searchId: string) {
 
   } catch (error) {
     const errorMessage = getErrorMessage(error);
-    ctxLog.error("Error continuing search", { error: errorMessage });
+    log.error("analyze.error", { source, searchId, error: errorMessage });
 
     // Reset status to completed on error (don't leave it stuck in processing)
     await db.update(search)

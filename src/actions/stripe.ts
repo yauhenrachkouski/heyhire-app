@@ -1,8 +1,8 @@
 "use server";
 
-import { log } from "@/lib/axiom/server-log";
+import { log } from "@/lib/axiom/server";
 
-const LOG_SOURCE = "actions/stripe";
+const source = "actions/stripe";
 
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
@@ -78,7 +78,7 @@ export async function getCustomerPortalPaymentMethodSession() {
       error: null,
     };
   } catch (error) {
-    log.error(LOG_SOURCE, "payment_method_portal.error", { error });
+    log.error("payment_method_portal.error", { source, error });
     return {
       url: null,
       error:
@@ -124,7 +124,7 @@ export async function getCustomerInvoices(params?: { limit?: number }) {
       error: null,
     };
   } catch (error) {
-    log.error(LOG_SOURCE, "list_invoices.error", { error });
+    log.error("list_invoices.error", { source, error });
     return {
       invoices: [],
       error:
@@ -174,7 +174,7 @@ export async function getCustomerPaymentMethods(params?: { limit?: number }) {
       error: null,
     };
   } catch (error) {
-    log.error(LOG_SOURCE, "list_payment_methods.error", { error });
+    log.error("list_payment_methods.error", { source, error });
     return {
       paymentMethods: [],
       defaultPaymentMethodId: null,
@@ -199,9 +199,9 @@ export async function getUserSubscription() {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to fetch subscription";
     if (message.includes("Not authenticated") || message.includes("No active organization")) {
-      log.warn(LOG_SOURCE, "fetch_subscription.warn", { error });
+      log.warn("fetch_subscription.warn", { source, error });
     } else {
-      log.error(LOG_SOURCE, "fetch_subscription.error", { error });
+      log.error("fetch_subscription.error", { source, error });
     }
     return { subscription: null, error: error instanceof Error ? error.message : "Failed to fetch subscription" };
   }
@@ -228,7 +228,7 @@ export async function getOrganizationSubscription(organizationId: string) {
 
     return { subscription: orgSubscription[0] || null, error: null };
   } catch (error) {
-    log.error(LOG_SOURCE, "fetch_org_subscription.error", { error });
+    log.error("fetch_org_subscription.error", { source, error });
     return { subscription: null, error: "Failed to fetch organization subscription" };
   }
 }
@@ -409,7 +409,7 @@ export async function getCustomerPortalSession() {
       error: null,
     };
   } catch (error) {
-    log.error(LOG_SOURCE, "customer_portal.error", { error });
+    log.error("customer_portal.error", { source, error });
     return {
       url: null,
       error:
@@ -476,7 +476,7 @@ export async function startProBillingNow() {
       error: null,
     };
   } catch (error) {
-    log.error(LOG_SOURCE, "unlock_trial.error", { error });
+    log.error("unlock_trial.error", { source, error });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to unlock trial",
@@ -543,7 +543,7 @@ export async function cancelSubscription() {
         });
       }
     } catch (e) {
-      log.warn(LOG_SOURCE, "cancel_email.failed", { error: e });
+      log.warn("cancel_email.failed", { source, error: e });
     }
 
     return {
@@ -552,7 +552,7 @@ export async function cancelSubscription() {
       error: null,
     };
   } catch (error) {
-    log.error(LOG_SOURCE, "cancel_subscription.error", { error });
+    log.error("cancel_subscription.error", { source, error });
     return {
       success: false,
       error:
@@ -618,7 +618,7 @@ export async function resumeSubscription() {
         });
       }
     } catch (e) {
-      log.warn(LOG_SOURCE, "resume_email.failed", { error: e });
+      log.warn("resume_email.failed", { source, error: e });
     }
 
     return {
@@ -627,7 +627,7 @@ export async function resumeSubscription() {
       error: null,
     };
   } catch (error) {
-    log.error(LOG_SOURCE, "resume_subscription.error", { error });
+    log.error("resume_subscription.error", { source, error });
     return {
       success: false,
       error:
@@ -673,7 +673,7 @@ export async function setDefaultPaymentMethod(paymentMethodId: string) {
       error: null,
     };
   } catch (error) {
-    log.error(LOG_SOURCE, "set_default_payment_method.error", { error });
+    log.error("set_default_payment_method.error", { source, error });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to set default payment method",
@@ -722,7 +722,7 @@ export async function removePaymentMethod(paymentMethodId: string) {
       error: null,
     };
   } catch (error) {
-    log.error(LOG_SOURCE, "remove_payment_method.error", { error });
+    log.error("remove_payment_method.error", { source, error });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to remove payment method",

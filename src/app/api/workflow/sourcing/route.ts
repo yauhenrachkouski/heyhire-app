@@ -6,8 +6,7 @@ import { search, sourcingStrategies } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { realtime } from "@/lib/realtime";
 import { generateId } from "@/lib/id";
-import { log } from "@/lib/axiom/server-log";
-import { withAxiom } from "@/lib/axiom/server";
+import { log, withAxiom } from "@/lib/axiom/server";
 import {
   strategyGenerationResponseSchema,
   strategyExecutionResponseSchema,
@@ -16,7 +15,7 @@ import {
   type SourcingStrategyItem,
 } from "@/types/search";
 
-const LOG_SOURCE = "workflow/sourcing";
+const source = "workflow/sourcing";
 
 const API_BASE_URL = "http://57.131.25.45";
 const STRATEGY_MAX_ITEMS = 25;
@@ -39,13 +38,14 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
     // This must be the FIRST step to prevent invalid workflows from proceeding
     const payload = await context.run("validate-payload", async () => {
       if (!context.requestPayload) {
-        log.error(LOG_SOURCE, "sourcing.missing_payload", {});
+        log.error("sourcing.missing_payload", { source });
         return null;
       }
 
       const { searchId, rawText, criteria, strategyIdsToRun } = context.requestPayload;
       if (!searchId || !rawText || !criteria) {
-        log.error(LOG_SOURCE, "sourcing.invalid_payload", {
+        log.error("sourcing.invalid_payload", {
+          source,
           hasSearchId: Boolean(searchId),
           hasRawText: Boolean(rawText),
           hasCriteria: Boolean(criteria),
@@ -54,7 +54,8 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
       }
 
       // Log workflow start (key milestone)
-      log.info(LOG_SOURCE, "sourcing.started", {
+      log.info("sourcing.started", {
+        source,
         searchId,
         isContinuation: Boolean(strategyIdsToRun?.length),
         strategyCount: strategyIdsToRun?.length ?? 0,
@@ -153,7 +154,7 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
       
       if (allGeneratedStrategies.length === 0) {
          // Fallback if IDs were invalid (shouldn't happen if logic is correct)
-         log.warn(LOG_SOURCE, "sourcing.no_strategies_found", { searchId });
+         log.warn("sourcing.no_strategies_found", { source, searchId });
       } else {
          await realtime.channel(channel).emit( "status.updated", {
           status: "processing",
@@ -193,7 +194,8 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
           await realtime.channel(channel).emit( "search.failed", {
             error: `Strategy generation failed: ${generateResponse.status}`
           });
-          log.error(LOG_SOURCE, "sourcing.strategy_generation_failed", {
+          log.error("sourcing.strategy_generation_failed", {
+            source,
             searchId,
             status: generateResponse.status,
           });
@@ -224,7 +226,7 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
           await realtime.channel(channel).emit( "search.failed", {
             error: "Strategy generation response invalid"
           });
-          log.error(LOG_SOURCE, "sourcing.strategy_schema_error", { searchId, error });
+          log.error("sourcing.strategy_schema_error", { source, searchId, error });
         });
         return { success: false, error: "Strategy generation response invalid" };
       }
@@ -266,7 +268,8 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
     const executedStrategyIds = strategiesToExecute.map((s) => s.id);
 
     // Log strategy count (useful for debugging)
-    log.info(LOG_SOURCE, "sourcing.strategies_ready", {
+    log.info("sourcing.strategies_ready", {
+      source,
       searchId,
       totalStrategies: allGeneratedStrategies.length,
       toExecute: strategiesToExecute.length,
@@ -346,7 +349,8 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
         await realtime.channel(channel).emit( "search.failed", {
           error: `Strategy execution failed: ${executeResponse.status}`
         });
-        log.error(LOG_SOURCE, "Strategy execution failed", {
+        log.error("Strategy execution failed", {
+          source,
           status: executeResponse.status,
         });
       });
@@ -380,14 +384,15 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
         await realtime.channel(channel).emit( "search.failed", {
           error: "Strategy execution response invalid"
         });
-        log.error(LOG_SOURCE, "Strategy execution schema validation failed", { error });
+        log.error("Strategy execution schema validation failed", { source, error });
       });
       return { success: false, error: "Strategy execution response invalid" };
     }
 
     const taskId = executeData.task_id;
 
-    log.info(LOG_SOURCE, "sourcing.execution_started", {
+    log.info("sourcing.execution_started", {
+      source,
       searchId,
       taskId,
       strategiesLaunched: executeData.strategies_launched,
@@ -445,7 +450,8 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
       if (pollResponse.status !== 200) {
         // Only log client errors (4xx) as they indicate a real problem
         if (pollResponse.status >= 400 && pollResponse.status < 500) {
-          log.error(LOG_SOURCE, "sourcing.poll_error", {
+          log.error("sourcing.poll_error", {
+            source,
             searchId,
             pollCount,
             status: pollResponse.status,
@@ -470,7 +476,7 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
         pollData = strategyResultsResponseSchema.parse(pollResponse.body);
       } catch (error) {
          // Schema errors are rare and worth logging
-         log.error(LOG_SOURCE, "sourcing.poll_schema_error", { searchId, pollCount, error });
+         log.error("sourcing.poll_schema_error", { source, searchId, pollCount, error });
          continue;
       }
 
@@ -603,13 +609,14 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
         });
 
         // Single completion log with all relevant data
-        log.info(LOG_SOURCE, "sourcing.completed", {
+        log.info("sourcing.completed", {
+          source,
           searchId,
           candidateCount: candidatesData.length,
           strategyCount: executedStrategyIds.length,
         });
       } catch (error) {
-        log.error(LOG_SOURCE, "sourcing.finalize_error", { searchId, error });
+        log.error("sourcing.finalize_error", { source, searchId, error });
       }
     });
 
@@ -630,7 +637,8 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
             body: JSON.stringify({ searchId }),
           });
           if (!scoringModelRes.ok) {
-            log.error(LOG_SOURCE, "sourcing.scoring_model_failed", {
+            log.error("sourcing.scoring_model_failed", {
+              source,
               searchId,
               status: scoringModelRes.status,
             });
@@ -650,7 +658,7 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
             },
           });
         } catch (error) {
-          log.error(LOG_SOURCE, "sourcing.scoring_trigger_failed", { searchId, error });
+          log.error("sourcing.scoring_trigger_failed", { source, searchId, error });
           // Don't throw - sourcing is complete, scoring failure shouldn't affect that
           await realtime.channel(channel).emit("scoring.failed", {
             error: error instanceof Error ? error.message : "Unknown error",
@@ -683,7 +691,8 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
       const channel = `search:${searchId}`;
 
       // Log workflow failure (critical event)
-      log.error(LOG_SOURCE, "sourcing.workflow_failed", {
+      log.error("sourcing.workflow_failed", {
+        source,
         searchId: searchId ?? "unknown",
         status: failureData.failStatus,
         error: failureData.failResponse,
@@ -702,7 +711,7 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
           });
         }
       } catch (e) {
-        log.error(LOG_SOURCE, "sourcing.status_update_failed", { searchId, error: e });
+        log.error("sourcing.status_update_failed", { source, searchId, error: e });
       }
 
       return `Workflow failed with status ${failureData.failStatus}`;

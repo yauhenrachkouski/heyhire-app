@@ -1,8 +1,8 @@
 'use client'
 
-import { log } from "@/lib/axiom/client-log";
+import { log } from "@/lib/axiom/client";
 
-const LOG_SOURCE = "components/account/profile-form";
+const source = "components/account/profile-form";
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
@@ -66,7 +66,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
         toast.error(result.error || 'Failed to update profile')
       }
     } catch (err) {
-      log.error(LOG_SOURCE, "Profile update error", { error: err })
+      log.error("Profile update error", { source, error: err })
       toast.error('Failed to update profile')
     } finally {
       setIsLoading(false)
@@ -116,7 +116,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
         toast.error(result.error || 'Failed to upload avatar')
       }
     } catch (err) {
-      log.error(LOG_SOURCE, "Avatar upload error", { error: err })
+      log.error("Avatar upload error", { source, error: err })
       toast.error('Failed to upload avatar')
     } finally {
       setIsUploadingAvatar(false)
@@ -149,7 +149,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
         toast.error(result.error || 'Failed to remove avatar')
       }
     } catch (err) {
-      log.error(LOG_SOURCE, "Avatar removal error", { error: err })
+      log.error("Avatar removal error", { source, error: err })
       toast.error('Failed to remove avatar')
     } finally {
       setIsUploadingAvatar(false)
