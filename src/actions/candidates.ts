@@ -5,7 +5,7 @@ import { log } from "@/lib/axiom/server";
 const source = "actions/candidates";
 
 import { db } from "@/db/drizzle";
-import { candidates, searchCandidates, search, searchCandidateStrategies, sourcingStrategies, creditTransactions } from "@/db/schema";
+import { candidates, searchCandidates, search, searchCandidateStrategies, sourcingStrategies, creditTransactions, candidateContacts } from "@/db/schema";
 import { eq, and, gte, lte, inArray, count, desc, asc, sql } from "drizzle-orm";
 import { generateId } from "@/lib/id";
 import type { CandidateProfile } from "@/types/search";
@@ -412,17 +412,37 @@ export async function getSearchCandidateById(searchCandidateId: string) {
     
     // Check if credits were already consumed for this candidate by this organization
     let isRevealed = false;
+    let isContactRevealed = false;
+    let revealedEmail: string | null = null;
+    let revealedPhone: string | null = null;
+
     if (result.search?.organizationId) {
-      const existingTransaction = await db.query.creditTransactions.findFirst({
-        where: and(
-          eq(creditTransactions.organizationId, result.search.organizationId),
-          eq(creditTransactions.relatedEntityId, result.candidateId),
-          eq(creditTransactions.creditType, CREDIT_TYPES.GENERAL),
-          eq(creditTransactions.type, "consumption"),
-          eq(creditTransactions.description, LINKEDIN_OPEN_DESCRIPTION)
-        ),
-      });
+      // Fetch LinkedIn reveal and contact reveal in parallel
+      const [existingTransaction, existingContact] = await Promise.all([
+        db.query.creditTransactions.findFirst({
+          where: and(
+            eq(creditTransactions.organizationId, result.search.organizationId),
+            eq(creditTransactions.relatedEntityId, result.candidateId),
+            eq(creditTransactions.creditType, CREDIT_TYPES.LINKEDIN_REVEAL),
+            eq(creditTransactions.type, "consumption"),
+            eq(creditTransactions.description, LINKEDIN_OPEN_DESCRIPTION)
+          ),
+        }),
+        db.query.candidateContacts.findFirst({
+          where: and(
+            eq(candidateContacts.organizationId, result.search.organizationId),
+            eq(candidateContacts.candidateId, result.candidateId),
+          ),
+          columns: {
+            email: true,
+            phone: true,
+          },
+        }),
+      ]);
       isRevealed = !!existingTransaction;
+      isContactRevealed = !!existingContact;
+      revealedEmail = existingContact?.email ?? null;
+      revealedPhone = existingContact?.phone ?? null;
     }
 
     // Don't parse JSON - the component will handle it with safeJsonParse
@@ -437,7 +457,10 @@ export async function getSearchCandidateById(searchCandidateId: string) {
       data: {
         ...result,
         candidate: transformedCandidate,
-        isRevealed
+        isRevealed,
+        isContactRevealed,
+        revealedEmail,
+        revealedPhone,
       }
     };
   } catch (error) {
@@ -625,30 +648,55 @@ export async function getCandidatesForSearch(
     // Fetch revealed candidate IDs ONLY for the candidates on this page (keeps this fast without extra indexing)
     const candidateIdsOnPage = pageResults.map((r) => r.candidateId);
     const revealedCandidateIds = new Set<string>();
+    const revealedContacts = new Map<string, { email: string | null; phone: string | null }>();
 
     if (candidateIdsOnPage.length > 0) {
-      const revealedTransactions = await db.query.creditTransactions.findMany({
-        where: and(
-          eq(creditTransactions.organizationId, activeOrgId),
-          eq(creditTransactions.creditType, CREDIT_TYPES.GENERAL),
-          eq(creditTransactions.type, "consumption"),
-          eq(creditTransactions.description, LINKEDIN_OPEN_DESCRIPTION),
-          inArray(creditTransactions.relatedEntityId, candidateIdsOnPage),
-        ),
-        columns: {
-          relatedEntityId: true,
-        },
-      });
+      // Fetch LinkedIn reveals and contact reveals in parallel
+      const [revealedTransactions, contactRecords] = await Promise.all([
+        db.query.creditTransactions.findMany({
+          where: and(
+            eq(creditTransactions.organizationId, activeOrgId),
+            eq(creditTransactions.creditType, CREDIT_TYPES.LINKEDIN_REVEAL),
+            eq(creditTransactions.type, "consumption"),
+            eq(creditTransactions.description, LINKEDIN_OPEN_DESCRIPTION),
+            inArray(creditTransactions.relatedEntityId, candidateIdsOnPage),
+          ),
+          columns: {
+            relatedEntityId: true,
+          },
+        }),
+        db.query.candidateContacts.findMany({
+          where: and(
+            eq(candidateContacts.organizationId, activeOrgId),
+            inArray(candidateContacts.candidateId, candidateIdsOnPage),
+          ),
+          columns: {
+            candidateId: true,
+            email: true,
+            phone: true,
+          },
+        }),
+      ]);
 
       for (const t of revealedTransactions) {
         if (t.relatedEntityId) revealedCandidateIds.add(t.relatedEntityId);
       }
+
+      for (const c of contactRecords) {
+        revealedContacts.set(c.candidateId, { email: c.email, phone: c.phone });
+      }
     }
 
-    const enrichedResults = pageResults.map((result) => ({
-      ...result,
-      isRevealed: revealedCandidateIds.has(result.candidateId),
-    }));
+    const enrichedResults = pageResults.map((result) => {
+      const contact = revealedContacts.get(result.candidateId);
+      return {
+        ...result,
+        isRevealed: revealedCandidateIds.has(result.candidateId),
+        isContactRevealed: !!contact,
+        revealedEmail: contact?.email ?? null,
+        revealedPhone: contact?.phone ?? null,
+      };
+    });
 
     const last = enrichedResults[enrichedResults.length - 1];
     let nextCursor: string | null = null;
@@ -728,30 +776,55 @@ export async function getCandidatesForSearch(
   // Fetch revealed candidate IDs ONLY for the candidates on this page (keeps this fast without extra indexing)
   const candidateIdsOnPage = results.map((r) => r.candidateId);
   const revealedCandidateIds = new Set<string>();
+  const revealedContacts = new Map<string, { email: string | null; phone: string | null }>();
 
   if (candidateIdsOnPage.length > 0) {
-    const revealedTransactions = await db.query.creditTransactions.findMany({
-      where: and(
-        eq(creditTransactions.organizationId, activeOrgId),
-        eq(creditTransactions.creditType, CREDIT_TYPES.GENERAL),
-        eq(creditTransactions.type, "consumption"),
-        eq(creditTransactions.description, LINKEDIN_OPEN_DESCRIPTION),
-        inArray(creditTransactions.relatedEntityId, candidateIdsOnPage)
-      ),
-      columns: {
-        relatedEntityId: true,
-      },
-    });
+    // Fetch LinkedIn reveals and contact reveals in parallel
+    const [revealedTransactions, contactRecords] = await Promise.all([
+      db.query.creditTransactions.findMany({
+        where: and(
+          eq(creditTransactions.organizationId, activeOrgId),
+          eq(creditTransactions.creditType, CREDIT_TYPES.LINKEDIN_REVEAL),
+          eq(creditTransactions.type, "consumption"),
+          eq(creditTransactions.description, LINKEDIN_OPEN_DESCRIPTION),
+          inArray(creditTransactions.relatedEntityId, candidateIdsOnPage)
+        ),
+        columns: {
+          relatedEntityId: true,
+        },
+      }),
+      db.query.candidateContacts.findMany({
+        where: and(
+          eq(candidateContacts.organizationId, activeOrgId),
+          inArray(candidateContacts.candidateId, candidateIdsOnPage),
+        ),
+        columns: {
+          candidateId: true,
+          email: true,
+          phone: true,
+        },
+      }),
+    ]);
 
     for (const t of revealedTransactions) {
       if (t.relatedEntityId) revealedCandidateIds.add(t.relatedEntityId);
     }
+
+    for (const c of contactRecords) {
+      revealedContacts.set(c.candidateId, { email: c.email, phone: c.phone });
+    }
   }
 
-  const enrichedResults = results.map(result => ({
-    ...result,
-    isRevealed: revealedCandidateIds.has(result.candidateId)
-  }));
+  const enrichedResults = results.map((result) => {
+    const contact = revealedContacts.get(result.candidateId);
+    return {
+      ...result,
+      isRevealed: revealedCandidateIds.has(result.candidateId),
+      isContactRevealed: !!contact,
+      revealedEmail: contact?.email ?? null,
+      revealedPhone: contact?.phone ?? null,
+    };
+  });
 
   log.info("candidates_fetch.completed", { userId, organizationId: activeOrgId, source, searchId, count: enrichedResults.length, total });
 

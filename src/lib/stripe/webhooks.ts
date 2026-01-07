@@ -545,6 +545,7 @@ async function getOrgOwnerId(organizationId: string): Promise<string | null> {
 
 /**
  * Grant credits with transaction for monthly reset
+ * Creates two transactions: burn out remaining credits, then grant full plan amount
  */
 async function grantPlanCreditsWithTransaction(
     organizationId: string,
@@ -554,8 +555,10 @@ async function grantPlanCreditsWithTransaction(
     event: Stripe.Event,
     creditsOverride?: number
 ) {
-    const creditsToGrant = creditsOverride ?? getPlanCreditAllocation(plan, CREDIT_TYPES.CONTACT_LOOKUP);
+    const creditsToGrant = creditsOverride ?? getPlanCreditAllocation(plan);
     if (creditsToGrant <= 0) return;
+
+    let burnedCredits = 0;
 
     await db.transaction(async (tx) => {
         const org = await tx.query.organization.findFirst({
@@ -564,8 +567,31 @@ async function grantPlanCreditsWithTransaction(
         });
 
         const balanceBefore = org?.credits ?? 0;
+        burnedCredits = balanceBefore;
 
-        // Monthly reset - set to plan amount, don't add
+        // Transaction 1: Burn out remaining credits if any
+        if (balanceBefore > 0) {
+            await tx.insert(creditTransactions).values({
+                id: generateId(),
+                organizationId,
+                userId,
+                type: "subscription_grant",
+                creditType: CREDIT_TYPES.GENERAL,
+                amount: -balanceBefore,
+                balanceBefore,
+                balanceAfter: 0,
+                relatedEntityId: subscriptionId,
+                description: `Period reset: ${balanceBefore} unused credits expired`,
+                metadata: JSON.stringify({
+                    plan,
+                    reason: "period_reset_burn",
+                    stripeEventId: event.id,
+                    stripeEventType: event.type,
+                }),
+            });
+        }
+
+        // Transaction 2: Grant full plan credits
         await tx
             .update(organization)
             .set({ credits: creditsToGrant })
@@ -576,19 +602,20 @@ async function grantPlanCreditsWithTransaction(
             organizationId,
             userId,
             type: "subscription_grant",
-            creditType: CREDIT_TYPES.CONTACT_LOOKUP,
-            amount: creditsToGrant - balanceBefore, // Delta
-            balanceBefore,
+            creditType: CREDIT_TYPES.GENERAL,
+            amount: creditsToGrant,
+            balanceBefore: 0,
             balanceAfter: creditsToGrant,
             relatedEntityId: subscriptionId,
-            description: `Monthly reset: ${creditsToGrant} credits for ${plan} plan`,
+            description: `Monthly allocation: ${creditsToGrant} credits for ${plan} plan`,
             metadata: JSON.stringify({
                 plan,
+                reason: "period_reset_grant",
                 stripeEventId: event.id,
                 stripeEventType: event.type,
             }),
         });
     });
 
-    log.info("credits.granted", { source, organizationId, plan, credits: creditsToGrant });
+    log.info("credits.granted", { source, organizationId, plan, credits: creditsToGrant, burnedOut: burnedCredits });
 }

@@ -5,8 +5,8 @@ import { log } from "@/lib/axiom/server";
 const source = "actions/credits";
 
 import { db } from "@/db/drizzle";
-import { organization, creditTransactions } from "@/db/schema";
-import { eq, and, gte, lte, sql } from "drizzle-orm";
+import { organization, creditTransactions, user } from "@/db/schema";
+import { eq, and, gte, lte, sql, desc } from "drizzle-orm";
 import { generateId } from "@/lib/id";
 import { getSessionWithOrg } from "@/lib/auth-helpers";
 import { trackServerEvent } from "@/lib/posthog/track";
@@ -196,4 +196,72 @@ export async function deductCredits(
   }
 }
 
+export type CreditTransaction = {
+  id: string;
+  type: "subscription_grant" | "manual_grant" | "purchase" | "consumption";
+  creditType: "general" | "linkedin_reveal" | "email_reveal" | "phone_reveal";
+  amount: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  description: string;
+  createdAt: Date;
+  userName: string | null;
+};
 
+/**
+ * Get credit transactions for an organization with pagination
+ */
+export async function getCreditTransactions(params: {
+  limit?: number;
+  offset?: number;
+}): Promise<{ transactions: CreditTransaction[]; total: number; error: string | null }> {
+  const { limit = 20, offset = 0 } = params;
+
+  try {
+    const { activeOrgId } = await getSessionWithOrg();
+
+    if (!activeOrgId) {
+      return { transactions: [], total: 0, error: "No active organization" };
+    }
+
+    // Get transactions with user info
+    const transactions = await db
+      .select({
+        id: creditTransactions.id,
+        type: creditTransactions.type,
+        creditType: creditTransactions.creditType,
+        amount: creditTransactions.amount,
+        balanceBefore: creditTransactions.balanceBefore,
+        balanceAfter: creditTransactions.balanceAfter,
+        description: creditTransactions.description,
+        createdAt: creditTransactions.createdAt,
+        userName: user.name,
+      })
+      .from(creditTransactions)
+      .leftJoin(user, eq(creditTransactions.userId, user.id))
+      .where(eq(creditTransactions.organizationId, activeOrgId))
+      .orderBy(desc(creditTransactions.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    // Get total count
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(creditTransactions)
+      .where(eq(creditTransactions.organizationId, activeOrgId));
+
+    const total = Number(countResult[0]?.count ?? 0);
+
+    return { transactions, total, error: null };
+  } catch (error) {
+    log.error("get_credit_transactions.error", {
+      source,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return {
+      transactions: [],
+      total: 0,
+      error: error instanceof Error ? error.message : "Failed to fetch transactions",
+    };
+  }
+}

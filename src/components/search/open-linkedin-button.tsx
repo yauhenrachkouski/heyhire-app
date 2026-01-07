@@ -74,7 +74,7 @@ export function OpenLinkedInButton({
             ) : revealed ? (
               <IconExternalLink className="h-4 w-4" />
             ) : (
-              <IconCoin className="h-4 w-4" />
+              <IconExternalLink className="h-4 w-4" />
             )}
             <span>Open LinkedIn</span>
           </Button>

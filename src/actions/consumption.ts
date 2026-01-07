@@ -25,7 +25,7 @@ export async function consumeCreditsForLinkedInOpen(params: {
         where: and(
           eq(creditTransactions.organizationId, activeOrgId),
           eq(creditTransactions.relatedEntityId, candidateId),
-          eq(creditTransactions.creditType, CREDIT_TYPES.GENERAL),
+          eq(creditTransactions.creditType, CREDIT_TYPES.LINKEDIN_REVEAL),
           eq(creditTransactions.type, "consumption"),
           eq(creditTransactions.description, LINKEDIN_OPEN_DESCRIPTION)
         ),
@@ -40,7 +40,7 @@ export async function consumeCreditsForLinkedInOpen(params: {
         organizationId: activeOrgId,
         userId,
         amount: 1,
-        creditType: CREDIT_TYPES.GENERAL,
+        creditType: CREDIT_TYPES.LINKEDIN_REVEAL,
         relatedEntityId: candidateId,
         description: LINKEDIN_OPEN_DESCRIPTION,
         metadata: { linkedinUrl },
@@ -54,7 +54,7 @@ export async function consumeCreditsForLinkedInOpen(params: {
         action: "linkedin_profile_opened",
         candidate_id: candidateId,
         linkedin_url: linkedinUrl,
-        credit_type: CREDIT_TYPES.GENERAL,
+        credit_type: CREDIT_TYPES.LINKEDIN_REVEAL,
         credit_amount: 1,
         credit_transaction_id: result.transaction?.id,
         credits_before: result.transaction?.balanceBefore,

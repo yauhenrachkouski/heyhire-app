@@ -6,7 +6,7 @@ export const candidateStatusEnum = pgEnum('candidate_status', ['new', 'reviewing
 
 // Enums for credits system
 export const transactionTypeEnum = pgEnum('transaction_type', ['subscription_grant', 'manual_grant', 'purchase', 'consumption']);
-export const creditTypeEnum = pgEnum('credit_type', ['contact_lookup', 'export', 'general']);
+export const creditTypeEnum = pgEnum('credit_type', ['general', 'linkedin_reveal', 'email_reveal', 'phone_reveal']);
 
 // Enums for sourcing strategies
 export const strategyStatusEnum = pgEnum('strategy_status', ['pending', 'executing', 'polling', 'completed', 'error']);
@@ -324,6 +324,45 @@ export const searchCandidateStrategies = pgTable("search_candidate_strategies", 
   strategyIdx: index("search_candidate_strategies_strategy_idx").on(table.strategyId),
 }));
 
+// Candidate contacts revealed via Findymail API - per organization
+export const candidateContacts = pgTable("candidate_contacts", {
+  id: text("id").primaryKey(),
+  candidateId: text("candidate_id")
+    .notNull()
+    .references(() => candidates.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  // Revealed by which user
+  revealedByUserId: text("revealed_by_user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  // Contact data from Findymail
+  email: text("email"),
+  phone: text("phone"),
+  // Findymail response metadata
+  findymailId: text("findymail_id"),
+  findymailConfidence: integer("findymail_confidence"), // 0-100
+  findymailSource: text("findymail_source"), // e.g., 'verified', 'pattern', etc.
+  // Raw API response for debugging
+  rawResponse: text("raw_response"), // JSON
+  // Credit transaction reference
+  creditTransactionId: text("credit_transaction_id")
+    .references(() => creditTransactions.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+}, (table) => ({
+  // Unique contact per candidate per organization
+  uniqueCandidateOrg: unique().on(table.candidateId, table.organizationId),
+  // Index for fetching contacts by organization
+  organizationIdx: index("candidate_contacts_organization_idx").on(table.organizationId),
+  // Index for fetching contacts by candidate
+  candidateIdx: index("candidate_contacts_candidate_idx").on(table.candidateId),
+}));
+
 // Relations for Better Auth
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
@@ -420,5 +459,24 @@ export const creditTransactionsRelations = relations(creditTransactions, ({ one 
   user: one(user, {
     fields: [creditTransactions.userId],
     references: [user.id],
+  }),
+}));
+
+export const candidateContactsRelations = relations(candidateContacts, ({ one }) => ({
+  candidate: one(candidates, {
+    fields: [candidateContacts.candidateId],
+    references: [candidates.id],
+  }),
+  organization: one(organization, {
+    fields: [candidateContacts.organizationId],
+    references: [organization.id],
+  }),
+  revealedByUser: one(user, {
+    fields: [candidateContacts.revealedByUserId],
+    references: [user.id],
+  }),
+  creditTransaction: one(creditTransactions, {
+    fields: [candidateContacts.creditTransactionId],
+    references: [creditTransactions.id],
   }),
 }));

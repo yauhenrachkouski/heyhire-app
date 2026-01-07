@@ -19,7 +19,6 @@ export async function getTrialWarning(subscription: any, organizationId: string)
     organizationId,
     startDate: new Date(start),
     endDate: new Date(end),
-    creditType: "contact_lookup",
   })
 
   if (result.error) return null

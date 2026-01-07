@@ -77,7 +77,7 @@ export default async function BillingPage() {
   return (
     <>
       <SettingsPageHeader
-        title="Billing"
+        title="Billing & Plan"
         description="Manage your subscription and billing"
       />
 

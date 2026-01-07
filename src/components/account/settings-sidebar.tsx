@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { IconCreditCard, IconSettings, IconUser } from "@tabler/icons-react"
+import { IconCreditCard, IconSettings, IconUser, IconHistory } from "@tabler/icons-react"
 
 import { buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -10,7 +10,8 @@ import { cn } from "@/lib/utils"
 const navItems = [
   { title: "Account", href: "/account", icon: IconUser },
   { title: "Organization", href: "/organization", icon: IconSettings },
-  { title: "Billing", href: "/billing", icon: IconCreditCard },
+  { title: "Billing & Plan", href: "/billing", icon: IconCreditCard },
+  { title: "Usage History", href: "/usage", icon: IconHistory },
 ]
 
 export function SettingsSidebar() {

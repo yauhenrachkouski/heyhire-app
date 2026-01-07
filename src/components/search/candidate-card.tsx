@@ -317,6 +317,9 @@ interface SearchCandidate {
   notes: string | null;
   scoringResult?: string | null;
   isRevealed?: boolean;
+  isContactRevealed?: boolean;
+  revealedEmail?: string | null;
+  revealedPhone?: string | null;
 }
 
 interface CandidateCardProps {

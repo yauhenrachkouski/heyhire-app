@@ -99,7 +99,7 @@ async function revokeOrgCreditsToZero(params: {
          organizationId: params.referenceId,
          userId: ownerId,
          type: "subscription_grant",
-         creditType: CREDIT_TYPES.CONTACT_LOOKUP,
+         creditType: CREDIT_TYPES.GENERAL,
          amount: -balanceBefore,
          balanceBefore,
          balanceAfter: 0,
@@ -146,7 +146,7 @@ async function grantPlanCreditsToLimit(params: {
    const ownerId = owner?.userId;
    if (!ownerId) return;
 
-   const creditsToGrant = getPlanCreditAllocation(params.plan, CREDIT_TYPES.CONTACT_LOOKUP);
+   const creditsToGrant = getPlanCreditAllocation(params.plan);
    if (creditsToGrant <= 0) return;
 
    await db.transaction(async (tx) => {
@@ -156,6 +156,29 @@ async function grantPlanCreditsToLimit(params: {
       });
 
       const balanceBefore = org?.credits ?? 0;
+
+      // Transaction 1: Burn out remaining credits if any
+      if (balanceBefore > 0) {
+         await tx.insert(schema.creditTransactions).values({
+            id: generateId(),
+            organizationId: params.referenceId,
+            userId: ownerId,
+            type: "subscription_grant",
+            creditType: CREDIT_TYPES.GENERAL,
+            amount: -balanceBefore,
+            balanceBefore,
+            balanceAfter: 0,
+            relatedEntityId: params.internalSubscriptionId,
+            description: `Period reset: ${balanceBefore} unused credits expired`,
+            metadata: JSON.stringify({
+               reason: "period_reset_burn",
+               stripeEventId: params.stripeEventId,
+               subscriptionId: params.internalSubscriptionId,
+            }),
+         });
+      }
+
+      // Transaction 2: Grant full plan credits
       await tx
          .update(schema.organization)
          .set({ credits: creditsToGrant })
@@ -166,14 +189,14 @@ async function grantPlanCreditsToLimit(params: {
          organizationId: params.referenceId,
          userId: ownerId,
          type: "subscription_grant",
-         creditType: CREDIT_TYPES.CONTACT_LOOKUP,
-         amount: creditsToGrant - balanceBefore,
-         balanceBefore,
+         creditType: CREDIT_TYPES.GENERAL,
+         amount: creditsToGrant,
+         balanceBefore: 0,
          balanceAfter: creditsToGrant,
          relatedEntityId: params.internalSubscriptionId,
-         description: `Plan reset: ${creditsToGrant} credits for ${params.plan} plan`,
+         description: `Plan allocation: ${creditsToGrant} credits for ${params.plan} plan`,
          metadata: JSON.stringify({
-            reason: params.type,
+            reason: "period_reset_grant",
             stripeEventId: params.stripeEventId,
             subscriptionId: params.internalSubscriptionId,
          }),
@@ -425,7 +448,7 @@ export const auth = betterAuth({
                         const ownerId = owner?.userId;
                         if (!ownerId) return;
 
-                        const creditsToGrant = getTrialCreditAllocation("pro", CREDIT_TYPES.CONTACT_LOOKUP);
+                        const creditsToGrant = getTrialCreditAllocation("pro");
                         if (creditsToGrant <= 0) return;
 
                         await db.transaction(async (tx) => {
@@ -445,7 +468,7 @@ export const auth = betterAuth({
                               organizationId: referenceId,
                               userId: ownerId,
                               type: "subscription_grant",
-                              creditType: CREDIT_TYPES.CONTACT_LOOKUP,
+                              creditType: CREDIT_TYPES.GENERAL,
                               amount: creditsToGrant - balanceBefore,
                               balanceBefore,
                               balanceAfter: creditsToGrant,

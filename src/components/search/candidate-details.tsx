@@ -30,6 +30,7 @@ import { formatDate, calculateDuration, cn } from "@/lib/utils";
 import { SourcingCriteria } from "@/types/search";
 import { CriteriaBadge } from "./criteria-badge";
 import { OpenLinkedInButton } from "./open-linkedin-button";
+import { RevealEmailButton, RevealPhoneButton } from "./reveal-contact-button";
 
 function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
   if (!raw) return fallback;
@@ -68,6 +69,9 @@ interface SearchCandidate {
   notes: string | null;
   scoringResult?: string | null;
   isRevealed?: boolean;
+  isContactRevealed?: boolean;
+  revealedEmail?: string | null;
+  revealedPhone?: string | null;
 }
 
 interface CandidateDetailsProps {
@@ -692,7 +696,7 @@ export function CandidateDetails({ searchCandidate, onClose, sourcingCriteria }:
   // Now check for early return after all hooks
   if (!searchCandidate) return null;
 
-  const { candidate, matchScore, scoringResult, isRevealed } = searchCandidate;
+  const { candidate, matchScore, scoringResult, isRevealed, isContactRevealed, revealedEmail, revealedPhone } = searchCandidate;
 
   // Extract name parts
   const fullName = candidate.fullName || "Unknown";
@@ -767,13 +771,31 @@ export function CandidateDetails({ searchCandidate, onClose, sourcingCriteria }:
               </div>
 
               {/* Action Buttons */}
-              <div className="flex flex-col gap-2">
-                <OpenLinkedInButton
-                  candidateId={candidate.id}
-                  searchCandidateId={searchCandidate.id}
-                  linkedinUrl={candidate.linkedinUrl}
-                  isRevealed={isRevealed}
-                />
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <OpenLinkedInButton
+                    candidateId={candidate.id}
+                    searchCandidateId={searchCandidate.id}
+                    linkedinUrl={candidate.linkedinUrl}
+                    isRevealed={isRevealed}
+                  />
+                </div>
+                <div className="flex-1">
+                  <RevealEmailButton
+                    candidateId={candidate.id}
+                    searchCandidateId={searchCandidate.id}
+                    revealedEmail={revealedEmail}
+                    variant="outline"
+                  />
+                </div>
+                <div className="flex-1">
+                  <RevealPhoneButton
+                    candidateId={candidate.id}
+                    searchCandidateId={searchCandidate.id}
+                    revealedPhone={revealedPhone}
+                    variant="outline"
+                  />
+                </div>
               </div>
 
               {/* <Separator /> */}
