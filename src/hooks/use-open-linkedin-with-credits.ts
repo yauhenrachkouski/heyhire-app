@@ -48,12 +48,7 @@ export function useOpenLinkedInWithCredits() {
           return result;
         }
 
-        // Track LinkedIn reveal - distinguish paid vs free (already revealed)
-        posthog.capture("linkedin_revealed", {
-          candidate_id: params.candidateId,
-          is_free: result.alreadyCharged === true,
-          cost_credits: result.alreadyCharged ? 0 : 1,
-        });
+        // Server tracks linkedin_revealed event with full context
 
         if (activeOrg?.id) {
           await queryClient.invalidateQueries({

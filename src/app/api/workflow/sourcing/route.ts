@@ -1,3 +1,6 @@
+export const runtime = 'nodejs';
+export const maxDuration = 60;
+
 import { serve } from "@upstash/workflow/nextjs";
 import type { WorkflowContext } from "@upstash/workflow";
 import { Client } from "@upstash/qstash";
@@ -7,6 +10,7 @@ import { eq, inArray } from "drizzle-orm";
 import { realtime } from "@/lib/realtime";
 import { generateId } from "@/lib/id";
 import { log, withAxiom } from "@/lib/axiom/server";
+import { getPostHogServer } from "@/lib/posthog/posthog-server";
 import {
   strategyGenerationResponseSchema,
   strategyExecutionResponseSchema,
@@ -661,6 +665,21 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
           candidateCount: candidatesData.length,
           strategyCount: executedStrategyIds.length,
         });
+
+        // Track sourcing completion for funnel analysis
+        if (userId) {
+          getPostHogServer().capture({
+            distinctId: userId,
+            event: "search_sourcing_completed",
+            ...(organizationId && { groups: { organization: organizationId } }),
+            properties: {
+              search_id: searchId,
+              candidate_count: candidatesData.length,
+              strategy_count: executedStrategyIds.length,
+            },
+          });
+        }
+       
       } catch (error) {
         log.error("sourcing.finalize_error", { userId, organizationId, source, searchId, error: error instanceof Error ? error.message : String(error) });
       }

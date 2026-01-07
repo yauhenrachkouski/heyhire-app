@@ -1,3 +1,6 @@
+export const runtime = 'nodejs';
+export const maxDuration = 60;
+
 import { withAxiom } from "@/lib/axiom/server";
 import { NextResponse } from "next/server";
 import { db } from "@/db/drizzle";

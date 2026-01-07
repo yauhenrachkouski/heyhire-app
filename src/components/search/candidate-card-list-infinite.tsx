@@ -104,7 +104,6 @@ export function CandidateCardListInfinite({
   const handleShowCandidate = useCallback((candidate: SearchCandidate) => {
     posthog.capture("candidate_details_viewed", {
       search_id: searchId,
-      organization_id: activeOrg?.id,
       candidate_id: candidate.candidate.id,
     });
     

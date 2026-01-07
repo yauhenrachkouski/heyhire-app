@@ -1,3 +1,6 @@
+export const runtime = 'nodejs';
+export const maxDuration = 60;
+
 import { Client } from "@upstash/qstash";
 import { db } from "@/db/drizzle";
 import { searchCandidates, search } from "@/db/schema";

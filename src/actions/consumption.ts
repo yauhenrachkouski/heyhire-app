@@ -50,12 +50,24 @@ export async function consumeCreditsForLinkedInOpen(params: {
         return { success: false, error: result.error || "Failed to consume credits" };
       }
 
+      // Track LinkedIn reveal for funnel analysis (consistent with contact_revealed pattern)
+      getPostHogServer().capture({
+        distinctId: userId,
+        event: "linkedin_revealed",
+        groups: { organization: activeOrgId },
+        properties: {
+          candidate_id: candidateId,
+          linkedin_url: linkedinUrl,
+          credit_cost: 1,
+        },
+      });
+
+      // Also track credits consumption for financial reporting
       getPostHogServer().capture({
         distinctId: userId,
         event: "credits_consumed",
         groups: { organization: activeOrgId },
         properties: {
-          organization_id: activeOrgId,
           action: "linkedin_profile_opened",
           candidate_id: candidateId,
           linkedin_url: linkedinUrl,

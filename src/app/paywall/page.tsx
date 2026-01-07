@@ -5,6 +5,7 @@ import Image from "next/image"
 import { SubscribeCardsServer, SubscribeHeader } from "@/components/subscribe/subscribe-cards"
 import { requireActiveSubscription } from "@/actions/stripe"
 import { getTrialEligibility } from "@/actions/subscription"
+import { getPostHogServer } from "@/lib/posthog/posthog-server"
 import heyhireLogo from "@/assets/heyhire_logo.svg"
 
 // Always render fresh, never cache the subscribe page
@@ -21,13 +22,24 @@ export default async function PaywallPage() {
 
   // Check if user already has an active subscription
   const { hasSubscription } = await requireActiveSubscription()
-  
+
   if (hasSubscription) {
     // User already has active subscription, redirect to app
     return redirect("/")
   }
 
   const { isTrialEligible } = await getTrialEligibility()
+
+  // Track paywall view for funnel analysis
+  const activeOrgId = session.session.activeOrganizationId
+  getPostHogServer().capture({
+    distinctId: session.user.id,
+    event: "paywall_viewed",
+    ...(activeOrgId && { groups: { organization: activeOrgId } }),
+    properties: {
+      is_trial_eligible: isTrialEligible,
+    },
+  })
 
   return (
     <div className="flex min-h-svh flex-col p-6 md:p-10">

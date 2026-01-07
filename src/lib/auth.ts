@@ -117,7 +117,6 @@ async function revokeOrgCreditsToZero(params: {
       event: params.type,
       groups: { organization: params.referenceId },
       properties: {
-         organization_id: params.referenceId,
          internal_subscription_id: params.internalSubscriptionId,
       },
    });
@@ -215,7 +214,6 @@ async function grantPlanCreditsToLimit(params: {
       event: params.type,
       groups: { organization: params.referenceId },
       properties: {
-         organization_id: params.referenceId,
          internal_subscription_id: params.internalSubscriptionId,
          plan: params.plan,
       },
@@ -316,7 +314,6 @@ export const auth = betterAuth({
                   event: "organization_created",
                   groups: { organization: organization.id },
                   properties: {
-                     organization_id: organization.id,
                      organization_name: organization.name,
                   },
                });
@@ -347,7 +344,6 @@ export const auth = betterAuth({
                   event: "invitation_sent",
                   groups: { organization: organization.id },
                   properties: {
-                     organization_id: organization.id,
                      invitation_id: invitation.id,
                      invited_email: invitation.email,
                      role: invitation.role,
@@ -380,7 +376,6 @@ export const auth = betterAuth({
                   event: "invitation_accepted",
                   groups: { organization: organization.id },
                   properties: {
-                     organization_id: organization.id,
                      invitation_id: invitation.id,
                      member_id: member.id,
                      role: member.role,
@@ -419,7 +414,6 @@ export const auth = betterAuth({
                   event: "invitation_rejected",
                   groups: { organization: organization.id },
                   properties: {
-                     organization_id: organization.id,
                      invitation_id: invitation.id,
                   },
                });
@@ -438,7 +432,6 @@ export const auth = betterAuth({
                   event: "invitation_canceled",
                   groups: { organization: organization.id },
                   properties: {
-                     organization_id: organization.id,
                      invitation_id: invitation.id,
                      invited_email: invitation.email,
                   },
@@ -577,7 +570,6 @@ export const auth = betterAuth({
                            event: "trial_started",
                            groups: { organization: referenceId },
                            properties: {
-                              organization_id: referenceId,
                               internal_subscription_id: subscription.id,
                               stripe_customer_id: subscription.stripeCustomerId,
                            },
@@ -724,7 +716,6 @@ export const auth = betterAuth({
                         event: "subscription_activated",
                         groups: { organization: referenceId },
                         properties: {
-                           organization_id: referenceId,
                            internal_subscription_id: subscription.id,
                            plan: subscription.plan,
                            stripe_subscription_id: subscription.stripeSubscriptionId,
@@ -751,7 +742,6 @@ export const auth = betterAuth({
                         event: "subscription_plan_changed",
                         groups: { organization: referenceId },
                         properties: {
-                           organization_id: referenceId,
                            internal_subscription_id: subscription.id,
                            from_price_id: previousItemPriceId,
                            to_price_id: currentItemPriceId,
@@ -820,7 +810,6 @@ export const auth = betterAuth({
                         event: "subscription_canceled",
                         groups: { organization: referenceId },
                         properties: {
-                           organization_id: referenceId,
                            internal_subscription_id: subscription.id,
                            stripe_subscription_id: subscription.stripeSubscriptionId,
                            plan: subscription.plan,

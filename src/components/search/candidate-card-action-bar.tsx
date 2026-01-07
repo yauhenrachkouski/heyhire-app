@@ -76,7 +76,6 @@ export function CandidateCardActionBar({
 
     posthog.capture("candidates_exported", {
       search_id: searchId,
-      organization_id: organizationId,
       candidate_count: selectedIds.length,
       export_format: "csv",
     });
@@ -89,20 +88,18 @@ export function CandidateCardActionBar({
   const handleSelectAllClick = React.useCallback(() => {
     posthog.capture("candidates_select_all", {
       search_id: searchId,
-      organization_id: organizationId,
       previously_selected_count: selectedIds.length,
     });
     onSelectAll?.();
-  }, [onSelectAll, selectedIds.length, searchId, organizationId]);
+  }, [onSelectAll, selectedIds.length, searchId]);
 
   const handleClearSelectionClick = React.useCallback(() => {
     posthog.capture("candidates_deselect_all", {
       search_id: searchId,
-      organization_id: organizationId,
       deselected_count: selectedIds.length,
     });
     onClearSelection();
-  }, [onClearSelection, selectedIds.length, searchId, organizationId]);
+  }, [onClearSelection, selectedIds.length, searchId]);
 
   const mockTable = {
     getFilteredSelectedRowModel: () => ({

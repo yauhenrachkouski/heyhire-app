@@ -10,6 +10,7 @@ import { subscription, useActiveOrganization } from "@/lib/auth-client"
 import { getActiveOrgId } from "@/lib/auth-helpers"
 import { toast } from "sonner"
 import type { PlanId } from "@/types/plans"
+import posthog from "posthog-js"
 
 interface SubscribeCheckoutButtonProps {
   plan: PlanId
@@ -95,6 +96,12 @@ export function SubscribeCheckoutButton({
               toast.error("Failed to start checkout. Please try again.")
               return
             }
+
+            // Track checkout initiated before redirecting to Stripe
+            // organization_id is already tracked via posthog.group() in UserContextProvider
+            posthog.capture("checkout_initiated", {
+              plan,
+            })
 
             window.location.href = session.url
           } catch (e) {

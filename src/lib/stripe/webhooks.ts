@@ -192,7 +192,6 @@ async function handleTrialWillEnd(ctx: WebhookContext) {
         event: "trial_will_end",
         groups: { organization: referenceId },
         properties: {
-            organization_id: referenceId,
             stripe_subscription_id: sub.id,
             trial_end: sub.trial_end,
         },
@@ -266,7 +265,6 @@ async function handleInvoiceUpcoming(ctx: WebhookContext) {
         event: "invoice_upcoming",
         groups: { organization: referenceId },
         properties: {
-            organization_id: referenceId,
             stripe_invoice_id: invoice.id,
             stripe_customer_id: invoice.customer as string,
             amount_due: (invoice as any).amount_due,
@@ -306,7 +304,6 @@ async function handleCustomerUpdated(ctx: WebhookContext) {
         event: "customer_updated",
         groups: { organization: referenceId },
         properties: {
-            organization_id: referenceId,
             stripe_customer_id: customer.id,
             email: customer.email,
         },
@@ -385,7 +382,6 @@ async function handleInvoicePaymentSucceeded(ctx: WebhookContext) {
             event: "credits_reset",
             groups: { organization: subscriptionRecord.referenceId },
             properties: {
-                organization_id: subscriptionRecord.referenceId,
                 internal_subscription_id: subscriptionRecord.id,
                 plan: subscriptionRecord.plan,
                 period_start: periodStartKey,
@@ -410,7 +406,6 @@ async function handleInvoicePaymentSucceeded(ctx: WebhookContext) {
             event: "subscription_invoice_paid",
             groups: { organization: subscriptionRecord.referenceId },
             properties: {
-                organization_id: subscriptionRecord.referenceId,
                 internal_subscription_id: subscriptionRecord.id,
                 plan: subscriptionRecord.plan,
                 stripe_invoice_id: invoice.id,
@@ -475,7 +470,6 @@ async function handleInvoicePaymentFailed(ctx: WebhookContext) {
                 event: "invoice_payment_failed",
                 groups: { organization: subscriptionRecord.referenceId },
                 properties: {
-                    organization_id: subscriptionRecord.referenceId,
                     internal_subscription_id: subscriptionRecord.id,
                     stripe_invoice_id: invoice.id,
                     stripe_subscription_id: invoiceSubscriptionId,
@@ -569,7 +563,6 @@ async function handlePaymentRiskEvent(ctx: WebhookContext) {
         event: "stripe_payment_risk_event",
         groups: { organization: referenceId },
         properties: {
-            organization_id: referenceId,
             stripe_charge_id: obj?.charge || obj?.id,
             stripe_customer_id: stripeCustomerId,
             amount: obj?.amount,

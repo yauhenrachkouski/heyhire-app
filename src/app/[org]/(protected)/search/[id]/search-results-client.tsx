@@ -471,7 +471,6 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
     if (result.success) {
       posthog.capture('search_name_updated', {
         search_id: search.id,
-        organization_id: activeOrg?.id,
         from_name: prevName,
         to_name: newName,
       });
@@ -734,7 +733,6 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
                   onScoreRangeChange={(min, max) => {
                     posthog.capture('search_filter_applied', {
                       search_id: search.id,
-                      organization_id: activeOrg?.id,
                       filter_type: 'score_range',
                       score_min: min,
                       score_max: max,
@@ -744,7 +742,6 @@ export function SearchResultsClient({ search, initialData, initialCandidateDetai
                   onSortChange={(sort) => {
                     posthog.capture('search_filter_applied', {
                       search_id: search.id,
-                      organization_id: activeOrg?.id,
                       filter_type: 'sort_by',
                       sort_by: sort,
                     });

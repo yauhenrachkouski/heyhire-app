@@ -72,7 +72,6 @@ export async function getCustomerPortalPaymentMethodSession() {
       event: "billing_portal_payment_method_session_created",
       groups: { organization: activeOrgId },
       properties: {
-        organization_id: activeOrgId,
         stripe_customer_id: orgSubscription.stripeCustomerId,
       },
     });
@@ -400,7 +399,6 @@ export async function startProBillingNow() {
       event: "trial_unlocked_now",
       groups: { organization: activeOrgId },
       properties: {
-        organization_id: activeOrgId,
         stripe_subscription_id: orgSubscription.stripeSubscriptionId,
       },
     });
@@ -455,7 +453,6 @@ export async function cancelSubscription() {
       event: "subscription_cancel_requested",
       groups: { organization: activeOrgId },
       properties: {
-        organization_id: activeOrgId,
         stripe_subscription_id: orgSubscription.stripeSubscriptionId,
       },
     });
@@ -541,7 +538,6 @@ export async function resumeSubscription() {
       event: "subscription_resume_requested",
       groups: { organization: activeOrgId },
       properties: {
-        organization_id: activeOrgId,
         stripe_subscription_id: orgSubscription.stripeSubscriptionId,
       },
     });
@@ -622,7 +618,6 @@ export async function setDefaultPaymentMethod(paymentMethodId: string) {
       event: "payment_method_set_default",
       groups: { organization: activeOrgId },
       properties: {
-        organization_id: activeOrgId,
         stripe_customer_id: orgSubscription.stripeCustomerId,
         payment_method_id: paymentMethodId,
       },
@@ -677,7 +672,6 @@ export async function removePaymentMethod(paymentMethodId: string) {
       event: "payment_method_removed",
       groups: { organization: activeOrgId },
       properties: {
-        organization_id: activeOrgId,
         stripe_customer_id: orgSubscription.stripeCustomerId,
         payment_method_id: paymentMethodId,
         was_default: currentDefaultId === paymentMethodId,

@@ -1,3 +1,6 @@
+export const runtime = 'nodejs';
+export const maxDuration = 60;
+
 import { db } from "@/db/drizzle";
 import { search, searchCandidates } from "@/db/schema";
 import { count, eq, sql } from "drizzle-orm";
@@ -7,6 +10,7 @@ import { Receiver } from "@upstash/qstash";
 import { jobParsingResponseV3Schema } from "@/types/search";
 import { generateId } from "@/lib/id";
 import { log, withAxiom } from "@/lib/axiom/server";
+import { getPostHogServer } from "@/lib/posthog/posthog-server";
 
 const source = "api/scoring/candidate";
 
@@ -104,6 +108,22 @@ export const POST = withAxiom(async (request: Request) => {
       if (total > 0 && scored + errors >= total) {
         // Log completion (this is a meaningful aggregate event)
         log.info("scoring.all_completed", { userId, organizationId, source, searchId, scored, errors });
+
+        // Track scoring completion for funnel analysis
+        if (userId) {
+          getPostHogServer().capture({
+            distinctId: userId,
+            event: "search_scoring_completed",
+            ...(organizationId && { groups: { organization: organizationId } }),
+            properties: {
+              search_id: validatedSearchId,
+              candidates_scored: scored,
+              scoring_errors: errors,
+              total_candidates: total,
+            },
+          });
+        }
+
         await realtime.channel(channel).emit("scoring.completed", {
           scored,
           errors,

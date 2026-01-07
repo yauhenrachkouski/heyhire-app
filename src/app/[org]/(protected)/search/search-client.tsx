@@ -106,9 +106,9 @@ export function SearchClient() {
       }
 
       if (source === "autorun") {
+        // organization_id is already tracked via posthog.group() in UserContextProvider
         posthog.capture('search_autorun_triggered', {
           search_id: searchId,
-          organization_id: activeOrg.id,
           query_text: queryText,
           query_text_length: queryText.length,
         });
@@ -134,7 +134,6 @@ export function SearchClient() {
 
       posthog.capture('search_created', {
         search_id: searchId,
-        organization_id: activeOrg.id,
         workflow_run_id: workflowResult.workflowRunId,
         source,
         query_text_length: queryText.length,
@@ -156,7 +155,6 @@ export function SearchClient() {
 
       posthog.capture('search_failed', {
         error_message: errorMessage,
-        organization_id: activeOrg?.id,
         query_text_length: queryText.length,
       });
 

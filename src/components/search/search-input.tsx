@@ -332,7 +332,6 @@ export function SearchInput({
         if (s.id !== id) return s;
         if (s.importance !== importance) {
           posthog.capture("search_criteria_importance_changed", {
-            organization_id: organizationId,
             criterion_id: s.id,
             category: s.category,
             value: s.value,

@@ -196,7 +196,6 @@ export async function revealCandidateContact(params: {
             event: "contact_revealed",
             groups: { organization: activeOrgId },
             properties: {
-              organization_id: activeOrgId,
               candidate_id: candidateId,
               type,
               had_email: !!existingContact.email,
@@ -295,7 +294,6 @@ export async function revealCandidateContact(params: {
           event: "contact_reveal_no_result",
           groups: { organization: activeOrgId },
           properties: {
-            organization_id: activeOrgId,
             candidate_id: candidateId,
             type,
             linkedin_url: candidate.linkedinUrl,
@@ -364,7 +362,6 @@ export async function revealCandidateContact(params: {
         event: "contact_revealed",
         groups: { organization: activeOrgId },
         properties: {
-          organization_id: activeOrgId,
           candidate_id: candidateId,
           type,
           got_email: !!email,

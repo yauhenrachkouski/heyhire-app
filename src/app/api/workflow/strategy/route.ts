@@ -1,3 +1,6 @@
+export const runtime = 'nodejs';
+export const maxDuration = 60;
+
 import { serve } from "@upstash/workflow/nextjs";
 import type { WorkflowContext } from "@upstash/workflow";
 import { db } from "@/db/drizzle";

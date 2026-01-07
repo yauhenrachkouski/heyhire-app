@@ -160,7 +160,6 @@ export async function deductCredits(
         event: "credits_exhausted",
         groups: { organization: organizationId },
         properties: {
-          organization_id: organizationId,
           credit_type: creditType,
           credits_before: result.balanceBefore,
           credit_transaction_id: result.id,
@@ -185,7 +184,6 @@ export async function deductCredits(
           event: "credits_low",
           groups: { organization: organizationId },
           properties: {
-            organization_id: organizationId,
             credit_type: creditType,
             credits_remaining: result.balanceAfter,
             threshold,
