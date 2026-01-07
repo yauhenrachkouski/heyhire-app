@@ -75,7 +75,7 @@ That means:
 
 ## Testing analytics (PostHog)
 
-Your webhook handler calls `trackServerEvent(...)` in multiple places.
+Your webhook handler calls `getPostHogServer().capture(...)` in multiple places.
 
 To verify:
 - Watch your PostHog events (project dashboard)

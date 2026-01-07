@@ -926,20 +926,18 @@ export const auth = betterAuth({
             after: async (session) => {
                const userRecord = await db.query.user.findFirst({
                   where: eq(schema.user.id, session.userId),
-                  columns: { email: true, name: true, lastLoginMethod: true },
+                  columns: { lastLoginMethod: true },
                });
 
                const authMethod = userRecord?.lastLoginMethod || "unknown";
 
-               // Identify user in PostHog with set_once for first auth method
+               // Track auth method (email/name set by user.create.after and client-side identify)
                const posthog = getPostHogServer();
                posthog.capture({
                   distinctId: session.userId,
                   event: "$set",
                   properties: {
                      $set: {
-                        email: userRecord?.email,
-                        name: userRecord?.name,
                         last_auth_method: authMethod,
                      },
                      $set_once: {
@@ -954,6 +952,22 @@ export const auth = betterAuth({
                   event: "user_signed_in",
                   properties: {
                      auth_method: authMethod,
+                  },
+               });
+            },
+         },
+         delete: {
+            before: async (session) => {
+               // Track sign out server-side (more reliable than client-side)
+               const posthog = getPostHogServer();
+               const activeOrgId = (session as { activeOrganizationId?: string }).activeOrganizationId;
+               posthog.capture({
+                  distinctId: session.userId,
+                  event: "user_signed_out",
+                  ...(activeOrgId && { groups: { organization: activeOrgId } }),
+                  properties: {
+                     session_id: session.id,
+                     organization_id: activeOrgId ?? null,
                   },
                });
             },

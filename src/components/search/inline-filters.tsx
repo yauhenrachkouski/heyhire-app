@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/tooltip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { IconSparkles, IconSortAscending, IconSortDescending } from "@tabler/icons-react";
-import posthog from "posthog-js";
 
 
 interface InlineFiltersProps {
@@ -92,12 +91,7 @@ export function InlineFilters({
   // Debounce the API call to avoid too many requests while dragging
   const debouncedScoreChange = useDebouncedCallback((min: number) => {
     onScoreRangeChange?.(min, 100); // Always max at 100
-
-    posthog.capture("search_score_filter_changed", {
-      filter_type: "custom_slider",
-      score_min: min,
-      score_max: 100,
-    });
+    // Analytics tracked by parent component with full context
   }, 500);
 
   const handleScoreChange = (values: number[]) => {
@@ -122,21 +116,12 @@ export function InlineFilters({
     setIsCustom(false);
     // Preset selection doesn't need debounce, apply immediately
     onScoreRangeChange?.(score, 100);
-
-    posthog.capture("search_score_filter_changed", {
-      filter_type: "preset",
-      preset_value: value,
-      score_min: score,
-      score_max: 100,
-    });
+    // Analytics tracked by parent component with full context
   };
 
   const handleSortChange = (value: string) => {
     onSortChange?.(value);
-
-    posthog.capture("search_sort_changed", {
-      sort_by: value,
-    });
+    // Analytics tracked by parent component with full context
   };
 
   // Determine the current select value

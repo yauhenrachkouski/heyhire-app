@@ -9,7 +9,7 @@ import { organization, creditTransactions, user } from "@/db/schema";
 import { eq, and, gte, lte, sql, desc } from "drizzle-orm";
 import { generateId } from "@/lib/id";
 import { getSessionWithOrg } from "@/lib/auth-helpers";
-import { trackServerEvent } from "@/lib/posthog/track";
+import { getPostHogServer } from "@/lib/posthog/posthog-server";
 import type {
   DeductCreditsParams,
   CreditOperationResult,
@@ -155,10 +155,16 @@ export async function deductCredits(
     
     // Track credits_exhausted when balance reaches zero
     if (result && result.balanceAfter === 0) {
-      trackServerEvent(userId, "credits_exhausted", organizationId, {
-        credit_type: creditType,
-        credits_before: result.balanceBefore,
-        credit_transaction_id: result.id,
+      getPostHogServer().capture({
+        distinctId: userId,
+        event: "credits_exhausted",
+        groups: { organization: organizationId },
+        properties: {
+          organization_id: organizationId,
+          credit_type: creditType,
+          credits_before: result.balanceBefore,
+          credit_transaction_id: result.id,
+        },
       });
     }
 
@@ -174,11 +180,17 @@ export async function deductCredits(
         result.balanceAfter <= threshold &&
         result.balanceAfter > 0
       ) {
-        trackServerEvent(userId, "credits_low", organizationId, {
-          credit_type: creditType,
-          credits_remaining: result.balanceAfter,
-          threshold,
-          credit_transaction_id: result.id,
+        getPostHogServer().capture({
+          distinctId: userId,
+          event: "credits_low",
+          groups: { organization: organizationId },
+          properties: {
+            organization_id: organizationId,
+            credit_type: creditType,
+            credits_remaining: result.balanceAfter,
+            threshold,
+            credit_transaction_id: result.id,
+          },
         });
       }
     }

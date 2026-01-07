@@ -4,7 +4,7 @@ import { deductCredits, getOrganizationCredits } from "@/actions/credits";
 import { getSessionWithOrg } from "@/lib/auth-helpers";
 import { CREDIT_TYPES } from "@/lib/credits";
 import { CONTACT_REVEAL_DESCRIPTION } from "@/lib/consumption";
-import { trackServerEvent } from "@/lib/posthog/track";
+import { getPostHogServer } from "@/lib/posthog/posthog-server";
 import { db } from "@/db/drizzle";
 import { candidateContacts, candidates } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
@@ -191,15 +191,21 @@ export async function revealCandidateContact(params: {
             })
             .where(eq(candidateContacts.id, existingContact.id));
 
-          trackServerEvent(userId, "contact_revealed", activeOrgId, {
-            candidate_id: candidateId,
-            type,
-            had_email: !!existingContact.email,
-            had_phone: !!existingContact.phone,
-            got_email: emailFound,
-            got_phone: phoneFound,
-            email_credit_cost: emailFound ? EMAIL_CREDIT_COST : 0,
-            phone_credit_cost: phoneFound ? PHONE_CREDIT_COST : 0,
+          getPostHogServer().capture({
+            distinctId: userId,
+            event: "contact_revealed",
+            groups: { organization: activeOrgId },
+            properties: {
+              organization_id: activeOrgId,
+              candidate_id: candidateId,
+              type,
+              had_email: !!existingContact.email,
+              had_phone: !!existingContact.phone,
+              got_email: emailFound,
+              got_phone: phoneFound,
+              email_credit_cost: emailFound ? EMAIL_CREDIT_COST : 0,
+              phone_credit_cost: phoneFound ? PHONE_CREDIT_COST : 0,
+            },
           });
         }
 
@@ -284,10 +290,16 @@ export async function revealCandidateContact(params: {
           rawResponse: JSON.stringify(rawResponse),
         });
 
-        trackServerEvent(userId, "contact_reveal_no_result", activeOrgId, {
-          candidate_id: candidateId,
-          type,
-          linkedin_url: candidate.linkedinUrl,
+        getPostHogServer().capture({
+          distinctId: userId,
+          event: "contact_reveal_no_result",
+          groups: { organization: activeOrgId },
+          properties: {
+            organization_id: activeOrgId,
+            candidate_id: candidateId,
+            type,
+            linkedin_url: candidate.linkedinUrl,
+          },
         });
 
         return {
@@ -347,13 +359,19 @@ export async function revealCandidateContact(params: {
         creditTransactionId: lastTransactionId,
       });
 
-      trackServerEvent(userId, "contact_revealed", activeOrgId, {
-        candidate_id: candidateId,
-        type,
-        got_email: !!email,
-        got_phone: !!phone,
-        email_credit_cost: email ? EMAIL_CREDIT_COST : 0,
-        phone_credit_cost: phone ? PHONE_CREDIT_COST : 0,
+      getPostHogServer().capture({
+        distinctId: userId,
+        event: "contact_revealed",
+        groups: { organization: activeOrgId },
+        properties: {
+          organization_id: activeOrgId,
+          candidate_id: candidateId,
+          type,
+          got_email: !!email,
+          got_phone: !!phone,
+          email_credit_cost: email ? EMAIL_CREDIT_COST : 0,
+          phone_credit_cost: phone ? PHONE_CREDIT_COST : 0,
+        },
       });
 
       return {

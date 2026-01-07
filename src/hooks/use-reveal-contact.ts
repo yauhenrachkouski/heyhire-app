@@ -49,14 +49,7 @@ export function useRevealContact() {
           return result;
         }
 
-        // Track contact reveal
-        posthog.capture("contact_revealed", {
-          candidate_id: params.candidateId,
-          type: params.type,
-          is_free: result.alreadyRevealed === true,
-          got_email: !!result.email,
-          got_phone: !!result.phone,
-        });
+        // Server already tracks contact_revealed with full context
 
         // Show success toast with revealed info
         if (result.email || result.phone) {

@@ -11,7 +11,7 @@ import { isSubscriptionActive } from "@/lib/subscription";
 import { getSessionWithOrg } from "@/lib/auth-helpers";
 import { getDemoOrgSlug } from "@/lib/demo";
 import { ADMIN_ROLES } from "@/lib/roles";
-import { trackServerEvent } from "@/lib/posthog/track";
+import { getPostHogServer } from "@/lib/posthog/posthog-server";
 import { Resend } from "resend";
 import { SubscriptionCanceledEmail, SubscriptionActivatedEmail } from "@/emails";
 import { formatDate } from "@/lib/format";
@@ -67,9 +67,15 @@ export async function getCustomerPortalPaymentMethodSession() {
       },
     });
 
-    trackServerEvent(userId, "billing_portal_payment_method_session_created", activeOrgId, {
-      stripe_customer_id: orgSubscription.stripeCustomerId,
-    })
+    getPostHogServer().capture({
+      distinctId: userId,
+      event: "billing_portal_payment_method_session_created",
+      groups: { organization: activeOrgId },
+      properties: {
+        organization_id: activeOrgId,
+        stripe_customer_id: orgSubscription.stripeCustomerId,
+      },
+    });
 
     return {
       url: portalSession.url,
@@ -389,8 +395,14 @@ export async function startProBillingNow() {
       }
     );
 
-    trackServerEvent(userId, "trial_unlocked_now", activeOrgId, {
-      stripe_subscription_id: orgSubscription.stripeSubscriptionId,
+    getPostHogServer().capture({
+      distinctId: userId,
+      event: "trial_unlocked_now",
+      groups: { organization: activeOrgId },
+      properties: {
+        organization_id: activeOrgId,
+        stripe_subscription_id: orgSubscription.stripeSubscriptionId,
+      },
     });
 
     const nextBillingDate = (updatedSubscription as any).current_period_end
@@ -438,9 +450,15 @@ export async function cancelSubscription() {
       }
     );
 
-    trackServerEvent(userId, "subscription_cancel_requested", activeOrgId, {
-      stripe_subscription_id: orgSubscription.stripeSubscriptionId,
-    })
+    getPostHogServer().capture({
+      distinctId: userId,
+      event: "subscription_cancel_requested",
+      groups: { organization: activeOrgId },
+      properties: {
+        organization_id: activeOrgId,
+        stripe_subscription_id: orgSubscription.stripeSubscriptionId,
+      },
+    });
 
     const cancelAt = (canceledSubscription as any).cancel_at;
     const formattedCancelDate = cancelAt
@@ -518,9 +536,15 @@ export async function resumeSubscription() {
       }
     );
 
-    trackServerEvent(userId, "subscription_resume_requested", activeOrgId, {
-      stripe_subscription_id: orgSubscription.stripeSubscriptionId,
-    })
+    getPostHogServer().capture({
+      distinctId: userId,
+      event: "subscription_resume_requested",
+      groups: { organization: activeOrgId },
+      properties: {
+        organization_id: activeOrgId,
+        stripe_subscription_id: orgSubscription.stripeSubscriptionId,
+      },
+    });
 
     try {
       const orgRecord = await db.query.organization.findFirst({
@@ -593,9 +617,15 @@ export async function setDefaultPaymentMethod(paymentMethodId: string) {
       },
     });
 
-    trackServerEvent(userId, "payment_method_set_default", activeOrgId, {
-      stripe_customer_id: orgSubscription.stripeCustomerId,
-      payment_method_id: paymentMethodId,
+    getPostHogServer().capture({
+      distinctId: userId,
+      event: "payment_method_set_default",
+      groups: { organization: activeOrgId },
+      properties: {
+        organization_id: activeOrgId,
+        stripe_customer_id: orgSubscription.stripeCustomerId,
+        payment_method_id: paymentMethodId,
+      },
     });
 
     return {
@@ -642,10 +672,16 @@ export async function removePaymentMethod(paymentMethodId: string) {
     // If this was the default payment method, we might need to handle this
     // Stripe will automatically handle setting a new default if available
 
-    trackServerEvent(userId, "payment_method_removed", activeOrgId, {
-      stripe_customer_id: orgSubscription.stripeCustomerId,
-      payment_method_id: paymentMethodId,
-      was_default: currentDefaultId === paymentMethodId,
+    getPostHogServer().capture({
+      distinctId: userId,
+      event: "payment_method_removed",
+      groups: { organization: activeOrgId },
+      properties: {
+        organization_id: activeOrgId,
+        stripe_customer_id: orgSubscription.stripeCustomerId,
+        payment_method_id: paymentMethodId,
+        was_default: currentDefaultId === paymentMethodId,
+      },
     });
 
     return {

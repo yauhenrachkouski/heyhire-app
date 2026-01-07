@@ -5,7 +5,8 @@ import posthog from "posthog-js";
 
 export function SignOutButton({ invitationId }: { invitationId: string }) {
   const handleSignOut = () => {
-    posthog.capture("user_signed_out", { reason: "account_switch" });
+    // Reset PostHog before sign out (event tracked server-side)
+    posthog.reset();
     // Import signOut dynamically to avoid SSR issues
     import("@/lib/auth-client").then(({ signOut }) => {
       signOut().then(() => {

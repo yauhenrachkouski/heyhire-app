@@ -66,7 +66,8 @@ export function NavUser({ user: serverUser }: NavUserProps) {
   const handleSignOut = async () => {
     setIsSigningOut(true)
     try {
-      posthog.capture("user_signed_out")
+      // Reset PostHog before sign out (event tracked server-side)
+      posthog.reset()
       await signOut({
         fetchOptions: {
           onSuccess: () => {

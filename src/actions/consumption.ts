@@ -3,7 +3,7 @@
 import { deductCredits } from "@/actions/credits";
 import { getSessionWithOrg } from "@/lib/auth-helpers";
 import { CREDIT_TYPES } from "@/lib/credits";
-import { trackServerEvent } from "@/lib/posthog/track";
+import { getPostHogServer } from "@/lib/posthog/posthog-server";
 import { db } from "@/db/drizzle";
 import { creditTransactions } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
@@ -50,15 +50,21 @@ export async function consumeCreditsForLinkedInOpen(params: {
         return { success: false, error: result.error || "Failed to consume credits" };
       }
 
-      trackServerEvent(userId, "credits_consumed", activeOrgId, {
-        action: "linkedin_profile_opened",
-        candidate_id: candidateId,
-        linkedin_url: linkedinUrl,
-        credit_type: CREDIT_TYPES.LINKEDIN_REVEAL,
-        credit_amount: 1,
-        credit_transaction_id: result.transaction?.id,
-        credits_before: result.transaction?.balanceBefore,
-        credits_after: result.transaction?.balanceAfter,
+      getPostHogServer().capture({
+        distinctId: userId,
+        event: "credits_consumed",
+        groups: { organization: activeOrgId },
+        properties: {
+          organization_id: activeOrgId,
+          action: "linkedin_profile_opened",
+          candidate_id: candidateId,
+          linkedin_url: linkedinUrl,
+          credit_type: CREDIT_TYPES.LINKEDIN_REVEAL,
+          credit_amount: 1,
+          credit_transaction_id: result.transaction?.id,
+          credits_before: result.transaction?.balanceBefore,
+          credits_after: result.transaction?.balanceAfter,
+        },
       });
 
       return { success: true };

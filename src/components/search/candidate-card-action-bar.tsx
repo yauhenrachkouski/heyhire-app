@@ -26,6 +26,8 @@ interface CandidateCardActionBarProps {
   onSelectAll?: () => void;
   isAllSelected?: boolean;
   onEmail?: (ids: string[]) => Promise<void>;
+  searchId?: string;
+  organizationId?: string;
 }
 
 export function CandidateCardActionBar({
@@ -34,6 +36,8 @@ export function CandidateCardActionBar({
   onClearSelection,
   onSelectAll,
   isAllSelected = false,
+  searchId,
+  organizationId,
 }: CandidateCardActionBarProps) {
   React.useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -71,6 +75,8 @@ export function CandidateCardActionBar({
     document.body.removeChild(link);
 
     posthog.capture("candidates_exported", {
+      search_id: searchId,
+      organization_id: organizationId,
       candidate_count: selectedIds.length,
       export_format: "csv",
     });
@@ -81,16 +87,22 @@ export function CandidateCardActionBar({
   }, [selectedIds, selectedCandidates]);
 
   const handleSelectAllClick = React.useCallback(() => {
-    posthog.capture("candidates_select_all");
+    posthog.capture("candidates_select_all", {
+      search_id: searchId,
+      organization_id: organizationId,
+      previously_selected_count: selectedIds.length,
+    });
     onSelectAll?.();
-  }, [onSelectAll]);
+  }, [onSelectAll, selectedIds.length, searchId, organizationId]);
 
   const handleClearSelectionClick = React.useCallback(() => {
     posthog.capture("candidates_deselect_all", {
+      search_id: searchId,
+      organization_id: organizationId,
       deselected_count: selectedIds.length,
     });
     onClearSelection();
-  }, [onClearSelection, selectedIds.length]);
+  }, [onClearSelection, selectedIds.length, searchId, organizationId]);
 
   const mockTable = {
     getFilteredSelectedRowModel: () => ({

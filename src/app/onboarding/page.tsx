@@ -5,7 +5,7 @@ import { headers } from 'next/headers'
 import { OnboardingForm } from '@/components/auth/onboarding-form'
 import heyhireLogo from '@/assets/heyhire_logo.svg'
 import { log } from "@/lib/axiom/server";
-import { trackServerEvent } from "@/lib/posthog/track";
+import { getPostHogServer } from "@/lib/posthog/posthog-server";
 
 const source = "app/onboarding";
 
@@ -58,9 +58,13 @@ export default async function OnboardingPage() {
   }
 
   // Track onboarding started
-  trackServerEvent(session.user.id, "onboarding_started", undefined, {
-    has_name: !!session.user.name,
-    email_domain: session.user.email?.split('@')[1]?.toLowerCase(),
+  getPostHogServer().capture({
+    distinctId: session.user.id,
+    event: "onboarding_started",
+    properties: {
+      has_name: !!session.user.name,
+      email_domain: session.user.email?.split('@')[1]?.toLowerCase(),
+    },
   });
 
   // Fetch initial organization name suggestion

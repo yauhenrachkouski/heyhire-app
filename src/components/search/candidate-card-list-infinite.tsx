@@ -254,6 +254,8 @@ export function CandidateCardListInfinite({
           onSelectAll={handleSelectAll}
           isAllSelected={isAllSelected}
           onClearSelection={handleClearSelection}
+          searchId={searchId}
+          organizationId={activeOrg?.id}
         />
       )}
     </div>
