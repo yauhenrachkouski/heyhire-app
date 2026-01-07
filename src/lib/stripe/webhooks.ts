@@ -2,7 +2,7 @@ import Stripe from "stripe";
 import { db } from "@/db/drizzle";
 import { subscription as subscriptionTable, member, creditTransactions, organization, user, stripeWebhookEvents } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
-import { trackServerEvent } from "@/lib/posthog/track";
+import { getPostHogServer } from "@/lib/posthog/posthog-server";
 import { generateId } from "@/lib/id";
 import { log } from "@/lib/axiom/server";
 import { getPlanCreditAllocation, CREDIT_TYPES } from "@/lib/credits";
@@ -186,9 +186,16 @@ async function handleTrialWillEnd(ctx: WebhookContext) {
         return;
     }
 
-    trackServerEvent(ownerId, "trial_will_end", referenceId, {
-        stripe_subscription_id: sub.id,
-        trial_end: sub.trial_end,
+    const posthog = getPostHogServer();
+    posthog.capture({
+        distinctId: ownerId,
+        event: "trial_will_end",
+        groups: { organization: referenceId },
+        properties: {
+            organization_id: referenceId,
+            stripe_subscription_id: sub.id,
+            trial_end: sub.trial_end,
+        },
     });
 
     try {
@@ -253,11 +260,18 @@ async function handleInvoiceUpcoming(ctx: WebhookContext) {
         return;
     }
 
-    trackServerEvent(ownerId, "invoice_upcoming", referenceId, {
-        stripe_invoice_id: invoice.id,
-        stripe_customer_id: invoice.customer as string,
-        amount_due: (invoice as any).amount_due,
-        next_payment_attempt: (invoice as any).next_payment_attempt,
+    const posthog = getPostHogServer();
+    posthog.capture({
+        distinctId: ownerId,
+        event: "invoice_upcoming",
+        groups: { organization: referenceId },
+        properties: {
+            organization_id: referenceId,
+            stripe_invoice_id: invoice.id,
+            stripe_customer_id: invoice.customer as string,
+            amount_due: (invoice as any).amount_due,
+            next_payment_attempt: (invoice as any).next_payment_attempt,
+        },
     });
 }
 
@@ -286,9 +300,16 @@ async function handleCustomerUpdated(ctx: WebhookContext) {
         return;
     }
 
-    trackServerEvent(ownerId, "customer_updated", referenceId, {
-        stripe_customer_id: customer.id,
-        email: customer.email,
+    const posthog = getPostHogServer();
+    posthog.capture({
+        distinctId: ownerId,
+        event: "customer_updated",
+        groups: { organization: referenceId },
+        properties: {
+            organization_id: referenceId,
+            stripe_customer_id: customer.id,
+            email: customer.email,
+        },
     });
 }
 
@@ -358,11 +379,18 @@ async function handleInvoicePaymentSucceeded(ctx: WebhookContext) {
             stripeSubscriptionId: stripeSub.id,
         });
 
-        trackServerEvent(ownerId, "credits_reset", subscriptionRecord.referenceId, {
-            internal_subscription_id: subscriptionRecord.id,
-            plan: subscriptionRecord.plan,
-            period_start: periodStartKey,
-            stripe_invoice_id: invoice.id,
+        const posthog = getPostHogServer();
+        posthog.capture({
+            distinctId: ownerId,
+            event: "credits_reset",
+            groups: { organization: subscriptionRecord.referenceId },
+            properties: {
+                organization_id: subscriptionRecord.referenceId,
+                internal_subscription_id: subscriptionRecord.id,
+                plan: subscriptionRecord.plan,
+                period_start: periodStartKey,
+                stripe_invoice_id: invoice.id,
+            },
         });
     }
 
@@ -376,10 +404,17 @@ async function handleInvoicePaymentSucceeded(ctx: WebhookContext) {
     }
 
     if (ownerId) {
-        trackServerEvent(ownerId, "subscription_invoice_paid", subscriptionRecord.referenceId, {
-            internal_subscription_id: subscriptionRecord.id,
-            plan: subscriptionRecord.plan,
-            stripe_invoice_id: invoice.id,
+        const posthog = getPostHogServer();
+        posthog.capture({
+            distinctId: ownerId,
+            event: "subscription_invoice_paid",
+            groups: { organization: subscriptionRecord.referenceId },
+            properties: {
+                organization_id: subscriptionRecord.referenceId,
+                internal_subscription_id: subscriptionRecord.id,
+                plan: subscriptionRecord.plan,
+                stripe_invoice_id: invoice.id,
+            },
         });
     }
 
@@ -434,11 +469,18 @@ async function handleInvoicePaymentFailed(ctx: WebhookContext) {
 
         const ownerId = await getOrgOwnerId(subscriptionRecord.referenceId);
         if (ownerId) {
-            trackServerEvent(ownerId, "invoice_payment_failed", subscriptionRecord.referenceId, {
-                internal_subscription_id: subscriptionRecord.id,
-                stripe_invoice_id: invoice.id,
-                stripe_subscription_id: invoiceSubscriptionId,
-                plan: subscriptionRecord.plan,
+            const posthog = getPostHogServer();
+            posthog.capture({
+                distinctId: ownerId,
+                event: "invoice_payment_failed",
+                groups: { organization: subscriptionRecord.referenceId },
+                properties: {
+                    organization_id: subscriptionRecord.referenceId,
+                    internal_subscription_id: subscriptionRecord.id,
+                    stripe_invoice_id: invoice.id,
+                    stripe_subscription_id: invoiceSubscriptionId,
+                    plan: subscriptionRecord.plan,
+                },
             });
         }
 
@@ -521,11 +563,18 @@ async function handlePaymentRiskEvent(ctx: WebhookContext) {
         userId: ownerId,
     });
 
-    trackServerEvent(ownerId, "stripe_payment_risk_event", referenceId, {
-        stripe_charge_id: obj?.charge || obj?.id,
-        stripe_customer_id: stripeCustomerId,
-        amount: obj?.amount,
-        reason: obj?.reason,
+    const posthog = getPostHogServer();
+    posthog.capture({
+        distinctId: ownerId,
+        event: "stripe_payment_risk_event",
+        groups: { organization: referenceId },
+        properties: {
+            organization_id: referenceId,
+            stripe_charge_id: obj?.charge || obj?.id,
+            stripe_customer_id: stripeCustomerId,
+            amount: obj?.amount,
+            reason: obj?.reason,
+        },
     });
 }
 

@@ -9,7 +9,6 @@ import { Resend } from "resend";
 import Stripe from "stripe";
 import { DISALLOWED_DOMAINS } from "./constants";
 import { eq, and } from "drizzle-orm";
-import { trackServerEvent } from "@/lib/posthog/track";
 import { getPostHogServer } from "@/lib/posthog/posthog-server";
 import { handleStripeEvent } from "@/lib/stripe/webhooks";
 import { log } from "@/lib/axiom/server";
@@ -112,8 +111,15 @@ async function revokeOrgCreditsToZero(params: {
       });
    });
 
-   trackServerEvent(ownerId, params.type, params.referenceId, {
-      internal_subscription_id: params.internalSubscriptionId,
+   const posthog = getPostHogServer();
+   posthog.capture({
+      distinctId: ownerId,
+      event: params.type,
+      groups: { organization: params.referenceId },
+      properties: {
+         organization_id: params.referenceId,
+         internal_subscription_id: params.internalSubscriptionId,
+      },
    });
 
    await markBillingActionProcessed({
@@ -203,9 +209,16 @@ async function grantPlanCreditsToLimit(params: {
       });
    });
 
-   trackServerEvent(ownerId, params.type, params.referenceId, {
-      internal_subscription_id: params.internalSubscriptionId,
-      plan: params.plan,
+   const posthog = getPostHogServer();
+   posthog.capture({
+      distinctId: ownerId,
+      event: params.type,
+      groups: { organization: params.referenceId },
+      properties: {
+         organization_id: params.referenceId,
+         internal_subscription_id: params.internalSubscriptionId,
+         plan: params.plan,
+      },
    });
 
    await markBillingActionProcessed({
@@ -272,8 +285,21 @@ export const auth = betterAuth({
                   userEmail: user.email,
                });
 
-               // Register organization as a group in PostHog
                const posthog = getPostHogServer();
+
+               // Set user's first organization (set_once - won't overwrite if already set)
+               posthog.capture({
+                  distinctId: user.id,
+                  event: "$set",
+                  properties: {
+                     $set_once: {
+                        first_organization_id: organization.id,
+                        first_organization_name: organization.name,
+                     },
+                  },
+               });
+
+               // Register organization as a group in PostHog
                posthog.groupIdentify({
                   groupType: "organization",
                   groupKey: organization.id,
@@ -281,11 +307,18 @@ export const auth = betterAuth({
                      name: organization.name,
                      slug: organization.slug,
                      created_at: new Date().toISOString(),
+                     creator_user_id: user.id,
                   },
                });
 
-               trackServerEvent(user.id, "organization_created", organization.id, {
-                  organization_name: organization.name,
+               posthog.capture({
+                  distinctId: user.id,
+                  event: "organization_created",
+                  groups: { organization: organization.id },
+                  properties: {
+                     organization_id: organization.id,
+                     organization_name: organization.name,
+                  },
                });
 
                const emailContent = WelcomeEmail({
@@ -308,10 +341,17 @@ export const auth = betterAuth({
                   organizationId: organization.id,
                   inviterId: inviter.id,
                });
-               trackServerEvent(inviter.id, "invitation_sent", organization.id, {
-                  invitation_id: invitation.id,
-                  invited_email: invitation.email,
-                  role: invitation.role,
+               const posthog = getPostHogServer();
+               posthog.capture({
+                  distinctId: inviter.id,
+                  event: "invitation_sent",
+                  groups: { organization: organization.id },
+                  properties: {
+                     organization_id: organization.id,
+                     invitation_id: invitation.id,
+                     invited_email: invitation.email,
+                     role: invitation.role,
+                  },
                });
             },
             afterAcceptInvitation: async ({ invitation, member, user, organization }) => {
@@ -335,10 +375,16 @@ export const auth = betterAuth({
                   },
                });
 
-               trackServerEvent(user.id, "invitation_accepted", organization.id, {
-                  invitation_id: invitation.id,
-                  member_id: member.id,
-                  role: member.role,
+               posthog.capture({
+                  distinctId: user.id,
+                  event: "invitation_accepted",
+                  groups: { organization: organization.id },
+                  properties: {
+                     organization_id: organization.id,
+                     invitation_id: invitation.id,
+                     member_id: member.id,
+                     role: member.role,
+                  },
                });
 
                const inviter = await db.query.user.findFirst({
@@ -367,8 +413,15 @@ export const auth = betterAuth({
                   organizationId: organization.id,
                   userEmail: user.email,
                });
-               trackServerEvent(user.id, "invitation_rejected", organization.id, {
-                  invitation_id: invitation.id,
+               const posthog = getPostHogServer();
+               posthog.capture({
+                  distinctId: user.id,
+                  event: "invitation_rejected",
+                  groups: { organization: organization.id },
+                  properties: {
+                     organization_id: organization.id,
+                     invitation_id: invitation.id,
+                  },
                });
             },
             afterCancelInvitation: async ({ invitation, cancelledBy, organization }) => {
@@ -379,9 +432,16 @@ export const auth = betterAuth({
                   cancelledByEmail: cancelledBy.email,
                   organizationId: organization.id,
                });
-               trackServerEvent(cancelledBy.id, "invitation_canceled", organization.id, {
-                  invitation_id: invitation.id,
-                  invited_email: invitation.email,
+               const posthog = getPostHogServer();
+               posthog.capture({
+                  distinctId: cancelledBy.id,
+                  event: "invitation_canceled",
+                  groups: { organization: organization.id },
+                  properties: {
+                     organization_id: organization.id,
+                     invitation_id: invitation.id,
+                     invited_email: invitation.email,
+                  },
                });
             },
          },
@@ -481,28 +541,46 @@ export const auth = betterAuth({
                            });
                         });
 
-                        // Link Stripe customer to PostHog identity
-                        if (subscription.stripeCustomerId) {
-                           const posthog = getPostHogServer();
-                           posthog.identify({
-                              distinctId: ownerId,
-                              properties: {
-                                 stripe_customer_id: subscription.stripeCustomerId,
+                        // Link Stripe customer to PostHog identity with set_once
+                        const posthog = getPostHogServer();
+                        posthog.capture({
+                           distinctId: ownerId,
+                           event: "$set",
+                           properties: {
+                              $set: {
+                                 current_plan: "pro",
+                                 is_trialing: true,
                               },
-                           });
+                              $set_once: {
+                                 stripe_customer_id: subscription.stripeCustomerId,
+                                 trial_started_at: new Date().toISOString(),
+                                 first_plan: "pro",
+                              },
+                           },
+                        });
+
+                        if (subscription.stripeCustomerId) {
                            posthog.groupIdentify({
                               groupType: "organization",
                               groupKey: referenceId,
                               properties: {
                                  stripe_customer_id: subscription.stripeCustomerId,
                                  stripe_subscription_id: subscription.stripeSubscriptionId,
+                                 current_plan: "pro",
+                                 is_trialing: true,
                               },
                            });
                         }
 
-                        trackServerEvent(ownerId, "trial_started", referenceId, {
-                           internal_subscription_id: subscription.id,
-                           stripe_customer_id: subscription.stripeCustomerId,
+                        posthog.capture({
+                           distinctId: ownerId,
+                           event: "trial_started",
+                           groups: { organization: referenceId },
+                           properties: {
+                              organization_id: referenceId,
+                              internal_subscription_id: subscription.id,
+                              stripe_customer_id: subscription.stripeCustomerId,
+                           },
                         });
 
                         await markBillingActionProcessed({
@@ -615,10 +693,42 @@ export const auth = betterAuth({
                   });
                   const ownerId = owner?.userId;
                   if (ownerId) {
-                     trackServerEvent(ownerId, "subscription_activated", referenceId, {
-                        internal_subscription_id: subscription.id,
-                        plan: subscription.plan,
-                        stripe_subscription_id: subscription.stripeSubscriptionId,
+                     const posthog = getPostHogServer();
+
+                     // Update person properties: trial ended, now active
+                     posthog.capture({
+                        distinctId: ownerId,
+                        event: "$set",
+                        properties: {
+                           $set: {
+                              current_plan: subscription.plan,
+                              is_trialing: false,
+                              subscription_status: "active",
+                           },
+                        },
+                     });
+
+                     // Update organization group properties
+                     posthog.groupIdentify({
+                        groupType: "organization",
+                        groupKey: referenceId,
+                        properties: {
+                           current_plan: subscription.plan,
+                           is_trialing: false,
+                           subscription_status: "active",
+                        },
+                     });
+
+                     posthog.capture({
+                        distinctId: ownerId,
+                        event: "subscription_activated",
+                        groups: { organization: referenceId },
+                        properties: {
+                           organization_id: referenceId,
+                           internal_subscription_id: subscription.id,
+                           plan: subscription.plan,
+                           stripe_subscription_id: subscription.stripeSubscriptionId,
+                        },
                      });
                   }
                }
@@ -635,12 +745,19 @@ export const auth = betterAuth({
                      ),
                   });
                   if (owner?.userId) {
-                     trackServerEvent(owner.userId, "subscription_plan_changed", referenceId, {
-                        internal_subscription_id: subscription.id,
-                        from_price_id: previousItemPriceId,
-                        to_price_id: currentItemPriceId,
-                        to_plan: subscription.plan,
-                        stripe_subscription_id: subscription.stripeSubscriptionId,
+                     const posthog = getPostHogServer();
+                     posthog.capture({
+                        distinctId: owner.userId,
+                        event: "subscription_plan_changed",
+                        groups: { organization: referenceId },
+                        properties: {
+                           organization_id: referenceId,
+                           internal_subscription_id: subscription.id,
+                           from_price_id: previousItemPriceId,
+                           to_price_id: currentItemPriceId,
+                           to_plan: subscription.plan,
+                           stripe_subscription_id: subscription.stripeSubscriptionId,
+                        },
                      });
                   }
                }
@@ -672,10 +789,42 @@ export const auth = betterAuth({
                      ),
                   });
                   if (owner?.userId) {
-                     trackServerEvent(owner.userId, "subscription_canceled", referenceId, {
-                        internal_subscription_id: subscription.id,
-                        stripe_subscription_id: subscription.stripeSubscriptionId,
-                        plan: subscription.plan,
+                     const posthog = getPostHogServer();
+
+                     // Update person properties: subscription canceled
+                     posthog.capture({
+                        distinctId: owner.userId,
+                        event: "$set",
+                        properties: {
+                           $set: {
+                              current_plan: "none",
+                              is_trialing: false,
+                              subscription_status: "canceled",
+                           },
+                        },
+                     });
+
+                     // Update organization group properties
+                     posthog.groupIdentify({
+                        groupType: "organization",
+                        groupKey: referenceId,
+                        properties: {
+                           current_plan: "none",
+                           is_trialing: false,
+                           subscription_status: "canceled",
+                        },
+                     });
+
+                     posthog.capture({
+                        distinctId: owner.userId,
+                        event: "subscription_canceled",
+                        groups: { organization: referenceId },
+                        properties: {
+                           organization_id: referenceId,
+                           internal_subscription_id: subscription.id,
+                           stripe_subscription_id: subscription.stripeSubscriptionId,
+                           plan: subscription.plan,
+                        },
                      });
                   }
                }
@@ -718,8 +867,33 @@ export const auth = betterAuth({
                return { data: user };
             },
             after: async (user) => {
-               trackServerEvent(user.id, "user_signed_up", undefined, {
-                  email_domain: user.email.split("@")[1]?.toLowerCase(),
+               const posthog = getPostHogServer();
+               const emailDomain = user.email.split("@")[1]?.toLowerCase();
+
+               // Set person properties with set_once for immutable data
+               posthog.capture({
+                  distinctId: user.id,
+                  event: "$set",
+                  properties: {
+                     $set: {
+                        email: user.email,
+                        name: user.name,
+                     },
+                     $set_once: {
+                        user_db_id: user.id,
+                        first_email: user.email,
+                        signed_up_at: new Date().toISOString(),
+                        email_domain: emailDomain,
+                     },
+                  },
+               });
+
+               posthog.capture({
+                  distinctId: user.id,
+                  event: "user_signed_up",
+                  properties: {
+                     email_domain: emailDomain,
+                  },
                });
             },
          },
@@ -755,18 +929,32 @@ export const auth = betterAuth({
                   columns: { email: true, name: true, lastLoginMethod: true },
                });
 
-               // Identify user in PostHog (once on login)
+               const authMethod = userRecord?.lastLoginMethod || "unknown";
+
+               // Identify user in PostHog with set_once for first auth method
                const posthog = getPostHogServer();
-               posthog.identify({
+               posthog.capture({
                   distinctId: session.userId,
+                  event: "$set",
                   properties: {
-                     email: userRecord?.email,
-                     name: userRecord?.name,
+                     $set: {
+                        email: userRecord?.email,
+                        name: userRecord?.name,
+                        last_auth_method: authMethod,
+                     },
+                     $set_once: {
+                        first_auth_method: authMethod,
+                        first_seen_at: new Date().toISOString(),
+                     },
                   },
                });
 
-               trackServerEvent(session.userId, "user_signed_in", undefined, {
-                  auth_method: userRecord?.lastLoginMethod || "unknown",
+               posthog.capture({
+                  distinctId: session.userId,
+                  event: "user_signed_in",
+                  properties: {
+                     auth_method: authMethod,
+                  },
                });
             },
          },
