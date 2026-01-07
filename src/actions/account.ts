@@ -367,7 +367,6 @@ export async function createOrganizationWithSetup(data: {
   logo?: string
   googleLink?: string
 }) {
-  const { userId: sessionUserId, activeOrgId } = await getSessionWithOrg();
   let userId: string | undefined;
   try {
     const session = await auth.api.getSession({
@@ -375,11 +374,12 @@ export async function createOrganizationWithSetup(data: {
     })
 
     if (!session?.user) {
-      log.error("create_org.no_auth", { userId: sessionUserId, organizationId: activeOrgId, source })
+      log.error("create_org.no_auth", { source })
       return { success: false, error: 'Not authenticated' }
     }
 
     userId = session.user.id;
+    const activeOrgId = session.session.activeOrganizationId;
 
     log.info("create_org.started", {
       source,
@@ -430,7 +430,7 @@ export async function createOrganizationWithSetup(data: {
     })
 
     if (!createResult) {
-      log.error("create_org.failed", { source, userId: sessionUserId, organizationId: activeOrgId, reason: "no_result" })
+      log.error("create_org.failed", { source, userId, organizationId: activeOrgId, reason: "no_result" })
       throw new Error('Failed to create organization')
     }
 
@@ -461,7 +461,7 @@ export async function createOrganizationWithSetup(data: {
       }
     }
   } catch (err) {
-    log.error("create_org.error", { source, userId: sessionUserId, organizationId: activeOrgId, error: err instanceof Error ? err.message : String(err) })
+    log.error("create_org.error", { source, userId, error: err instanceof Error ? err.message : String(err) })
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to create organization'
