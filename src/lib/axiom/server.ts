@@ -9,19 +9,16 @@ import {
 } from "@axiomhq/nextjs";
 import { auth } from "@/lib/auth";
 
+const isProduction = process.env.NODE_ENV === "production";
 const dataset = process.env.AXIOM_DATASET ?? process.env.NEXT_PUBLIC_AXIOM_DATASET;
 
-if (!dataset) {
-  throw new Error("AXIOM_DATASET (or NEXT_PUBLIC_AXIOM_DATASET) is required");
+if (isProduction && !dataset) {
+  throw new Error("AXIOM_DATASET (or NEXT_PUBLIC_AXIOM_DATASET) is required in production");
 }
 
-const serverTransports: [Transport, ...Transport[]] = [
-  new AxiomJSTransport({ axiom: axiomClient, dataset }),
-];
-
-if (process.env.NODE_ENV !== "production") {
-  serverTransports.push(new ConsoleTransport({ prettyPrint: true }));
-}
+const serverTransports: [Transport, ...Transport[]] = isProduction
+  ? [new AxiomJSTransport({ axiom: axiomClient, dataset: dataset! })]
+  : [new ConsoleTransport({ prettyPrint: true })];
 
 export const logger = new Logger({
   transports: serverTransports,
@@ -33,8 +30,6 @@ export const logger = new Logger({
     gitSha: process.env.VERCEL_GIT_COMMIT_SHA,
   },
 });
-
-const isProduction = process.env.NODE_ENV === "production";
 
 /**
  * Stringify complex objects into a single JSON field.

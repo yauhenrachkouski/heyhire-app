@@ -151,7 +151,7 @@ export function ScenarioGroupList({
   };
 
   return (
-    <div className="space-y-6 flex-1 pb-4">
+    <div className="space-y-6 flex-1">
       {sortedGroups.map((groupName) => (
         <div key={groupName} id={getGroupId(groupName)} className="space-y-3 scroll-mt-4">
           <h4 className="flex items-center justify-between text-xs font-bold text-foreground uppercase tracking-wider border-b border-border/30 pb-2">

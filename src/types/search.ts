@@ -62,7 +62,7 @@ export type SourcingCriteria = JobParsingResponseV3;
 
 const apifyPayloadSchema = z.object({
   profileScraperMode: z.enum(["Short", "Full", "Full + email search"]).default("Full").optional(),
-  searchQuery: z.string().max(300).nullable().optional(),
+  searchQuery: z.string().nullable().optional(),
   maxItems: z.number().max(2500).default(5).optional(),
   locations: z.array(z.string()).max(20).nullable().optional(),
   currentCompanies: z.array(z.string()).max(10).nullable().optional(),
@@ -186,3 +186,6 @@ export const strategyResultsResponseSchema = z.object({
 }).passthrough();
 
 export type StrategyResultsResponse = z.infer<typeof strategyResultsResponseSchema>;
+
+// Re-export z for use with native error formatting (z.prettifyError, z.flattenError)
+export { z };

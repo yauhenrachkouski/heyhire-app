@@ -62,7 +62,7 @@ export function CriteriaDisplay({ data }: CriteriaDisplayProps) {
     if (items.length === 0) return null;
 
     return (
-      <div className="flex items-center gap-2 group/category">
+      <>
         <Tooltip>
           <TooltipTrigger asChild>
             <div className="flex items-center justify-center size-6 rounded-md bg-muted/50 text-muted-foreground shrink-0 cursor-help transition-colors hover:bg-muted">
@@ -73,73 +73,41 @@ export function CriteriaDisplay({ data }: CriteriaDisplayProps) {
             <p>{title}</p>
           </TooltipContent>
         </Tooltip>
-
-        <div className="flex flex-wrap gap-1.5 items-center">
-          {items.map((c) => (
-            <CriteriaBadge
-              key={c.id}
-              label={getValueString(c.value) + (c.type.includes("years") ? " years" : "")}
-              value={getValueString(c.value)} // Pass raw value for consistent shortcode
-              type={c.type}
-              priority={c.priority_level}
-              operator={c.operator}
-              withShortname={true}
-            />
-          ))}
-        </div>
-      </div>
+        {items.map((c) => (
+          <CriteriaBadge
+            key={c.id}
+            label={getValueString(c.value) + (c.type.includes("years") ? " years" : "")}
+            value={getValueString(c.value)}
+            type={c.type}
+            priority={c.priority_level}
+            operator={c.operator}
+            withShortname={true}
+          />
+        ))}
+      </>
     );
   };
 
   const groupItems = [
-    {
-      key: "location",
-      title: "Location",
-      items: groups.location,
-      icon: IconMapPin,
-    },
-    {
-      key: "experience",
-      title: "Experience",
-      items: groups.experience,
-      icon: IconBriefcase,
-    },
-    {
-      key: "skills",
-      title: "Skills",
-      items: groups.skills,
-      icon: IconTools,
-    },
-    {
-      key: "capabilities",
-      title: "Capabilities",
-      items: groups.capabilities,
-      icon: IconBrain,
-    },
-    {
-      key: "other",
-      title: "Other",
-      items: groups.other,
-      icon: IconList,
-    },
+    { key: "location", title: "Location", items: groups.location, icon: IconMapPin },
+    { key: "experience", title: "Experience", items: groups.experience, icon: IconBriefcase },
+    { key: "skills", title: "Skills", items: groups.skills, icon: IconTools },
+    { key: "capabilities", title: "Capabilities", items: groups.capabilities, icon: IconBrain },
+    { key: "other", title: "Other", items: groups.other, icon: IconList },
   ].filter((g) => g.items.length > 0);
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-4 py-4 w-full">
-        {groupItems.flatMap((group, index) => [
-          <div key={group.key} className="flex items-center">
+      <div className="flex flex-wrap items-center gap-2 py-4 w-full">
+        {groupItems.map((group, index) => (
+          <div key={group.key} className="contents">
             {renderGroup(group.title, group.items, group.icon)}
-          </div>,
-          index < groupItems.length - 1 && (
-            <div
-              key={`divider-${group.key}`}
-              className="h-4 w-px bg-border/40 shrink-0 hidden sm:block -mx-3"
-            />
-          ),
-        ]).filter(Boolean)}
+            {index < groupItems.length - 1 && (
+              <div className="h-4 w-px bg-border/40 shrink-0 mx-1" />
+            )}
+          </div>
+        ))}
       </div>
     </TooltipProvider>
   );
 }
-

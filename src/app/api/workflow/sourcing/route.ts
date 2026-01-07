@@ -15,6 +15,7 @@ import {
   strategyGenerationResponseSchema,
   strategyExecutionResponseSchema,
   strategyResultsResponseSchema,
+  z,
   type SourcingCriteria,
   type SourcingStrategyItem,
 } from "@/types/search";
@@ -250,7 +251,7 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
             .update(search)
             .set({ status: "error", progress: 0 })
             .where(eq(search.id, searchId));
-          
+
           await realtime.channel(channel).emit( "search.failed", {
             error: "Strategy generation response invalid"
           });
@@ -258,7 +259,17 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
             where: eq(search.id, searchId),
             columns: { userId: true, organizationId: true },
           });
-          log.error("sourcing.strategy_schema_error", { userId: searchRecord?.userId, organizationId: searchRecord?.organizationId, source, searchId, error: error instanceof Error ? error.message : String(error) });
+          const isZodError = error instanceof z.ZodError;
+          log.error("sourcing.strategy_schema_error", {
+            userId: searchRecord?.userId,
+            organizationId: searchRecord?.organizationId,
+            source,
+            searchId,
+            error: isZodError ? z.prettifyError(error) : String(error),
+            validationErrors: isZodError ? z.flattenError(error) : null,
+            responseBodyKeys: generateResponse.body ? Object.keys(generateResponse.body as object) : [],
+            strategiesCount: (generateResponse.body as any)?.strategies?.length,
+          });
         });
         return { success: false, error: "Strategy generation response invalid" };
       }
@@ -414,7 +425,7 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
           .update(sourcingStrategies)
           .set({ status: "error", error: "Execution response invalid" })
           .where(inArray(sourcingStrategies.id, executedStrategyIds));
-          
+
         await realtime.channel(channel).emit( "search.failed", {
           error: "Strategy execution response invalid"
         });
@@ -422,7 +433,16 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
           where: eq(search.id, searchId),
           columns: { userId: true, organizationId: true },
         });
-        log.error("strategy.execution_schema_validation_failed", { userId: searchRecord?.userId, organizationId: searchRecord?.organizationId, source, error: error instanceof Error ? error.message : String(error) });
+        const isZodError = error instanceof z.ZodError;
+        log.error("strategy.execution_schema_validation_failed", {
+          userId: searchRecord?.userId,
+          organizationId: searchRecord?.organizationId,
+          source,
+          searchId,
+          error: isZodError ? z.prettifyError(error) : String(error),
+          validationErrors: isZodError ? z.flattenError(error) : null,
+          responseBodyKeys: executeResponse.body ? Object.keys(executeResponse.body as object) : [],
+        });
       });
       return { success: false, error: "Strategy execution response invalid" };
     }
@@ -517,8 +537,19 @@ const { POST: workflowPost } = serve<SourcingWorkflowPayload>(
       try {
         pollData = strategyResultsResponseSchema.parse(pollResponse.body);
       } catch (error) {
-         // Schema errors are rare and worth logging
-         log.error("sourcing.poll_schema_error", { userId, organizationId, source, searchId, pollCount, error: error instanceof Error ? error.message : String(error) });
+         // Schema errors are rare and worth logging - include detailed validation info
+         const isZodError = error instanceof z.ZodError;
+         log.error("sourcing.poll_schema_error", {
+           userId,
+           organizationId,
+           source,
+           searchId,
+           pollCount,
+           error: isZodError ? z.prettifyError(error) : String(error),
+           validationErrors: isZodError ? z.flattenError(error) : null,
+           responseStatus: (pollResponse.body as any)?.status,
+           candidatesCount: (pollResponse.body as any)?.candidates?.length ?? (pollResponse.body as any)?.results?.length,
+         });
          continue;
       }
 
