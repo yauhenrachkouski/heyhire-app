@@ -53,7 +53,7 @@ export default async function BillingPage() {
       })
     : null
 
-  const nextBillingAmountLabel = subscription?.plan === 'pro' ? '$69' : null
+  const nextBillingAmountLabel = subscription?.plan === 'pro' ? '$99' : null
 
   // Fetch initial period usage for SSR
   let initialPeriodUsed: number | undefined = undefined;

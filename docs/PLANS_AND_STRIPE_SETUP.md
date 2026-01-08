@@ -3,7 +3,7 @@
 ## Plans
 
 - **pro**
-  - Price: **$69/month**
+  - Price: **$99/month**
   - Trial: **3 days**
 
 Plan config lives in `src/lib/auth.ts` (better-auth Stripe plugin).
@@ -14,7 +14,7 @@ Stripe **test mode** and **live mode** are separate. You need to create:
 
 - Product: `pro`
 - Price (recurring):
-  - Pro monthly $69
+  - Pro monthly $99
   - Trial: **3 days**
 
 Your app uses **Price IDs** (not Product IDs).
@@ -71,10 +71,10 @@ Create prices:
 stripe prices create \
   --product=PROD_PRO_TEST \
   --currency=usd \
-  --unit-amount=6900 \
+  --unit-amount=9900 \
   --recurring.interval=month \
   -d "recurring[trial_period_days]=3" \
-  --nickname="pro_monthly_69_trial_3d"
+  --nickname="pro_monthly_99_trial_3d"
 ```
 
 If you see errors like `No such price: 'price_...'` in the app, it means the Stripe CLI is
@@ -87,10 +87,10 @@ stripe prices create \
   --api-key "$STRIPE_SECRET_KEY" \
   --product=PROD_PRO_TEST \
   --currency=usd \
-  --unit-amount=6900 \
+  --unit-amount=9900 \
   -d "recurring[interval]=month" \
   -d "recurring[trial_period_days]=3" \
-  --nickname="pro_monthly_69_trial_3d"
+  --nickname="pro_monthly_99_trial_3d"
 ```
 
 ### Live mode
@@ -106,10 +106,10 @@ stripe prices create \
   --live \
   --product=PROD_PRO_LIVE \
   --currency=usd \
-  --unit-amount=6900 \
+  --unit-amount=9900 \
   --recurring.interval=month \
   -d "recurring[trial_period_days]=3" \
-  --nickname="pro_monthly_69_trial_3d"
+  --nickname="pro_monthly_99_trial_3d"
 ```
 
 Copy the resulting `price_...` IDs into production env vars.

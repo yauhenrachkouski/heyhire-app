@@ -107,7 +107,7 @@ export function UnlockProNowButton({
             <AlertDialogTitle>Start full Pro Plan now</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <p>
-                You'll be charged {nextBillingAmountLabel || '$69'} today. You'll get {credits}{" "}
+                You'll be charged {nextBillingAmountLabel || '$99'} today. You'll get {credits}{" "}
                 reveals available right away.
               </p>
             </AlertDialogDescription>
@@ -115,7 +115,7 @@ export function UnlockProNowButton({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleUnlockNow} disabled={isPending}>
-              {isPending ? "Processing..." : `Pay ${nextBillingAmountLabel || '$69'} & unlock now`}
+              {isPending ? "Processing..." : `Pay ${nextBillingAmountLabel || '$99'} & unlock now`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

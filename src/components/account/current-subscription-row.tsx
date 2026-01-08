@@ -28,7 +28,7 @@ interface PricingPlan {
 const plans: PricingPlan[] = [
   {
     name: "Pro",
-    price: 69,
+    price: 99,
     planId: "pro",
     description: "3-day free trial to try, 100 reveals included",
     features: [

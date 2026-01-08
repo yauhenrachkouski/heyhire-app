@@ -7,7 +7,7 @@ This document explains how subscriptions work in HeyHire, following the better-a
 ## Plans
 
 - **pro**
-  - Price: **$69/month**
+  - Price: **$99/month**
   - Trial: **3 days**
 
 ## Important: Subscriptions are NOT Automatically Created
