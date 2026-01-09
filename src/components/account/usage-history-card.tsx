@@ -1,4 +1,3 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getCreditTransactions, type CreditTransaction } from "@/actions/credits"
 import { Badge } from "@/components/ui/badge"
@@ -61,18 +60,14 @@ export async function UsageHistoryCard() {
   const { transactions, error } = await getCreditTransactions({ limit: 50 })
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Usage History</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="rounded-lg border">
+    <section>
+      
+      <div className="rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
                 <TableHead>Type</TableHead>
-                <TableHead>Description</TableHead>
                 <TableHead>User</TableHead>
                 <TableHead className="text-right">Credits</TableHead>
                 <TableHead className="text-right">Balance</TableHead>
@@ -81,13 +76,13 @@ export async function UsageHistoryCard() {
             <TableBody>
               {error ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-16 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={5} className="h-16 text-center text-sm text-muted-foreground">
                     {error}
                   </TableCell>
                 </TableRow>
               ) : transactions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-16 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={5} className="h-16 text-center text-sm text-muted-foreground">
                     No usage history found.
                   </TableCell>
                 </TableRow>
@@ -118,9 +113,6 @@ export async function UsageHistoryCard() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="max-w-[200px] truncate" title={tx.description}>
-                        {tx.description}
-                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {tx.userName || "System"}
                       </TableCell>
@@ -139,8 +131,7 @@ export async function UsageHistoryCard() {
               )}
             </TableBody>
           </Table>
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }

@@ -5,7 +5,6 @@ import { log } from "@/lib/axiom/client";
 const source = "components/account/connected-accounts-section";
 
 import { useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/icon'
 import Image from 'next/image'
@@ -68,14 +67,14 @@ export function ConnectedAccountsSection({ accounts: initialAccounts }: Connecte
   const isGoogleConnected = accounts.some(acc => acc.providerId === 'google')
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Connected Accounts</CardTitle>
-        <CardDescription>
+    <section>
+      <div className="space-y-1 mb-4">
+        <h3 className="text-base font-semibold">Connected Accounts</h3>
+        <p className="text-sm text-muted-foreground">
           Manage OAuth providers connected to your account. You can always sign in using magic link with your email.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+        </p>
+      </div>
+      <div className="space-y-6">
         {/* Connected Accounts */}
         {accounts.length > 0 && (
           <div>
@@ -164,7 +163,7 @@ export function ConnectedAccountsSection({ accounts: initialAccounts }: Connecte
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }

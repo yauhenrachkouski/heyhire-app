@@ -173,7 +173,7 @@ export function CurrentSubscriptionRow({
           </div>
 
             {allocation && periodLabel && (
-              <div className="rounded-lg border p-4 space-y-2">
+              <div className="space-y-2">
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-sm font-medium">Usage</div>
                   <div className="text-xs text-muted-foreground">{periodLabel}</div>

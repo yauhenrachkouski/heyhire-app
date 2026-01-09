@@ -1,4 +1,3 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getCustomerInvoices } from "@/actions/stripe"
 import { Badge } from "@/components/ui/badge"
@@ -54,12 +53,11 @@ export async function InvoicesCard({ subscription }: InvoicesCardProps) {
   const { invoices, error } = await getCustomerInvoices({ limit: 10 });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Invoices</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="rounded-lg border">
+    <section>
+      <div className="space-y-1 mb-4">
+        <h3 className="text-base font-semibold">Invoices</h3>
+      </div>
+      <div className="rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
@@ -120,8 +118,7 @@ export async function InvoicesCard({ subscription }: InvoicesCardProps) {
               )}
             </TableBody>
           </Table>
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }

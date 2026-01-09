@@ -9,7 +9,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
         <aside className="w-full shrink-0 md:w-48">
           <SettingsSidebar />
         </aside>
-        <main className="flex-1 min-w-0 max-w-3xl space-y-6">{children}</main>
+        <main className="flex-1 min-w-0 max-w-3xl space-y-10">{children}</main>
       </div>
     </div>
   )

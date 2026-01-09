@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -119,22 +118,20 @@ export function SimpleMembersTable({ members, organizationId, currentUserId }: S
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="space-y-1">
-              <CardTitle>Members ({members.length})</CardTitle>
-              <CardDescription>
-                Manage your organization members and invitations
-              </CardDescription>
-            </div>
-            <Button onClick={() => setShowInviteDialog(true)} size="sm" className="w-full sm:w-auto">
-              <Icon name="user-plus" className="h-4 w-4" />
-              Invite Member
-            </Button>
+      <section>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div className="space-y-1">
+            <h3 className="text-base font-semibold">Members ({members.length})</h3>
+            <p className="text-sm text-muted-foreground">
+              Manage your organization members and invitations
+            </p>
           </div>
-        </CardHeader>
-      <CardContent>
+          <Button onClick={() => setShowInviteDialog(true)} size="sm" className="w-full sm:w-auto">
+            <Icon name="user-plus" className="h-4 w-4" />
+            Invite Member
+          </Button>
+        </div>
+        <div>
         {members.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             No members found
@@ -248,8 +245,8 @@ export function SimpleMembersTable({ members, organizationId, currentUserId }: S
             </Table>
           </div>
         )}
-      </CardContent>
-    </Card>
+        </div>
+      </section>
 
     <InviteMemberDialog
       open={showInviteDialog}

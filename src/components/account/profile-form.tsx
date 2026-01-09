@@ -8,7 +8,6 @@ import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import posthog from 'posthog-js'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -158,15 +157,14 @@ export function ProfileForm({ user }: ProfileFormProps) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Profile</CardTitle>
-        <CardDescription>
+    <section>
+      <div className="space-y-1 mb-4">
+        <h3 className="text-base font-semibold">Profile</h3>
+        <p className="text-sm text-muted-foreground">
           Update your personal information
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        </p>
+      </div>
+      <form onSubmit={handleSubmit} className="space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <Avatar className="h-16 w-16 sm:h-20 sm:w-20 shrink-0">
               {userImage && <AvatarImage src={userImage} alt={userName} />}
@@ -258,8 +256,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
               </>
             )}
           </Button>
-        </form>
-      </CardContent>
-    </Card>
+      </form>
+    </section>
   )
 }

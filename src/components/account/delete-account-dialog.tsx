@@ -6,7 +6,6 @@ const source = "components/account/delete-account-dialog";
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -60,15 +59,14 @@ export function DeleteAccountDialog({ userEmail }: DeleteAccountDialogProps) {
   }
 
   return (
-    <Card className="border-destructive">
-      <CardHeader>
-        <CardTitle className="text-destructive">Danger Zone</CardTitle>
-        <CardDescription>
+    <section>
+      <div className="space-y-1 mb-4">
+        <h3 className="text-base font-semibold text-destructive">Danger Zone</h3>
+        <p className="text-sm text-muted-foreground">
           Irreversible actions for your account
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
+        </p>
+      </div>
+      <div className="space-y-3">
           <Alert variant="destructive">
             <Icon name="alert-triangle" className="h-4 w-4" />
             <AlertDescription>
@@ -127,8 +125,7 @@ export function DeleteAccountDialog({ userEmail }: DeleteAccountDialogProps) {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }
