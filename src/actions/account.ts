@@ -2,6 +2,7 @@
 
 import { log } from "@/lib/axiom/server";
 import { getSessionWithOrg } from "@/lib/auth-helpers";
+import { requirePermission } from "@/lib/request-access";
 
 const source = "actions/account";
 
@@ -191,6 +192,9 @@ export async function updateOrganization(data: {
     if (!session?.user) {
       return { success: false, error: 'Not authenticated' }
     }
+
+    // Only admins and owners can update organization settings
+    await requirePermission(data.organizationId, "org_settings");
 
     // Parse existing metadata
     const org = await db.query.organization.findFirst({

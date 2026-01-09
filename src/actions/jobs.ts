@@ -2,6 +2,7 @@
 
 import { log } from "@/lib/axiom/server";
 import { getSessionWithOrg } from "@/lib/auth-helpers";
+import { assertNotReadOnlyForOrganization } from "@/lib/request-access";
 
 const source = "actions/jobs";
 
@@ -45,6 +46,8 @@ export async function parseJob(
   const { userId, activeOrgId } = await getSessionWithOrg();
 
   try {
+    // Note: We allow read-only users to parse jobs so they can see criteria
+    // The actual search execution (generateStrategies, executeStrategies) is blocked
     log.info("parse.started", {
       userId,
       organizationId: activeOrgId,
@@ -133,6 +136,9 @@ export async function generateStrategies(
   const { userId, activeOrgId } = await getSessionWithOrg();
 
   try {
+    // Block read-only users (viewer, demo_viewer) from generating strategies
+    await assertNotReadOnlyForOrganization(activeOrgId);
+
     log.info("strategy.generate_started", {
       userId,
       organizationId: activeOrgId,
@@ -194,6 +200,9 @@ export async function executeStrategies(
 ): Promise<{ success: boolean; data?: StrategyExecutionResponse; error?: string }> {
   const { userId, activeOrgId } = await getSessionWithOrg();
   try {
+    // Block read-only users (viewer, demo_viewer) from executing strategies
+    await assertNotReadOnlyForOrganization(activeOrgId);
+
     log.info("strategy.execute_started", {
       userId,
       organizationId: activeOrgId,

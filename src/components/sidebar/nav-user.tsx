@@ -26,6 +26,7 @@ import { signOut } from "@/lib/auth-client"
 import Link from "next/link"
 import { useState } from "react"
 import posthog from "posthog-js"
+import { useUserRole } from "@/hooks/use-user-role"
 
 // User type based on better-auth session
 interface User {
@@ -46,6 +47,7 @@ export function NavUser({ user: serverUser }: NavUserProps) {
   const router = useRouter()
   const pathname = usePathname()
   const { isMobile } = useSidebar()
+  const { isReadOnly } = useUserRole()
   const [isSigningOut, setIsSigningOut] = useState(false)
   const orgSegment = pathname?.split("/")[1]
   const basePath = orgSegment ? `/${orgSegment}` : ""
@@ -121,16 +123,19 @@ export function NavUser({ user: serverUser }: NavUserProps) {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem asChild>
-                <Link href={`${basePath}/account`}>
-                  <Icon name="user" className="h-4 w-4" />
-                  Account
-                </Link>
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            
-            <DropdownMenuSeparator />
+            {!isReadOnly && (
+              <>
+                <DropdownMenuGroup>
+                  <DropdownMenuItem asChild>
+                    <Link href={`${basePath}/account`}>
+                      <Icon name="user" className="h-4 w-4" />
+                      Account
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+              </>
+            )}
             <DropdownMenuItem onClick={handleSignOut} disabled={isSigningOut}>
               <Icon name="logout" className="h-4 w-4" />
               Log out

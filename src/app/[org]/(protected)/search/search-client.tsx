@@ -15,15 +15,19 @@ import { useSession, useActiveOrganization } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { recentSearchesKeys } from "@/lib/query-keys/search";
+import { useUserRole } from "@/hooks/use-user-role";
+import { CreateAccountModal } from "@/components/auth/create-account-modal";
 
 export function SearchClient() {
   const [queryText, setQueryText] = useState<string>("");
   const [isSearching, setIsSearching] = useState(false);
   const [, setIsParsing] = useState(false);
   const [sourcingCriteria, setSourcingCriteria] = useState<SourcingCriteria | null>(null);
+  const [showCreateAccountModal, setShowCreateAccountModal] = useState(false);
 
   const { data: session } = useSession();
   const { data: activeOrg } = useActiveOrganization();
+  const { isReadOnly } = useUserRole();
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -36,6 +40,31 @@ export function SearchClient() {
   };
 
   const handleStartSearch = async (source: "manual" | "autorun" = "manual") => {
+    // Block read-only users (viewer, demo_viewer)
+    if (isReadOnly) {
+      // Check if embedded in iframe - notify parent window instead of showing modal
+      const isInIframe = (() => {
+        try {
+          return window.self !== window.top
+        } catch {
+          return true
+        }
+      })()
+
+      if (isInIframe) {
+        // Notify parent window to handle signup (redirect to /signin)
+        window.parent.postMessage(
+          { type: "HEYHIRE_CREATE_ACCOUNT", action: "signup" },
+          "*"
+        )
+        return
+      }
+
+      // Not in iframe - show modal
+      setShowCreateAccountModal(true);
+      return;
+    }
+
     if (!sourcingCriteria) {
       toast.error("Error", {
         description: "Please parse a job description first",
@@ -173,22 +202,29 @@ export function SearchClient() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] w-full max-w-5xl mx-auto px-4 py-12">
-      <div className="w-full flex flex-col items-center gap-8 pb-12">
-        {/* Search Box */}
-        <div className="w-full max-w-3xl relative space-y-4">
-          <SearchInput
-            onCriteriaChange={handleCriteriaChange}
-            onParsingChange={handleParsingChange}
-            onSearch={() => handleStartSearch("manual")}
-            isLoading={isSearching}
-            value={queryText}
-            onQueryTextChange={handleQueryTextChange}
-            organizationId={activeOrg?.id}
-            className="w-full"
-          />
+    <>
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] w-full max-w-5xl mx-auto px-4 py-12">
+        <div className="w-full flex flex-col items-center gap-8 pb-12">
+          {/* Search Box */}
+          <div className="w-full max-w-3xl relative space-y-4">
+            <SearchInput
+              onCriteriaChange={handleCriteriaChange}
+              onParsingChange={handleParsingChange}
+              onSearch={() => handleStartSearch("manual")}
+              isLoading={isSearching}
+              value={queryText}
+              onQueryTextChange={handleQueryTextChange}
+              organizationId={activeOrg?.id}
+              className="w-full"
+            />
+          </div>
         </div>
       </div>
-    </div>
+
+      <CreateAccountModal
+        open={showCreateAccountModal}
+        onOpenChange={setShowCreateAccountModal}
+      />
+    </>
   );
 }
