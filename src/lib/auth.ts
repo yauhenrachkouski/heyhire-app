@@ -967,6 +967,18 @@ export const auth = betterAuth({
       window: 60,
       max: 10,
    },
+   // Cookie configuration for cross-origin iframe support (demo embedded in landing page)
+   // SameSite=None allows cookies to be sent in cross-site iframe contexts
+   // Partitioned attribute enables CHIPS (Cookies Having Independent Partitioned State)
+   // for future browser compatibility
+   advanced: {
+      defaultCookieAttributes: {
+         secure: true,
+         sameSite: "none",
+         httpOnly: true,
+         partitioned: true,
+      },
+   },
 });
 
 // Export stripeClient for use in server actions
