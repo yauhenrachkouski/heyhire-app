@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Icon } from '@/components/icon'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { authClient } from '@/lib/auth-client'
+import { authClient, useSession } from '@/lib/auth-client'
 import { toast } from 'sonner'
 import googleIcon from '@/assets/google-icon.svg'
 import heyhireLogo from '@/assets/heyhire_logo.svg'
@@ -45,7 +45,28 @@ export function LoginForm({ initialError }: { initialError?: string }) {
   const [error, setError] = useState(initialError || '')
   const [lastMethod, setLastMethod] = useState<string | null>(null)
   const [callbackURL, setCallbackURL] = useState('/auth/callback')
+  const [isSigningOut, setIsSigningOut] = useState(false)
   const isInviteCallback = callbackURL.startsWith('/auth/accept-invitation/')
+
+  const { data: session } = useSession()
+
+  // Sign out anonymous users so they can create a real account
+  useEffect(() => {
+    async function signOutAnonymous() {
+      if (session?.user?.isAnonymous && !isSigningOut) {
+        setIsSigningOut(true)
+        try {
+          await authClient.signOut()
+          log.info("anonymous_user_signed_out", { source })
+        } catch (err) {
+          log.error("anonymous_signout.error", { source, error: err instanceof Error ? err.message : String(err) })
+        } finally {
+          setIsSigningOut(false)
+        }
+      }
+    }
+    signOutAnonymous()
+  }, [session?.user?.isAnonymous, isSigningOut])
 
   useEffect(() => {
     if (initialError) {
@@ -89,6 +110,18 @@ export function LoginForm({ initialError }: { initialError?: string }) {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Show loading while signing out anonymous user
+  if (isSigningOut || session?.user?.isAnonymous) {
+    return (
+      <Card className="w-full shadow-none ring-0">
+        <CardContent className="flex flex-col items-center justify-center py-12">
+          <Icon name="loader" className="h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="mt-4 text-sm text-muted-foreground">Preparing sign in...</p>
+        </CardContent>
+      </Card>
+    )
   }
 
   if (emailSent) {

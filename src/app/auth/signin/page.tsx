@@ -17,9 +17,11 @@ export default async function LoginPage({
   const params = await searchParams
   const callbackUrl = typeof params.callbackUrl === 'string' ? params.callbackUrl : undefined
 
- if (session) {
+  // Only redirect if user is authenticated AND not anonymous
+  // Anonymous users (from demo iframe) should be able to create a real account
+  if (session && !session.user.isAnonymous) {
     return redirect(callbackUrl || "/")
- }
+  }
   const errorMessage = typeof params.error === 'string' ? params.error : undefined
 
   return (

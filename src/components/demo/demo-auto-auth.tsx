@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { authClient } from "@/lib/auth-client"
-import { addDemoWorkspaceForCurrentUser, setActiveOrganization } from "@/actions/demo"
+import { authClient, useSession } from "@/lib/auth-client"
+import { addDemoWorkspaceForCurrentUser } from "@/actions/demo"
 import { IconLoader2 } from "@tabler/icons-react"
 
 interface DemoAutoAuthProps {
@@ -12,15 +12,23 @@ interface DemoAutoAuthProps {
 
 export function DemoAutoAuth({ redirectTo }: DemoAutoAuthProps) {
   const router = useRouter()
+  const { refetch } = useSession()
   const [status, setStatus] = useState<"signing-in" | "setting-up" | "redirecting" | "error">("signing-in")
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     async function setupDemoAccess() {
       try {
-        // Step 1: Sign in anonymously
+        // Step 1: Sign in anonymously (with onSuccess to ensure completion)
         setStatus("signing-in")
-        const { error: signInError } = await authClient.signIn.anonymous()
+        const { error: signInError } = await authClient.signIn.anonymous({
+          fetchOptions: {
+            onSuccess: () => {
+              // Session cookie is now set - refetch to sync client state
+              refetch()
+            }
+          }
+        })
 
         if (signInError) {
           throw new Error(signInError.message || "Failed to sign in")
@@ -34,10 +42,20 @@ export function DemoAutoAuth({ redirectTo }: DemoAutoAuthProps) {
           throw new Error("Failed to set up demo workspace")
         }
 
-        // Step 3: Set active organization
-        await setActiveOrganization(organizationId)
+        // Step 3: Set active organization using client-side method
+        // This ensures cookies are properly synced before navigation
+        const { error: setOrgError } = await authClient.organization.setActive({
+          organizationId,
+        })
 
-        // Step 4: Redirect to demo org
+        if (setOrgError) {
+          throw new Error(setOrgError.message || "Failed to set active organization")
+        }
+
+        // Step 4: Refetch session to ensure client state is synced
+        await refetch()
+
+        // Step 5: Redirect to demo org
         setStatus("redirecting")
         const destination = redirectTo || `/${organizationId}`
         router.push(destination)
@@ -50,7 +68,7 @@ export function DemoAutoAuth({ redirectTo }: DemoAutoAuthProps) {
     }
 
     setupDemoAccess()
-  }, [router, redirectTo])
+  }, [router, redirectTo, refetch])
 
   const messages = {
     "signing-in": "Creating demo session...",

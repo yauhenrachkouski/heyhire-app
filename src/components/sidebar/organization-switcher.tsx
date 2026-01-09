@@ -4,7 +4,7 @@ import { log } from "@/lib/axiom/client";
 const source = "components/sidebar/organization-switcher";
 
 import * as React from "react"
-import { organization, useActiveOrganization, useListOrganizations } from "@/lib/auth-client"
+import { authClient, useActiveOrganization, useListOrganizations } from "@/lib/auth-client"
 import { Icon } from "@/components/icon"
 import {
   DropdownMenu,
@@ -25,7 +25,6 @@ import { usePathname, useRouter } from "next/navigation"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { subscription } from "@/db/schema"
 import Image from "next/image"
-import { removeDemoWorkspaceForCurrentUser } from "@/actions/demo"
 import { useQueryClient } from "@tanstack/react-query"
 
 type SubscriptionType = typeof subscription.$inferSelect
@@ -126,7 +125,7 @@ export function OrganizationSwitcher({
   const displayOrg = activeOrganization || organizations[0]
   
   const handleOrganizationSwitch = async (orgId: string) => {
-    await organization.setActive({ organizationId: orgId })
+    await authClient.organization.setActive({ organizationId: orgId })
     await Promise.all([
       refetchActiveOrganization(),
       refetchOrganizations(),
@@ -143,12 +142,20 @@ export function OrganizationSwitcher({
     router.push(nextPath || `/${orgId}`)
   }
 
-  const handleRemoveDemo = async () => {
+  const handleLeaveOrganization = async (orgId: string) => {
     try {
-      await removeDemoWorkspaceForCurrentUser()
+      const { error } = await authClient.organization.leave({ organizationId: orgId })
+      if (error) {
+        throw new Error(error.message || "Failed to leave organization")
+      }
+      await Promise.all([
+        refetchActiveOrganization(),
+        refetchOrganizations(),
+        queryClient.invalidateQueries(),
+      ])
       router.refresh()
     } catch (e) {
-      log.error("remove_demo_org.error", { source, error: e instanceof Error ? e.message : String(e) })
+      log.error("leave_organization.error", { source, orgId, error: e instanceof Error ? e.message : String(e) })
     }
   }
   
@@ -217,7 +224,7 @@ export function OrganizationSwitcher({
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation()
-                        void handleRemoveDemo()
+                        void handleLeaveOrganization(org.id)
                       }}
                       className="ml-auto inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                       aria-label="Leave demo workspace"
