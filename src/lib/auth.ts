@@ -622,7 +622,7 @@ export const auth = betterAuth({
                         userId: user?.id,
                      },
                      subscription_data: {
-                        trial_from_plan: true,
+                        trial_period_days: plan?.freeTrial?.days,
                         metadata: {
                            referenceId,
                            plan: plan?.name,
