@@ -615,6 +615,7 @@ export const auth = betterAuth({
                return {
                   params: {
                      payment_method_collection: "always",
+                     allow_promotion_codes: true,
                      client_reference_id: referenceId,
                      metadata: {
                         referenceId,
