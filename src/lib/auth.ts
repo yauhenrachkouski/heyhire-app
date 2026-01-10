@@ -238,8 +238,8 @@ export const auth = betterAuth({
    },
    trustedOrigins: [
       appUrl,
-      "https://*.heyhire.ai", // Trust all heyhire.ai subdomains for cross-subdomain cookies
-      "https://heyhire.ai",   // Trust root domain
+      "https://*.heyhire.ai",
+      "https://heyhire.ai",
    ],
    socialProviders: {
       google: {
@@ -842,7 +842,7 @@ export const auth = betterAuth({
 
       // Anonymous plugin for demo mode
       anonymous({
-         emailDomainName: "demo.heyhire.app",
+         emailDomainName: "demo.heyhire.ai",
       }),
    ],
    databaseHooks: {
@@ -971,13 +971,11 @@ export const auth = betterAuth({
       window: 60,
       max: 10,
    },
-   // Share cookies across all *.heyhire.ai subdomains
-   // This enables the demo iframe (on heyhire.ai/lp.heyhire.ai) to access
-   // session cookies set by app.heyhire.ai
+   // Cookies are isolated per subdomain (app.heyhire.ai vs demo.heyhire.ai)
+   // This ensures demo sessions don't leak to production and vice versa
    advanced: {
       crossSubDomainCookies: {
-         enabled: true,
-         domain: ".heyhire.ai",
+         enabled: false,
       },
    },
 });
