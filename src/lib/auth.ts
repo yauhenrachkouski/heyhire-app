@@ -236,7 +236,11 @@ export const auth = betterAuth({
    emailAndPassword: {
       enabled: false,
    },
-   trustedOrigins: [appUrl],
+   trustedOrigins: [
+      appUrl,
+      "https://*.heyhire.ai", // Trust all heyhire.ai subdomains for cross-subdomain cookies
+      "https://heyhire.ai",   // Trust root domain
+   ],
    socialProviders: {
       google: {
          clientId: process.env.GOOGLE_CLIENT_ID as string,
@@ -967,16 +971,13 @@ export const auth = betterAuth({
       window: 60,
       max: 10,
    },
-   // Cookie configuration for cross-origin iframe support (demo embedded in landing page)
-   // SameSite=None allows cookies to be sent in cross-site iframe contexts
-   // Partitioned attribute enables CHIPS (Cookies Having Independent Partitioned State)
-   // for future browser compatibility
+   // Share cookies across all *.heyhire.ai subdomains
+   // This enables the demo iframe (on heyhire.ai/lp.heyhire.ai) to access
+   // session cookies set by app.heyhire.ai
    advanced: {
-      defaultCookieAttributes: {
-         secure: true,
-         sameSite: "none",
-         httpOnly: true,
-         partitioned: true,
+      crossSubDomainCookies: {
+         enabled: true,
+         domain: ".heyhire.ai",
       },
    },
 });
